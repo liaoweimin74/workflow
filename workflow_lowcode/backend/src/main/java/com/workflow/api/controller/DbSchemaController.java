@@ -49,4 +49,14 @@ public class DbSchemaController {
     public R<List<ColumnInfo>> columns(@PathVariable String table) {
         return R.ok(tableManager.findTableColumns(table));
     }
+
+    /**
+     * 按表名列举唯一索引列组（information_schema.STATISTICS；每组为该索引按序的列名，
+     * 如 [tenant_id, sku]；主键不计入；表不存在返回空列表）。
+     * 供数据写入（DATA_UPSERT）节点冲突键下拉取物理真值唯一字段。
+     */
+    @GetMapping("/tables/{table}/unique-keys")
+    public R<List<List<String>>> uniqueKeys(@PathVariable String table) {
+        return R.ok(tableManager.findTableUniqueIndexes(table));
+    }
 }

@@ -7,7 +7,10 @@ import org.springframework.stereotype.Component;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 动态物理表管理器。
@@ -44,7 +47,9 @@ public class DynamicTableManager {
         }
 
         List<ColumnInfo> existing = findTableColumns(table);
-        List<String> alterStatements = DdlBuilder.buildAlterStatements(formKey, columns, existing);
+        // 既有唯一索引实查（物理真值）：同 key 表单跨租户共享物理表时防重复 ADD UNIQUE INDEX（发布幂等）
+        List<String> alterStatements = DdlBuilder.buildAlterStatements(formKey, columns, existing,
+                findTableUniqueIndexes(table));
         if (alterStatements.isEmpty()) {
             log.info("Dynamic table {} structure unchanged", table);
             return;
@@ -130,6 +135,28 @@ public class DynamicTableManager {
                 ORDER BY ORDINAL_POSITION
                 """;
         return jdbcTemplate.query(sql, this::mapColumnInfo, tableName);
+    }
+
+    /**
+     * 查询表的唯一索引列组（information_schema.STATISTICS，NON_UNIQUE=0）。
+     * 每个内层列表为该唯一索引按 SEQ_IN_INDEX 排序的列名（如 [tenant_id, sku]）；
+     * 主键（INDEX_NAME=PRIMARY）不计入；表不存在返回空列表。
+     * 供 DATA_UPSERT 冲突键校验与前端唯一字段下拉共用（物理真值，非配置推导）。
+     */
+    public List<List<String>> findTableUniqueIndexes(String tableName) {
+        String sql = """
+                SELECT INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND NON_UNIQUE = 0
+                  AND INDEX_NAME <> 'PRIMARY'
+                ORDER BY INDEX_NAME, SEQ_IN_INDEX
+                """;
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            String name = rs.getString("INDEX_NAME");
+            grouped.computeIfAbsent(name, k -> new ArrayList<>()).add(rs.getString("COLUMN_NAME"));
+        }, tableName);
+        return List.copyOf(grouped.values());
     }
 
     private ColumnInfo mapColumnInfo(ResultSet rs, int rowNum) throws SQLException {

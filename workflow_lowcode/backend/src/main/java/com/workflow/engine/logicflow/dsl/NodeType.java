@@ -29,6 +29,13 @@ public enum NodeType {
     SUBFLOW,
     /** 数据更新（纯配置 UPDATE 动态表：SET/ADD/SUB + WHERE，参数绑定防注入，受影响行数写回 resultVar）。 */
     DATA_UPDATE,
+    /**
+     * 业务数据写入（表单记录 upsert）：面向已发布 BUSINESS 表单的 wf_biz_&lt;formKey&gt; 物理表，
+     * 以 (tenant_id, conflictKey) 唯一索引为冲突判定执行原子
+     * {@code INSERT ... ON DUPLICATE KEY UPDATE}——存在则更新、不存在则新增；
+     * 输出 { result: created|updated|unchanged, affected, id, table }。
+     */
+    DATA_UPSERT,
     /** SQL 批处理（多条 SQL 按 ; 顺序执行，{{var}} 占位符编译为 JDBC ? 参数绑定，返回执行汇总 Map）。 */
     SQL_SCRIPT,
     /** 数据查询（按 formKey 租户隔离查询业务表数据：等值筛选 + 关键字，返回分页结果 Map）。 */

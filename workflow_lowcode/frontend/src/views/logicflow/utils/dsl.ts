@@ -15,12 +15,13 @@
  *                       （legacy 兼容：actionType: HTTP|SCRIPT|BEAN + actionConfig 单动作，
  *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
  *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
- *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
- *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}],
- *                            updates?: [{alias?, table, setOps, where}] }
- *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；updates 非空时为多表形态：单事务顺序
- *       执行全有或全无，返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值；
- *       单表形态返回受影响行数 Integer（存量行为不变）
+ *   - DATA_UPDATE config = { updates: [{alias?, table, setOps[{column, mode: SET|ADD|SUB, value}],
+ *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}]}] }
+ *       （legacy 兼容：顶层 {table, setOps, where} 单表形态，引擎仍接受；设计器打开时自动
+ *         迁移为 updates 单条目形态）
+ *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；统一多表形态：单条目 = 单表更新，
+ *       返回受影响行数 Integer（与存量单表行为一致）；多条目单事务顺序执行全有或全无，
+ *       返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值
  *   - SQL_SCRIPT config = { sql, onError?: 'abort'|'continue', maxRows? }
  *       多条 SQL 按 ; 顺序执行（字面量/注释内分号不切分）；{{var.path}} 编译为 JDBC ? 参数绑定；
  *       返回执行汇总 Map（total/succeeded/failed/aborted?/durationMs/s{i} 条目）作为节点返回值
@@ -49,6 +50,7 @@ export type LogicNodeType =
   | 'BATCH'
   | 'SUBFLOW'
   | 'DATA_UPDATE'
+  | 'DATA_UPSERT'
   | 'SQL_SCRIPT'
   | 'DATA_QUERY'
   | 'DATA_INSERT'
@@ -107,6 +109,7 @@ export type BatchBodyType =
   | 'BEAN'
   | 'SCRIPT'
   | 'DATA_UPDATE'
+  | 'DATA_UPSERT'
   | 'SUBFLOW'
   | 'SQL_SCRIPT'
   | 'BATCH'
@@ -119,7 +122,7 @@ export type BatchBodyType =
   | 'LLM'
 
 export const BATCH_BODY_TYPES: BatchBodyType[] = [
-  'HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH',
+  'HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'DATA_UPSERT', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH',
   'DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE', 'NOTIFY', 'TRANSFORM', 'AGGREGATE', 'LLM',
 ]
 
@@ -197,7 +200,7 @@ export interface DataUpdateWhereCond {
   value?: string
 }
 
-/** 多表更新单表项（updates 非空时生效；alias 缺省输出键为 t{序号}） */
+/** 多表更新单表项（统一形态：单条目 = 单表更新；alias 缺省输出键为 t{序号}，仅多条目时输出汇总） */
 export interface DataUpdateTableUpdate {
   /** 可选输出别名（仅字母/数字/下划线，多表内唯一） */
   alias?: string
@@ -207,12 +210,50 @@ export interface DataUpdateTableUpdate {
 }
 
 export interface DataUpdateNodeConfig {
-  /** 目标动态表（运行期校验存在性与标识符合法性，值经参数绑定防注入） */
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 updates[0]，新 DSL 不再产出） */
   table: string
   setOps: DataUpdateSetOp[]
   where: DataUpdateWhereCond[]
-  /** 多表更新：存在且非空时引擎单事务顺序执行（优先于单表形态），任一表失败整体回滚 */
+  /** 统一多表形态：单条目 = 单表更新（输出受影响行数）；多条目单事务顺序执行（输出汇总），任一表失败整体回滚 */
   updates?: DataUpdateTableUpdate[]
+}
+
+/** 业务数据写入取值项（列名 + 字面量或 {{var}} 点路径） */
+export interface DataUpsertValueOp {
+  column: string
+  value: string
+}
+
+/** 业务数据写入单条目（多表单形态：单事务顺序执行，任一失败整体回滚） */
+export interface DataUpsertUpsertItem {
+  /** 输出别名（可选，字母/数字/下划线；缺省输出键 u{序号}） */
+  alias?: string
+  /** 已发布 BUSINESS 表单 key → 物理表 wf_biz_<formKey> */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+}
+
+/**
+ * 业务数据写入（表单记录 upsert）：引擎以 (tenant_id, conflictKey) 唯一索引为冲突判定
+ * 执行原子 INSERT ... ON DUPLICATE KEY UPDATE——存在则更新、不存在则新增；
+ * tenant_id/created_by/version 等引擎列自动维护，输出 { result, affected, id, table }
+ */
+export interface DataUpsertNodeConfig {
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 upserts[0]，新 DSL 不再产出） */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+  /** 统一多表单形态：单条目 = 单表写入（输出与存量单表一致）；多条目单事务顺序执行（输出汇总 { total, created, updated, u0|别名.affected, … }） */
+  upserts?: DataUpsertUpsertItem[]
 }
 
 /** SQL 批处理失败策略 */
@@ -322,6 +363,7 @@ export type NodeConfig =
   | BatchNodeConfig
   | SubflowNodeConfig
   | DataUpdateNodeConfig
+  | DataUpsertNodeConfig
   | SqlScriptNodeConfig
   | DataQueryNodeConfig
   | DataInsertNodeConfig
@@ -333,11 +375,21 @@ export type NodeConfig =
   | LlmNodeConfig
 
 /** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
+/** 字段结构树节点（JSON 实例推断产物，与后端 form-fields 树同构：path/label/type/children） */
+export interface FieldNode {
+  path: string
+  label?: string | null
+  type?: string | null
+  children?: FieldNode[] | null
+}
+
 export interface InputVarDef {
   name: string
   type: 'string' | 'number' | 'boolean' | 'json'
   required?: boolean
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（持久化在 DSL，供变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 /**
@@ -354,9 +406,34 @@ export interface ResultVarDef {
   mode: ResultMode
   type: 'string' | 'number' | 'boolean' | 'json'
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（供下游变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
+
+/** 结构树轻校验：非法/空则丢弃；单层最多 30 键、深度最多 6 层，超限截断 */
+function sanitizeStructure(input?: FieldNode[] | null): FieldNode[] | undefined {
+  if (!Array.isArray(input) || !input.length) return undefined
+  const MAX_DEPTH = 6
+  const MAX_KEYS = 30
+  const walk = (list: FieldNode[], d: number): FieldNode[] | null => {
+    if (d > MAX_DEPTH) return null
+    const out: FieldNode[] = []
+    for (const f of list.slice(0, MAX_KEYS)) {
+      const path = String(f?.path ?? '').trim()
+      if (!path) continue
+      const node: FieldNode = { path, type: f?.type ? String(f.type) : null }
+      if (Array.isArray(f?.children) && f.children.length) {
+        const kids = walk(f.children as FieldNode[], d + 1)
+        if (kids) node.children = kids
+      }
+      out.push(node)
+    }
+    return out.length ? out : null
+  }
+  return walk(input, 1) ?? undefined
+}
 
 /** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string、mode 回退 WHOLE；全空返回 undefined */
 export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | undefined {
@@ -368,6 +445,7 @@ export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | unde
         ? (r.type as ResultVarDef['type'])
         : ('string' as const),
       desc: r?.desc ? String(r.desc).trim() || undefined : undefined,
+      structure: sanitizeStructure(r?.structure),
     }))
     .filter((r) => r.name)
   return rows.length ? rows : undefined
@@ -418,6 +496,8 @@ export interface FlowNode {
   type: string
   position: { x: number; y: number }
   data: FlowNodeData
+  /** vue-flow 节点级删除豁免：START 置 false（Delete 键交互删除被跳过；角标显隐联动） */
+  deletable?: boolean
 }
 
 /** vue-flow 边（branch 挂在 data 上；CONDITION 出边需 sourceHandle 定位 真/假 连接点） */
@@ -489,6 +569,7 @@ export const CONFIG_TYPES: LogicNodeType[] = [
   'BATCH',
   'SUBFLOW',
   'DATA_UPDATE',
+  'DATA_UPSERT',
   'SQL_SCRIPT',
   'DATA_QUERY',
   'DATA_INSERT',
@@ -505,7 +586,7 @@ export function isLogicNodeType(type: unknown): type is LogicNodeType {
     type === 'START' || type === 'END' || type === 'HTTP' ||
     type === 'BEAN' || type === 'SCRIPT' || type === 'CONDITION' ||
     type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE' ||
-    type === 'SQL_SCRIPT' || type === 'DATA_QUERY' || type === 'DATA_INSERT' ||
+    type === 'SQL_SCRIPT' || type === 'DATA_UPSERT' || type === 'DATA_QUERY' || type === 'DATA_INSERT' ||
     type === 'DATA_DELETE' || type === 'NOTIFY' || type === 'DELAY' ||
     type === 'TRANSFORM' || type === 'AGGREGATE' || type === 'LLM'
   )
@@ -523,6 +604,7 @@ export function defaultNodeName(type: LogicNodeType): string {
     BATCH: '批处理',
     SUBFLOW: '子流程',
     DATA_UPDATE: '数据更新',
+    DATA_UPSERT: '数据写入',
     SQL_SCRIPT: 'SQL 批处理',
     DATA_QUERY: '数据查询',
     DATA_INSERT: '数据新增',
@@ -568,7 +650,20 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
     case 'SUBFLOW':
       return { flowId: '', passAllVars: true, varsMapping: [] }
     case 'DATA_UPDATE':
-      return { table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }
+      return {
+        table: '',
+        setOps: [],
+        where: [],
+        updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
+      }
+    case 'DATA_UPSERT':
+      return {
+        formKey: '',
+        conflictKey: '',
+        values: [{ column: '', value: '' }],
+        onUpdate: [],
+        upserts: [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }],
+      }
     case 'SQL_SCRIPT':
       return { sql: '', onError: 'abort', maxRows: 200 }
     case 'DATA_QUERY':
@@ -731,6 +826,7 @@ export function parseDsl(dsl: string): FlowGraph {
         type,
         required: Boolean(v.required),
         desc: v.desc ? String(v.desc) : undefined,
+        structure: sanitizeStructure(Array.isArray(v.structure) ? (v.structure as FieldNode[]) : undefined),
       }
     })
     .filter((v): v is InputVarDef => v !== null)
@@ -792,6 +888,7 @@ function hasExecutionMeta(type: LogicNodeType): boolean {
     type === 'SUBFLOW' ||
     type === 'DATA_UPDATE' ||
     type === 'SQL_SCRIPT' ||
+    type === 'DATA_UPSERT' ||
     type === 'DATA_QUERY' ||
     type === 'DATA_INSERT' ||
     type === 'DATA_DELETE' ||

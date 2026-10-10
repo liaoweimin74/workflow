@@ -84,11 +84,13 @@
           @drop="handleDrop"
         >
           <template #node-logic="nodeProps">
+            <!-- START 角标隐藏（data 推导；引擎层另有 node.deletable=false 双保险） -->
             <FlowNode
               :id="nodeProps.id"
               :data="nodeProps.data"
               :selected="nodeProps.selected"
               :status="runStatusMap[nodeProps.id] ?? ''"
+              :deletable="nodeProps.data?.nodeType !== 'START'"
               @delete="removeNode"
             />
           </template>
@@ -138,23 +140,36 @@
       <template #header>
         <FieldLabel
           label="输入参数声明"
-          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议"
+          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；行尾上传图标为结构单一入口：可粘贴 JSON 实例导入字段结构，formData 参数还可从绑定表单一键导入，已导入后同一入口可查看结构树/清除。节点选择变量时即可展开选到具体字段"
         />
       </template>
       <div v-if="!inputVars.length" class="iv-empty">未声明入参</div>
-      <div v-for="(v, i) in inputVars" :key="i" class="iv-row">
-        <el-input v-model="v.name" placeholder="变量名" style="width: 160px" />
-        <el-select v-model="v.type" style="width: 110px">
-          <el-option label="string" value="string" />
-          <el-option label="number" value="number" />
-          <el-option label="boolean" value="boolean" />
-          <el-option label="json" value="json" />
-        </el-select>
-        <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
-        <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
-        <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
-          <el-icon><Delete /></el-icon>
-        </el-button>
+      <div v-for="(v, i) in inputVars" :key="i" class="iv-row-wrap">
+        <div class="iv-row" :class="{ 'is-json': v.type === 'json' }">
+          <el-input v-model="v.name" placeholder="变量名" style="width: 160px" />
+          <el-select v-model="v.type" style="width: 110px">
+            <el-option label="string" value="string" />
+            <el-option label="number" value="number" />
+            <el-option label="boolean" value="boolean" />
+            <el-option label="json" value="json" />
+          </el-select>
+          <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
+          <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
+          <el-button size="small" text type="danger" class="iv-del-btn" title="删除参数" @click="inputVars.splice(i, 1)">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+          <!-- 结构单一入口（menu 模式）：查看树 / JSON 实例导入 / 绑定表单导入 / 清除，替代两图标并列防拥挤；
+               已导入时图标变绿 + 字段数徽标 → 变量选择器可展开选到字段 -->
+          <JsonInstanceImport
+            v-if="v.type === 'json' || v.name.trim() === 'formData'"
+            mode="menu"
+            :is-form-data="v.name.trim() === 'formData'"
+            :structure="v.structure"
+            @import="(fields) => (v.structure = fields)"
+            @import-form="importFormStructure(v)"
+            @clear="v.structure = undefined"
+          />
+        </div>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
       <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤）。
@@ -214,6 +229,7 @@ import RunTestDialog from './components/RunTestDialog.vue'
 import FieldLabel from './components/FieldLabel.vue'
 import TriggerGroupSelect from '@/components/TriggerGroupSelect.vue'
 import type { TriggerGroupSelectGroup } from '@/components/TriggerGroupSelect.vue'
+import JsonInstanceImport from './components/JsonInstanceImport.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import { FORM_LOGIC_TRIGGERS, triggerParamSpec } from '@/api/formLogicBinding'
 import {
@@ -230,7 +246,12 @@ import {
   serializeDsl,
 } from './utils/dsl'
 import type { FlowEdge, FlowNode as FlowNodeModel, InputVarDef, LogicNodeType } from './utils/dsl'
-import { collectAvailableVars, type FormFieldGroupLike } from './utils/flowVars'
+import {
+  collectAvailableVars,
+  formFieldGroupsToFieldNodes,
+  type FormFieldGroupLike,
+} from './utils/flowVars'
+import { statFields } from './utils/jsonStructure'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -286,6 +307,17 @@ const inputVarsDialogVisible = ref(false)
 
 function addInputVar() {
   inputVars.value.push({ name: '', type: 'string', required: false, desc: undefined })
+}
+
+/** formData 入参一键导入绑定表单字段结构（formFieldGroups 由设计器设计期发现加载） */
+function importFormStructure(v: InputVarDef): void {
+  const fields = formFieldGroupsToFieldNodes(formFieldGroups.value)
+  if (!fields.length) {
+    ElMessage.warning('未获取到绑定表单的字段结构：请先在「表单逻辑」为本流绑定表单后重试')
+    return
+  }
+  v.structure = fields
+  ElMessage.success(`已导入表单结构：${statFields(fields).total} 个字段`)
 }
 
 // ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
@@ -438,7 +470,7 @@ onMounted(async () => {
     if (detail.dsl) {
       try {
         const graph = parseDsl(detail.dsl)
-        nodes.value = graph.nodes
+        nodes.value = withNodeGuards(graph.nodes)
         edges.value = graph.edges
         inputVars.value = graph.inputVars || []
       } catch (err) {
@@ -470,6 +502,8 @@ function addNode(type: LogicNodeType, position: { x: number; y: number }): FlowN
     id: createNodeId(type, allNodes().map((n) => n.id)),
     type: 'logic',
     position,
+    // START 是流程锚点：禁删（Delete 键交互删除被 vue-flow 跳过，角标随 deletable 隐藏）
+    deletable: type === 'START' ? false : undefined,
     data: {
       nodeType: type,
       name: defaultNodeName(type),
@@ -510,7 +544,20 @@ function handleDrop(event: DragEvent) {
   if (node) trySnapNode(node)
 }
 
+/** START 为流程锚点禁删：装载 DSL 后统一打标（角标隐藏 + Delete 键豁免 + removeNode 兑底） */
+function withNodeGuards(list: FlowNodeModel[]): FlowNodeModel[] {
+  for (const n of list) {
+    if (n?.data?.nodeType === 'START') n.deletable = false
+  }
+  return list
+}
+
 function removeNode(id: string) {
+  const target = allNodes().find((n) => n.id === id)
+  if (target?.data.nodeType === 'START') {
+    ElMessage.warning('开始节点是流程入口，不可删除')
+    return
+  }
   removeNodes([id])
   if (selectedNodeId.value === id) selectedNodeId.value = null
 }
@@ -1068,7 +1115,7 @@ function applySnapshot(dsl: string) {
   applyingHistory.value = true
   try {
     const graph = parseDsl(dsl)
-    nodes.value = graph.nodes
+    nodes.value = withNodeGuards(graph.nodes)
     edges.value = graph.edges
     selectedNodeId.value = null
   } catch {
@@ -1397,6 +1444,12 @@ function onRunTraces(traces: { nodeId: string; status: string }[] | undefined) {
 let savingQuiet = false
 
 async function handleSave(): Promise<boolean> {
+  // 防呆守卫：画布无「开始」节点视为异常状态（如 HMR 热替换/加载失败导致画布被清空），
+  // 禁止保存以免把空画布写库覆盖已有流程内容（真实事故：2026-10-09 var_picker_test 节点被空存清空）
+  if (!allNodes().some((n) => n.data.nodeType === 'START')) {
+    ElMessage.warning('画布为空：缺少「开始」节点，已阻止保存（避免覆盖已有流程内容）。请刷新页面重新加载流程')
+    return false
+  }
   saving.value = true
   try {
     const dsl = serializeDsl(allNodes(), allEdges(), inputVars.value)
@@ -1475,8 +1528,30 @@ onBeforeRouteLeave(async (_to, _from) => {
   }
 })
 
+/** 返回守卫状态：确认框/导航进行中防重复触发（双击返回会连跳两个历史条目，落地页错乱） */
+const leaving = ref(false)
+
 function handleBack() {
-  router.back()
+  if (leaving.value) return
+  leaving.value = true
+  // 确定性回列表：不依赖 history 栈（直链进入/刷新后 back 会跳出应用或落在错误页）
+  router
+    .push('/logic-flow')
+    .catch(() => {}) // 留在本页（未保存确认取消）时 push 被中止，吞掉导航失败
+    .finally(() => {
+      leaving.value = false
+    })
+}
+
+// ===== HMR 守卫：本页持有整张画布的内存状态（nodes/edges/入参声明），流程数据仅在
+// onMounted 拉取一次；开发期 vite HMR 重载本组件会重置 setup 状态但不会重跑 onMounted，
+// 导致画布被清空、「开始」节点消失（真实事故：2026-10-09 画布被 HMR 清空，var_picker_test
+// 节点被空存覆盖）。故在本模块被 HMR 替换时强制整页刷新：页面重载后画布从 API 完整重建，
+// 开发期并发编辑不再产生「空画布」中间态（仅影响 dev，生产构建无 HMR）。
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    window.location.reload()
+  })
 }
 </script>
 
@@ -1604,6 +1679,17 @@ function handleBack() {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+/* json 入参结构导入（图标按钮在行内删除之后） */
+.iv-row-wrap {
+  margin-bottom: 8px;
+}
+.iv-row-wrap .iv-row {
+  margin-bottom: 0;
+}
+/* 删除按钮常驻可见（用户反馈：不要 hover 才显示） */
+.iv-del-btn {
+  opacity: 1;
 }
 /* 从触发点导入区块：与表单逻辑流绑定联动 */
 .iv-import {

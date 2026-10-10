@@ -185,12 +185,16 @@ function heatmapData(): { xValues: string[]; yValues: string[]; data: Array<[num
 }
 
 function render(): void {
-  if (!chartEl.value || !canvasAvailable()) return
+  const el = chartEl.value
+  if (!el || !canvasAvailable()) return
+  // 0 尺寸容器（tab 未激活/折叠面板）init 会产生 ECharts 警告且宽度锁定 0：静默跳过，
+  // 容器恢复尺寸时 ResizeObserver 回调会补调 render()
+  if (el.clientWidth === 0 || el.clientHeight === 0) return
   const echarts = ensureEcharts()
   // 环境兜底：jsdom/无 canvas 环境下 init/setOption 会抛错（测试与异常终端），吞掉不让它打断页面
   try {
     if (!chart) {
-      chart = echarts.init(chartEl.value)
+      chart = echarts.init(el)
     }
   } catch {
     chart = null
@@ -350,7 +354,14 @@ watch(isFullscreen, async () => {
 onMounted(async () => {
   await nextTick()
   if (chartEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => chart?.resize())
+    resizeObserver = new ResizeObserver(() => {
+      if (chart) {
+        chart.resize()
+      } else {
+        // 实例尚未创建（此前 0 尺寸被守卫跳过）：容器恢复尺寸时补渲染
+        render()
+      }
+    })
     resizeObserver.observe(chartEl.value)
   }
   void fetchData()

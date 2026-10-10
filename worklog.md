@@ -5993,3 +5993,31 @@ Work Log:
 Stage Summary:
 - push 仍被凭据缺失阻塞：待用户提供新 GitHub PAT（需 repo 写权限 liaoweimin74/workflow）→ 配置后一条命令补推：git config credential.helper store && printf 'https://<PAT>@github.com\n' > ~/.git-credentials && chmod 600 ~/.git-credentials && git push origin main
 - 代码零改动，无风险
+
+---
+Task ID: merge-integration-20261010
+Agent: 主控（Z.ai Code）
+Task: 用户「push」→ 凭据修复 + 整合合并远端 DATA_UPSERT 并全量推送
+
+Work Log:
+- 用户提供 GitHub PAT → credential store 配置（~/.git-credentials 600），凭据链路恢复
+- push 被拒（non-fast-forward）：fetch 发现远端并行会话已推送 DATA_UPSERT 多形态交付（b129d60a/6912669e），与本地 P0/P1/P2 八节点（360ed48a）分叉 55+23 commits（含大量同名镜像快照提交）
+- 安全前置：backup-pre-merge-20261010 分支 + 合并前 DB 快照（cd8e62da）
+- git merge origin/main：10 文件冲突逐处解决——
+  · 引擎 12 参构造器超集吸收远端 9 参；import/字段/赋值全部并集
+  · BATCH 循环体白名单三处（引擎 EnumSet/校验器 Set/前端 BATCH_BODY_TYPES）均取并集：+DATA_UPSERT +7 新型，DELAY 双方均排除
+  · 前端：BatchBodyType 并集；nodeMeta 取远端 DATA_UPSERT 条目但归入「数据」组（动作组保 NOTIFY，避免跨组重复）；PropertyPanel import+执行型列表并集
+  · FlowableEngineConfig 保本地 4 依赖装配（远端 1 依赖为其子集），注释合并
+  · scripts：recover-dplus.sh 取远端主体（显式库名导入修复 + jar 备份快速路径）追加本地 accessToken 真绿核验段；dump-db.sh 取远端（有效性检查+保留 3 份策略）补 sysroot LD_LIBRARY_PATH + push
+  · worklog 双方会话记录全保留
+- 测试适配：LogicFlowDataUpsertTest 构造器 9→12 参
+- 质量关：后端 logicflow 包 122/122 全绿（远端 DataUpsert 17 + 本地 NewNodes 22 + 引擎 31 共存）；全量 43 失败经纯远端 worktree 复跑逐一确认计数吻合=存量技术债非合并引入；vue-tsc 54 逐行等同远端基线（先前 56 系把详情续行误计，rg 需锚定 "error TS"）；vitest 1425/1425（+27 远端新用例）
+- 部署：mvn package 103M jar → backups/jar 留档 → kill 旧 Java(7161) → setsid nohup start-services.sh（铁律：nohup 直启会被收割）→ t+10s 真绿
+- E2E 双验（新 jar 实测）：e2e-new-nodes.mjs 13/13（八节点+onError+BATCH chunk/LLM 网关）+ e2e-unique-field-chain.mjs 9/9（远端唯一字段链路）
+- 推送终态：b129d60a..1a42cfa3 → origin/main=1a42cfa3（含 GH001 大文件警告，jar 入库为既有惯例）
+- 部署后巡检：四链路 200×4 真绿，mem 2513MB，vite×1，oom 0
+
+Stage Summary:
+- 双线并行交付完成合流：DATA_UPSERT 多形态 × P0/P1/P2 八节点 + onError + BATCH 增强，全链路（引擎/校验器/前端三件套/白名单/Spring 装配）功能并集零丢失
+- 凭据已恢复（PAT 入 credential store），后续 push 直接 git push origin main 即可
+- 移交：①43 存量测试失败（notification/task/datasource/page/ai/system 模块）远端基线既有，建议独立专项清偿 ②GH001 大文件警告：jar 103MB 反复入库会膨胀仓库，建议下轮评估 jar 改 LFS 或 .gitignore+外部留存 ③P3（PARALLEL/EVENT_WAIT/SCHEDULE）仍需异步执行模型，未在范围

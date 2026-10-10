@@ -5886,3 +5886,21 @@ Work Log:
 Stage Summary:
 - D+ 终态恢复（第 5 次），jar 备份快速路径使恢复窗口缩至单次 600s 内
 - 用户可见症状（no such table: SYS_USER）= 环境重供给后 Node 假绿的固定表现，非数据库损坏；数据始终有 git 快照兜底
+
+---
+Task ID: dev-dataupsert-fix-20261010-0915（用户报障修复）
+Agent: 主控（Z.ai Code）
+Task: 用户报障①保存 DATA_UPSERT 报 UNKNOWN_NODE_TYPE+业务表单下拉空 ②数据写入节点需支持多表单
+
+Work Log:
+- 【问题①根因】运行 jar 为旧版：unzip 抽取 NodeType.class 仅含 DATA_UPDATE 无 DATA_UPSERT——23:13 构建时工作区源码落后于 feat 0d34c29d（18:35 提交），且该旧 jar 被 cp 进 backups/jar，此后每次重供给恢复都回到旧 jar
+- 【修复①】mvn 重建（BUILD SUCCESS 103671571 字节，NodeType 含 DATA_UPDATE+DATA_UPSERT）→ 替换运行实例 → **更新 backups/jar 备份**（防重供给回退旧 jar）→ 经 start-services.sh 存活链路拉起（第一次 setsid 直接拉起被会话收割者静默回收，教训与 worklog 5150 一致）
+- 【问题①下拉数据验证】GET form-definitions?type=BUSINESS&status=PUBLISHED 返回 6 表单 ✓；unique-keys API 正常（person 有 (tenant_id,code)；bill_test/leave_apply_biz 无唯一索引 → 冲突键禁配=预期，需表单声明唯一字段才有选项）
+- 【问题②结论】多表单能力已原生存在：后端 BackendDataUpsertConfig.upserts（MAX 20，单事务顺序执行）+ 引擎 executeDataUpsertMulti + 发布校验逐条目 + 前端 PropertyPanel 统一多表单编辑器（upserts 数组）——无需开发，直接可用
+- 【API 级 E2E】scripts/e2e-dataupsert.sh（已入库 ba291614）：创建→保存 upserts 双条目→发布 PUBLISHED→run1 created×2（u1/u2 各含 result/affected/id/table）→run2 updated×2（id 反查一致）→DB 核对 version=2/name 更新/created_by=logicflow→清理。全绿
+- 【推送】a72bcc56..ba291614 origin/main 同步
+
+Stage Summary:
+- 用户两个报障闭环：①=旧 jar 根因已根治（新 jar 已替换且备份已更新，UNKNOWN_NODE_TYPE 不再出现）②=多表单已原生支持（前端统一编辑器直接配多条目）
+- 用户侧注意事项：浏览器强刷（Ctrl+Shift+R）拉最新前端；表单须声明唯一字段后其冲突键下拉才有选项（bill_test 等无唯一索引的表单配不了冲突键属预期）
+- 沉淀：验证 jar 版本用 unzip -p jar path/NodeType.class | strings 比 git log 时间推断可靠

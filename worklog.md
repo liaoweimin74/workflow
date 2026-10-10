@@ -6092,3 +6092,20 @@ Stage Summary:
 - __lastError 数据形态：Map{nodeId, nodeName, type, message, timestamp(ISO-8601 带时区)}——理由=resolvePath 支持嵌套取值，补救节点主插值通道（TRANSFORM/NOTIFY/LLM/DATA_UPDATE）真能取到 {{__lastError.message}}；整体 {{__lastError}} 为 Map toString/JSON 对象
 - 测试结果：后端 5/5 新 + 53/53 定向回归；前端 vitest 37/37（32 dsl + 5 新）、vue-tsc 54=基线
 - 遗留风险：①VariableResolver（HTTP url/headers、CONDITION value、BATCH collection）仅扁平 {{var}}，{{__lastError.message}} 点路径在这些位置取不到（仅 {{__lastError}} 整体 toString），如需全局点路径需升级 VariableResolver（独立专项）；②运行中 jar 未重建（禁重启），__lastError 引擎行为待下次部署后可在 UI 验证（单测已覆盖）；③PropertyPanel 新测试断言依赖 element-plus 2.14 disabled 类落点（.el-select__wrapper.is-disabled），升级组件库需回看
+
+---
+Task ID: 446961-r1805+deploy-sync
+Agent: cron-light-ops+deploy
+Task: 18:05 运维轮 + 运行代码与 git 仓库比对同步（用户指令）
+
+Work Log:
+- 比对结论：运行 jar=09:32 构建（merge 227f38e9 版），落后 HEAD 一个功能提交（113ce518 errorAction 动态提示+__lastError，09:56）；前端 vite 磁盘直服无滞后
+- 确认 Task1 代理（error-action-lasterror）实际成功交付：LogicFlowEngine recordLastError()+PropertyPanel 三态提示+双侧测试；后端 LogicFlowLastErrorTest 5/5、前端 PropertyPanelLastErrorHint 5/5、vue-tsc=54 基线
+- mvn 需显式 JAVA_HOME=/home/z/tools/jdk21（系统默认 java 不支持 release 21）
+- 重建 jar（10:10:22）→ kill 旧进程 → start-java.sh 拉起 pid=7312 → 四链路 200×4 + accessToken 真绿
+- dump-db OK 20261010-101116；vite=1 postcss=0；mem 1984MB；oom 0
+- 提交 worklog 并推送：origin/main 6aff673d→bcbd679a，本地远端零差异
+
+Stage Summary:
+- 运行代码已与 HEAD 同步（含 __lastError 引擎端）；凭据已由并行会话恢复（~/.git-credentials 09:37）
+- 五项开发待办更新：①已完成并上线；接下来派 ②43 存量测试清偿

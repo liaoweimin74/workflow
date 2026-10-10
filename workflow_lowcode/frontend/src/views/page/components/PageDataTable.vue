@@ -220,12 +220,17 @@ const props = withDefaults(defineProps<{
   excelExport?: boolean | { enabled?: boolean }
   /** Excel 导入（Task 5-b）：工具栏「导入 Excel」能力位；缺省关闭（按钮不出现） */
   excelImport?: boolean | { enabled?: boolean }
+  /** 汇总行总开关（Task ⑤）：关闭时即使列级聚合存在也不渲染汇总行；未传（存量 schema）保持旧行为=有聚合列即显示 */
+  summaryRow?: boolean | { enabled?: boolean }
   styleRule?: CardStyle
   /** 附加属性（border/stripe 等） */
   [key: string]: any
 }>(), {
   // Boolean 类型 prop 未传入时 Vue 默认 false，显式默认 true（分页默认显示）
   pagination: true,
+  // summaryRow 含 Boolean 联合类型：Vue 会把未传入的 Boolean 联合 prop 强转 false，
+  // 显式默认 undefined 保留「未声明」语义（存量 schema 回退旧行为=有聚合列即显示）
+  summaryRow: undefined,
 })
 const emit = defineEmits<{
   (e: 'row-click', row: any): void
@@ -579,8 +584,12 @@ const summarySpecs = computed<SummaryColumnSpec[]>(() =>
     .filter((c: any) => !c.hidden && c.aggregate)
     .map((c: any) => ({ key: c.key ?? c.prop, aggregate: c.aggregate })),
 )
-/** 存在聚合配置列 → 表格底部渲染汇总行（按当前页数据统计） */
-const summaryEnabled = computed(() => summarySpecs.value.length > 0)
+/** 汇总行总开关：summaryRow 已声明用其值；未传（存量 schema）回退旧行为，避免存量页面汇总行消失 */
+const summaryRowOn = computed(() =>
+  props.summaryRow === undefined ? true : featureEnabled(props.summaryRow as boolean | { enabled?: boolean }),
+)
+/** 总开关开 且 存在聚合配置列 → 表格底部渲染汇总行（按当前页数据统计） */
+const summaryEnabled = computed(() => summaryRowOn.value && summarySpecs.value.length > 0)
 const summaryMethod = computed(() => buildSummaryMethod(summarySpecs.value))
 
 // ==================== 表头筛选（Task ⑤） ====================

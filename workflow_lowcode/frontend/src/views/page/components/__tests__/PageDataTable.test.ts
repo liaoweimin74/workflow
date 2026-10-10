@@ -652,3 +652,61 @@ describe('PageDataTable — 用户配置列数组值组件显示', () => {
     wrapper.unmount()
   })
 })
+
+// ----- 汇总行总开关（summaryRow）：关闭即不渲染；未传（存量 schema）保持旧行为=有聚合列即显示 -----
+describe('PageDataTable — 汇总行总开关 summaryRow', () => {
+  const AGG_COLS = [
+    { key: 'amount', label: '金额', aggregate: 'sum' },
+    { key: 'name', label: '姓名' },
+  ]
+
+  function mockTableData() {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { writable: false, columns: [
+        { key: 'amount', label: '金额', columnType: 'DECIMAL' },
+        { key: 'name', label: '姓名', columnType: 'VARCHAR' },
+      ] },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+  }
+
+  it('未传 summaryRow（存量 schema）+ 存在聚合列：保持旧行为渲染汇总行', async () => {
+    mockTableData()
+    const wrapper = createWrapper({ columns: AGG_COLS })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.findComponent(SearchTable).props('showSummary')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('summaryRow={enabled:false}：即便存在聚合列也不渲染汇总行', async () => {
+    mockTableData()
+    const wrapper = createWrapper({ columns: AGG_COLS, summaryRow: { enabled: false } })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.findComponent(SearchTable).props('showSummary')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('summaryRow={enabled:true}：渲染汇总行', async () => {
+    mockTableData()
+    const wrapper = createWrapper({ columns: AGG_COLS, summaryRow: { enabled: true } })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.findComponent(SearchTable).props('showSummary')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('无聚合列：无论开关状态均不渲染汇总行', async () => {
+    mockTableData()
+    const wrapper = createWrapper({ columns: [{ key: 'name', label: '姓名' }], summaryRow: { enabled: true } })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.findComponent(SearchTable).props('showSummary')).toBe(false)
+    wrapper.unmount()
+  })
+})

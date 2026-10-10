@@ -369,3 +369,75 @@ describe('DsBindingConfigDialog — table-mode Excel 导入导出（Task 5-b 配
     wrapper.unmount()
   })
 })
+
+// ----- 汇总行总开关（summaryRow）：开关替代「去配置」链接；存量 schema 按列级聚合推导保持旧行为 -----
+describe('DsBindingConfigDialog — table-mode 汇总行总开关 summaryRow', () => {
+  it('存量 schema 未声明 summaryRow 且存在列级聚合：推导开启，保存写入 {enabled:true}；「去配置」链接已移除', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1', columns: [
+      { prop: 'amount', label: '金额', aggregate: 'sum' },
+      { prop: 'name', label: '姓名' },
+    ] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.summaryRow).toBe(true)
+    // 「去配置」入口已删除（用户反馈：无实际作用，配置位置改由 tooltip 说明）
+    expect(wrapper.find('.summary-entry').exists()).toBe(false)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.summaryRow).toEqual({ enabled: true })
+    wrapper.unmount()
+  })
+
+  it('存量 schema 未声明 summaryRow 且无列级聚合：推导关闭，保存写入 {enabled:false}', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1' })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.summaryRow).toBe(false)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.summaryRow).toEqual({ enabled: false })
+    wrapper.unmount()
+  })
+
+  it('显式声明 summaryRow={enabled:false}（即便存在聚合列）：回填关闭并如实保存', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({
+      dataSourceId: 'ds1',
+      columns: [{ prop: 'amount', label: '金额', aggregate: 'sum' }],
+      summaryRow: { enabled: false },
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.summaryRow).toBe(false)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.summaryRow).toEqual({ enabled: false })
+    wrapper.unmount()
+  })
+
+  it('显式声明 summaryRow={enabled:true}：回填开启并如实保存', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1', summaryRow: { enabled: true } })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.summaryRow).toBe(true)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.summaryRow).toEqual({ enabled: true })
+    wrapper.unmount()
+  })
+})

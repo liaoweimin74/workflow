@@ -109,14 +109,14 @@
                 </el-form-item>
                 <el-form-item>
                   <template #label>
-                    <span class="label-with-tip summary-tip">
+                    <span class="label-with-tip">
                       汇总行
-                      <el-tooltip content="在下方列清单中点击列的「高级配置」→ 汇总下拉选择聚合方式（求和/平均/最大/最小/计数）" placement="top">
+                      <el-tooltip content="开启后表格底部显示汇总行，按当前页数据统计；在下方列清单点击列的「高级配置」→ 汇总下拉选择聚合方式（求和/平均/最大/最小/计数）" placement="top">
                         <el-icon class="tip-icon"><QuestionFilled /></el-icon>
                       </el-tooltip>
                     </span>
                   </template>
-                  <span class="summary-entry" @click="scrollToColumns">去配置 →</span>
+                  <el-switch v-model="tableData.summaryRow" />
                 </el-form-item>
               </div>
               <div v-if="effectiveListMode === 'card'" class="card-quick-row">
@@ -148,7 +148,7 @@
               </div>
             </div>
           </el-form>
-          <div ref="columnsWrapRef">
+          <div>
             <QueryColumnsConfig
               v-if="tableCandidates.length > 0"
               :candidates="tableCandidates"
@@ -461,6 +461,8 @@ const tableData = reactive({
   excelExport: false,
   /** Excel 导入（Task 5-b，table 模式）：运行页工具栏「导入 Excel」能力位，缺省关闭 */
   excelImport: false,
+  /** 汇总行总开关（table 模式）：开启后底部渲染汇总行；列级聚合在各列高级配置内声明，缺省关闭 */
+  summaryRow: false,
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -533,15 +535,13 @@ function initTableData() {
   // Excel 导入导出（Task 5-b）：回填能力位，缺省关闭
   tableData.excelExport = bp.excelExport?.enabled === true
   tableData.excelImport = bp.excelImport?.enabled === true
+  // 汇总行总开关：已声明用其值；未声明（存量 schema）按「存在列级聚合」推导，保持旧行为（有聚合列即显示汇总行）
+  tableData.summaryRow = bp.summaryRow !== undefined
+    ? bp.summaryRow.enabled === true
+    : tableData.columns.some((c: any) => c.aggregate)
 }
 
 // ==================== 打开/回填 ====================
-const columnsWrapRef = ref<HTMLElement | null>(null)
-/** 汇总行「去配置」：滚动到列清单区（列级聚合在每列高级配置内） */
-function scrollToColumns() {
-  columnsWrapRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 watch(() => props.modelValue, async (val) => {
   if (!val) return
   activeTab.value = 'binding'
@@ -621,6 +621,8 @@ function handleConfirm() {
       // Excel 导入导出（Task 5-b）：能力位写入 props（PageDataTable excelExportOn/excelImportOn 消费）
       result.excelExport = { enabled: tableData.excelExport }
       result.excelImport = { enabled: tableData.excelImport }
+      // 汇总行总开关：PageDataTable summaryEnabled 消费；关闭时即使列级聚合存在也不渲染汇总行
+      result.summaryRow = { enabled: tableData.summaryRow }
     }
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination
@@ -747,16 +749,6 @@ function handleConfirm() {
   margin-left: 4px;
   color: #909399;
   cursor: help;
-}
-/* 汇总行入口链接：可点击样式提示 */
-.summary-entry {
-  color: #2e73ff;
-  cursor: pointer;
-  font-size: 13px;
-  user-select: none;
-}
-.summary-entry:hover {
-  text-decoration: underline;
 }
 /* 数据容器配置：label 独占一行并左对齐，控件占满下一行 */
 .container-form :deep(.el-form-item__label) {

@@ -6245,3 +6245,20 @@ Stage Summary:
 - 故障链完整记录：重供给丢符号链接 → liburing 失败；快照库大小写污染 → Flowable 建表冲突；混合状态触发脚本无密码建库缺陷；mariadb-dump 丢失致快照失效——四项均修复
 - 数据零丢失：以 git backups 最新 dump（12:05 快照）为准重导，sys_user/sys_menu(78 行)/流程引擎版本行完整
 - 遗留：① 工具网关 broken session 403 频发（平台层，非沙箱故障），长前台命令与 cron 轮叠加疑似诱因，建议恢复期用小步短命令 ② debs/ 缓存（4MB）未 git 追踪，全量重供给时由脚本 apt 重新下载（已验证可用）③ dump-db.sh 校验可考虑增加行数级抽检防半成品
+
+---
+Task ID: dev-5-config-entry
+Agent: main-session-dev
+Task: 页面设计器补齐表格增强（汇总行/表头筛选/批量操作）配置入口
+
+Work Log:
+- 【背景核实】用户废弃 ViewDesigner（视图）双线，统一走页面设计器 page-table（PageDataTable 渲染）；运行时三功能已实现但配置入口残留在废弃的 ViewDesigner（ColumnAdvancedConfig 聚合下拉仅被其引用）→ PageDesigner 属性面板无任何开关，事实上不可配置
+- 【链路确认】page-table rule props → transformComponent 全量透传（无白名单）→ PageDataTable 消费 props.headerFilter/batch/columns[].aggregate；DsBindingConfigDialog（表格模式）为配置弹窗，handleConfirm 列白名单遗漏 aggregate（丢失点）
+- 【改动】仅 DsBindingConfigDialog.vue：①显示列 tab 新增「表格增强」行（表头筛选/批量操作/批量删除开关 + 汇总行「去配置」锚点滚动，仅 table 模式渲染，card 模式不输出）②confirm 写入 props.headerFilter={enabled}/props.batch={enabled,delete}（batch.delete 缺省 true，与 batchDeleteEnabled 契约一致）③columns 映射补 aggregate 透传 ④initTableData 回填 ⑤清理 pre-existing 未用变量 visibleColumns；运行时零改动
+- 【验证】弹窗三套件 22/22（新增 4 用例：缺省关闭/回填保存/模式排除/aggregate 透传）；PageDataTable+tableEnhance 回归 45/45；vue-tsc 54（基线 53+环境恢复漂移 2−清理 1，触碰文件零错误）；提交 3ca48dd1
+- 【E2E 实测】agent-browser 全链路：新建页面「表格增强E2E」→ 拖数据表格 → 页面级绑定请假人员源 → 配置弹窗三开关全开 → code 列高级配置汇总=计数 → 保存发布挂接菜单 → 运行时 /page/table-enhance-e2e 实测：多选框列✅、列头漏斗筛选面板✅、勾选行批量操作条（已选1项/批量删除/清空选择）✅、汇总行（code=1 计数+汇总标签）✅
+
+Stage Summary:
+- 页面设计器路径三功能配置入口补齐，视图废弃后的能力缺口关闭；schema 契约与 PageDataTable 既有消费完全对齐（{enabled}/{enabled,delete}/aggregate），存量页面不受影响（缺省关闭）
+- 环境注意：本次 E2E 期间发现页面级数据源绑定若未选全局源（refId 空）会静默失败（表格弹窗列候选空+无 metadata 请求）——非本次引入的既有交互问题，建议后续给绑定行加必选校验
+- 测试页面「表格增强E2E」(table-enhance-e2e) 已发布并挂接菜单，可作为三功能演示页保留或后续删除

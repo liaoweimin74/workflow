@@ -127,7 +127,15 @@
           <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="唯一" width="70" align="center">
+      <el-table-column width="70" align="center">
+        <template #header>
+          <el-tooltip
+            content="开启后发布时自动生成 (tenant_id, 该字段) 复合唯一索引：同租户内该字段值不可重复；可作为「数据写入（UPSERT）」节点的冲突键用于判重"
+            placement="top"
+          >
+            <span class="uk-header-tip">唯一</span>
+          </el-tooltip>
+        </template>
         <template #default="{ row }">
           <el-switch v-if="!row.unsupported && !row.hidden && !row.subColumns" v-model="row.unique" size="small" />
           <span v-else-if="row.hidden">—</span>
@@ -720,5 +728,9 @@ function handleConfirm() {
 .subtable-empty {
   color: #c0c4cc;
   padding: 0 12px;
+}
+.uk-header-tip {
+  cursor: help;
+  border-bottom: 1px dashed var(--el-text-color-placeholder, #c0c4cc);
 }
 </style>

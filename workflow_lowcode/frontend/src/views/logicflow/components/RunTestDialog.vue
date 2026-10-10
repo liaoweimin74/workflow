@@ -15,7 +15,7 @@
         <el-button size="small" text type="primary" @click="addVar">添加变量</el-button>
       </div>
       <div v-if="declaredVars.length" class="declare-hint">
-        本流已声明 {{ declaredVars.length }} 个入参（<el-link type="primary" :underline="false" @click="showSuggested = !showSuggested">查看扫描建议</el-link>）
+        本流已声明 {{ declaredVars.length }} 个入参（<el-link type="primary" underline="never" @click="showSuggested = !showSuggested">查看扫描建议</el-link>）
       </div>
       <div v-if="declaredVars.length && showSuggested && suggestedKeys.length" class="declare-hint suggest">
         扫描到未声明引用：{{ suggestedKeys.join('、') }}（可手动添加）

@@ -3,7 +3,7 @@
  * （未声明 results 的执行型祖先节点 → 变量名 = 节点 id，与引擎隐式约定对齐）。
  */
 import { describe, expect, it } from 'vitest'
-import { collectAvailableVars, EXEC_NODE_TYPES, varInsertText } from '../flowVars'
+import { collectAvailableVars, EXEC_NODE_TYPES, formFieldGroupsToFieldNodes, varInsertText } from '../flowVars'
 import type { FormFieldGroupLike, VarEdgeLike, VarNodeLike } from '../flowVars'
 import type { InputVarDef, ResultVarDef } from '../dsl'
 
@@ -41,8 +41,39 @@ describe('collectAvailableVars · 隐式整体输出', () => {
     const implicit = vars.find((v) => v.name === 'http_abc')
     expect(implicit).toBeDefined()
     expect(implicit!.group).toBe('upstream')
-    expect(implicit!.detail).toContain('自动整体输出')
-    expect(implicit!.detail).toContain('查询订单')
+  })
+
+  it('下拉只展示变量名 + 类型：隐式整体输出/循环变量不携带说明文案', () => {
+    const nodes = [
+      node('start', 'START', '开始'),
+      node('http_abc', 'HTTP', '查询订单'),
+      node('n', 'SCRIPT', '下游'),
+    ]
+    const edges = [edge('start', 'http_abc'), edge('http_abc', 'n')]
+
+    const vars = collectAvailableVars('n', nodes, edges, NO_INPUT)
+
+    expect(vars.find((v) => v.name === 'http_abc')!.detail).toBeUndefined()
+  })
+
+  it('入参条目只报类型：required/desc 不进下拉展示', () => {
+    const inputs: InputVarDef[] = [
+      { name: 'orderId', type: 'string', required: true, desc: '订单编号' },
+    ]
+    const vars = collectAvailableVars('start', [node('start', 'START', '开始')], [], inputs)
+    const item = vars.find((v) => v.name === 'orderId')
+    expect(item!.detail).toBe('string')
+  })
+
+  it('声明 results 的节点条目只报类型：mode/desc/来自节点均不进下拉展示', () => {
+    const results: ResultVarDef[] = [
+      { name: 'sum', mode: 'WHOLE', type: 'number', desc: '合计金额' },
+    ]
+    const nodes = [node('sc_1', 'SCRIPT', '计算', results), node('sc_2', 'SCRIPT', '消费')]
+    const edges = [edge('sc_1', 'sc_2')]
+
+    const vars = collectAvailableVars('sc_2', nodes, edges, NO_INPUT)
+    expect(vars.find((v) => v.name === 'sum')!.detail).toBe('number')
   })
 
   it('已声明 results 的 SCRIPT 祖先 → 只列声明名，不再列节点 id', () => {
@@ -126,9 +157,12 @@ describe('collectAvailableVars · 表单字段树', () => {
     expect(root).toBeDefined()
     expect(root!.prefixOnly).toBe(true)
     expect(root!.children!.map((c) => c.name)).toEqual(['formData.person_name', 'formData.order'])
-    expect(root!.detail).toContain('测试表单')
+    expect(root!.detail).toBeUndefined()
     // 孙层（props.columns / 采样深层）
     expect(root!.children![1].children!.map((c) => c.name)).toEqual(['formData.order.no'])
+    // 字段条目只报类型，不展示 label
+    expect(root!.children![0].detail).toBe('string')
+    expect(root!.children![0].detail).not.toContain('请假人姓名')
   })
 
   it('无结构（未传/空数组/全部空字段）→ 回退单条 formData 提示', () => {
@@ -184,5 +218,92 @@ describe('varInsertText · 表单条目', () => {
     expect(varInsertText(leaf, 'placeholder')).toBe('{{formData.person_name}}')
     expect(varInsertText(leaf, 'bare')).toBe('formData.person_name')
     expect(varInsertText(exLeaf, 'placeholder')).toBe('{{formDataExisting.amount}}')
+  })
+})
+
+describe('collectAvailableVars · JSON 结构树（输入参数）', () => {
+  const structure = [
+    { path: 'code', type: 'number' },
+    { path: 'data', type: 'object', children: [{ path: 'id', type: 'number' }] },
+  ]
+
+  it('json 入参带 structure → input 组根条目 + 子字段树（name=根.路径，short=相对路径）', () => {
+    const inputs: InputVarDef[] = [{ name: 'payload', type: 'json', structure } as InputVarDef]
+    const vars = collectAvailableVars('start', [node('start', 'START', '开始')], [], inputs)
+    const root = vars.find((v) => v.name === 'payload')
+    expect(root?.group).toBe('input')
+    expect(root?.children?.length).toBe(2)
+    expect(root?.children?.[0]).toMatchObject({ name: 'payload.code', short: 'code', detail: 'number' })
+    expect(root?.children?.[1].children?.[0].name).toBe('payload.data.id')
+  })
+
+  it('无结构 json 入参 → 无 children（保持单条目，存量行为不变）', () => {
+    const inputs: InputVarDef[] = [{ name: 'bare', type: 'json' }]
+    const vars = collectAvailableVars('start', [node('start', 'START', '开始')], [], inputs)
+    const root = vars.find((v) => v.name === 'bare')
+    expect(root?.children).toBeUndefined()
+  })
+})
+
+describe('collectAvailableVars · JSON 结构树（上游输出）', () => {
+  it('上游 results json 带 structure → upstream 条目展开字段树，点选插完整路径', () => {
+    const nodes = [
+      node('start', 'START', '开始'),
+      node('http_a', 'HTTP', '调用', [
+        {
+          name: 'resp',
+          mode: 'WHOLE',
+          type: 'json',
+          structure: [{ path: 'list', type: 'array<object>', children: [{ path: 'sku', type: 'string' }] }],
+        } as ResultVarDef,
+      ]),
+      node('script_b', 'SCRIPT', '用'),
+    ]
+    const edges = [edge('start', 'http_a'), edge('http_a', 'script_b')]
+    const vars = collectAvailableVars('script_b', nodes, edges, NO_INPUT)
+    const item = vars.find((v) => v.name === 'resp')
+    expect(item?.group).toBe('upstream')
+    expect(item?.children?.[0]).toMatchObject({ name: 'resp.list', short: 'list' })
+    expect(item?.children?.[0].children?.[0].name).toBe('resp.list.sku')
+  })
+})
+
+describe('varInsertText · 结构子条目', () => {
+  it('结构字段子条目插完整路径（与 form 字段同规）', () => {
+    const child: any = { name: 'payload.data.id', group: 'input' }
+    expect(varInsertText(child, 'placeholder')).toBe('{{payload.data.id}}')
+    expect(varInsertText(child, 'bare')).toBe('payload.data.id')
+  })
+})
+
+describe('formFieldGroupsToFieldNodes · 表单结构 → FieldNode 树（formData 入参导入用）', () => {
+  it('递归转换 path/label/type/children，结构与 form-fields 树同形', () => {
+    const groups: FormFieldGroupLike[] = [
+      {
+        formKey: 'bill_test',
+        fields: [
+          { path: 'amount', label: '金额', type: 'number' },
+          { path: 'order', type: 'object', children: [{ path: 'order.no', type: 'string' }] },
+        ],
+      },
+    ]
+    const tree = formFieldGroupsToFieldNodes(groups)
+    expect(tree).toHaveLength(2)
+    expect(tree[0]).toEqual({ path: 'amount', label: '金额', type: 'number', children: null })
+    expect(tree[1].children?.[0]).toMatchObject({ path: 'order.no', type: 'string' })
+  })
+
+  it('多表单合并去重（同路径先到先得）；空/缺 fields → 空树', () => {
+    const two: FormFieldGroupLike[] = [
+      { formKey: 'a', fields: [{ path: 'amount', type: 'number' }] },
+      { formKey: 'b', fields: [{ path: 'amount', type: 'string' }, { path: 'extra' }] },
+    ]
+    const tree = formFieldGroupsToFieldNodes(two)
+    expect(tree.map((f) => f.path)).toEqual(['amount', 'extra'])
+    expect(tree[0].type).toBe('number')
+
+    expect(formFieldGroupsToFieldNodes([])).toEqual([])
+    expect(formFieldGroupsToFieldNodes([{ formKey: 'x', fields: [] }])).toEqual([])
+    expect(formFieldGroupsToFieldNodes(undefined)).toEqual([])
   })
 })

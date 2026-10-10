@@ -15,12 +15,13 @@
  *                       （legacy 兼容：actionType: HTTP|SCRIPT|BEAN + actionConfig 单动作，
  *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
  *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
- *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
- *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}],
- *                            updates?: [{alias?, table, setOps, where}] }
- *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；updates 非空时为多表形态：单事务顺序
- *       执行全有或全无，返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值；
- *       单表形态返回受影响行数 Integer（存量行为不变）
+ *   - DATA_UPDATE config = { updates: [{alias?, table, setOps[{column, mode: SET|ADD|SUB, value}],
+ *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}]}] }
+ *       （legacy 兼容：顶层 {table, setOps, where} 单表形态，引擎仍接受；设计器打开时自动
+ *         迁移为 updates 单条目形态）
+ *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；统一多表形态：单条目 = 单表更新，
+ *       返回受影响行数 Integer（与存量单表行为一致）；多条目单事务顺序执行全有或全无，
+ *       返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值
  *   - SQL_SCRIPT config = { sql, onError?: 'abort'|'continue', maxRows? }
  *       多条 SQL 按 ; 顺序执行（字面量/注释内分号不切分）；{{var.path}} 编译为 JDBC ? 参数绑定；
  *       返回执行汇总 Map（total/succeeded/failed/aborted?/durationMs/s{i} 条目）作为节点返回值
@@ -49,7 +50,16 @@ export type LogicNodeType =
   | 'BATCH'
   | 'SUBFLOW'
   | 'DATA_UPDATE'
+  | 'DATA_UPSERT'
   | 'SQL_SCRIPT'
+  | 'DATA_QUERY'
+  | 'DATA_INSERT'
+  | 'DATA_DELETE'
+  | 'NOTIFY'
+  | 'DELAY'
+  | 'TRANSFORM'
+  | 'AGGREGATE'
+  | 'LLM'
 
 export type ErrorAction = 'FAIL_FLOW' | 'IGNORE_CONTINUE'
 
@@ -93,10 +103,28 @@ export interface ConditionNodeConfig {
 /** 批处理节点内嵌动作类型（仅业务执行三型，legacy 配置用） */
 export type BatchActionType = 'HTTP' | 'SCRIPT' | 'BEAN'
 
-/** 循环体允许的节点类型（业务执行七型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
-export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'SUBFLOW' | 'SQL_SCRIPT' | 'BATCH'
+/** 循环体允许的节点类型（业务执行多型，含 BATCH = 支持嵌套批处理；START/END/CONDITION/DELAY 不可入循环体） */
+export type BatchBodyType =
+  | 'HTTP'
+  | 'BEAN'
+  | 'SCRIPT'
+  | 'DATA_UPDATE'
+  | 'DATA_UPSERT'
+  | 'SUBFLOW'
+  | 'SQL_SCRIPT'
+  | 'BATCH'
+  | 'DATA_QUERY'
+  | 'DATA_INSERT'
+  | 'DATA_DELETE'
+  | 'NOTIFY'
+  | 'TRANSFORM'
+  | 'AGGREGATE'
+  | 'LLM'
 
-export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH']
+export const BATCH_BODY_TYPES: BatchBodyType[] = [
+  'HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'DATA_UPSERT', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH',
+  'DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE', 'NOTIFY', 'TRANSFORM', 'AGGREGATE', 'LLM',
+]
 
 /** 循环体节点（线性链一环，按序逐项执行） */
 export interface BatchBodyNode {
@@ -114,7 +142,17 @@ export interface BatchBodyNode {
   y?: number
 }
 
-export interface BatchNodeConfig {
+/** BATCH 增强选项：chunk 分批 / interval 节流 / breakWhen 提前跳出（P1） */
+export interface BatchEnhancements {
+  /** >1 时按 N 个一组分批，每批 List 作为 item */
+  chunkSize?: number
+  /** 每项/批之间等待毫秒（0~5000，0=关闭） */
+  intervalMs?: number
+  /** 每项循环体执行前评估，true → 提前跳出（variable/operator/value 同 CONDITION 算子） */
+  breakWhen?: { variable: string; operator: string; value?: string }
+}
+
+export interface BatchNodeConfig extends BatchEnhancements {
   /** 集合表达式：{{var}} 或 JSON 数组字面量 */
   collection: string
   /** 迭代项变量名（默认 item） */
@@ -129,7 +167,7 @@ export interface BatchNodeConfig {
   actionConfig?: Record<string, unknown>
   /** 单项失败是否中断整批（默认 true） */
   stopOnError: boolean
-  /** 单次最大迭代数（默认 100，硬上限 1000） */
+  /** 单次最大迭代数（默认 100，硬上限 1000；chunk 模式下为最大批次数） */
   maxItems: number
 }
 
@@ -162,7 +200,7 @@ export interface DataUpdateWhereCond {
   value?: string
 }
 
-/** 多表更新单表项（updates 非空时生效；alias 缺省输出键为 t{序号}） */
+/** 多表更新单表项（统一形态：单条目 = 单表更新；alias 缺省输出键为 t{序号}，仅多条目时输出汇总） */
 export interface DataUpdateTableUpdate {
   /** 可选输出别名（仅字母/数字/下划线，多表内唯一） */
   alias?: string
@@ -172,12 +210,50 @@ export interface DataUpdateTableUpdate {
 }
 
 export interface DataUpdateNodeConfig {
-  /** 目标动态表（运行期校验存在性与标识符合法性，值经参数绑定防注入） */
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 updates[0]，新 DSL 不再产出） */
   table: string
   setOps: DataUpdateSetOp[]
   where: DataUpdateWhereCond[]
-  /** 多表更新：存在且非空时引擎单事务顺序执行（优先于单表形态），任一表失败整体回滚 */
+  /** 统一多表形态：单条目 = 单表更新（输出受影响行数）；多条目单事务顺序执行（输出汇总），任一表失败整体回滚 */
   updates?: DataUpdateTableUpdate[]
+}
+
+/** 业务数据写入取值项（列名 + 字面量或 {{var}} 点路径） */
+export interface DataUpsertValueOp {
+  column: string
+  value: string
+}
+
+/** 业务数据写入单条目（多表单形态：单事务顺序执行，任一失败整体回滚） */
+export interface DataUpsertUpsertItem {
+  /** 输出别名（可选，字母/数字/下划线；缺省输出键 u{序号}） */
+  alias?: string
+  /** 已发布 BUSINESS 表单 key → 物理表 wf_biz_<formKey> */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+}
+
+/**
+ * 业务数据写入（表单记录 upsert）：引擎以 (tenant_id, conflictKey) 唯一索引为冲突判定
+ * 执行原子 INSERT ... ON DUPLICATE KEY UPDATE——存在则更新、不存在则新增；
+ * tenant_id/created_by/version 等引擎列自动维护，输出 { result, affected, id, table }
+ */
+export interface DataUpsertNodeConfig {
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 upserts[0]，新 DSL 不再产出） */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+  /** 统一多表单形态：单条目 = 单表写入（输出与存量单表一致）；多条目单事务顺序执行（输出汇总 { total, created, updated, u0|别名.affected, … }） */
+  upserts?: DataUpsertUpsertItem[]
 }
 
 /** SQL 批处理失败策略 */
@@ -192,6 +268,93 @@ export interface SqlScriptNodeConfig {
   maxRows?: number
 }
 
+/** 数据查询筛选条件（等值，AND 连接） */
+export interface DataQueryFilter {
+  column: string
+  value: string
+}
+
+export interface DataQueryNodeConfig {
+  formKey: string
+  filter: DataQueryFilter[]
+  keyword?: string
+  keywordColumn?: string
+  /** 单次返回行数上限（默认 50，硬上限 100） */
+  size?: number
+}
+
+/** 数据新增列值对 */
+export interface DataInsertField {
+  column: string
+  value: string
+}
+
+export interface DataInsertNodeConfig {
+  formKey: string
+  data: DataInsertField[]
+}
+
+export type DataDeleteWhereOp = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'IS_NULL' | 'NOT_NULL'
+
+export interface DataDeleteCond {
+  column: string
+  op: DataDeleteWhereOp
+  value?: string
+}
+
+export interface DataDeleteNodeConfig {
+  formKey: string
+  /** 精确删除（优先于 filter）；支持 {{var}} */
+  id?: string
+  /** 条件删除（引擎自动追加租户过滤；防全表删须至少一个带值条件） */
+  filter?: DataDeleteCond[]
+}
+
+export type NotifyMessageType = 'PRIVATE' | 'PUBLIC' | 'SYSTEM'
+export type NotifyChannel = 'IN_APP' | 'SMS'
+
+export interface NotifyVarPair {
+  name: string
+  value: string
+}
+
+export interface NotifyNodeConfig {
+  templateCode: string
+  /** 接收用户 ID 列表（元素支持 {{var}}） */
+  recipientIds: string[]
+  variables: NotifyVarPair[]
+  messageType: NotifyMessageType
+  channels: NotifyChannel[]
+}
+
+export interface DelayNodeConfig {
+  /** 同步等待毫秒（1~60000） */
+  durationMs: number
+}
+
+export interface TransformNodeConfig {
+  /** JSON 模板：值位 {{var.path}} 注入原始值；字符串内占位符插值 */
+  template: string
+}
+
+export type AggregateOp = 'SUM' | 'AVG' | 'COUNT' | 'MIN' | 'MAX'
+
+export interface AggregateNodeConfig {
+  collection: string
+  /** 聚合字段（纯 COUNT 可省） */
+  field: string
+  ops: AggregateOp[]
+  /** 可选分组字段 */
+  groupBy?: string
+}
+
+export interface LlmNodeConfig {
+  prompt: string
+  system?: string
+  /** 0~2，空则用平台默认 */
+  temperature?: number
+}
+
 export type NodeConfig =
   | HttpNodeConfig
   | BeanNodeConfig
@@ -200,14 +363,33 @@ export type NodeConfig =
   | BatchNodeConfig
   | SubflowNodeConfig
   | DataUpdateNodeConfig
+  | DataUpsertNodeConfig
   | SqlScriptNodeConfig
+  | DataQueryNodeConfig
+  | DataInsertNodeConfig
+  | DataDeleteNodeConfig
+  | NotifyNodeConfig
+  | DelayNodeConfig
+  | TransformNodeConfig
+  | AggregateNodeConfig
+  | LlmNodeConfig
 
 /** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
+/** 字段结构树节点（JSON 实例推断产物，与后端 form-fields 树同构：path/label/type/children） */
+export interface FieldNode {
+  path: string
+  label?: string | null
+  type?: string | null
+  children?: FieldNode[] | null
+}
+
 export interface InputVarDef {
   name: string
   type: 'string' | 'number' | 'boolean' | 'json'
   required?: boolean
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（持久化在 DSL，供变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 /**
@@ -224,9 +406,34 @@ export interface ResultVarDef {
   mode: ResultMode
   type: 'string' | 'number' | 'boolean' | 'json'
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（供下游变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
+
+/** 结构树轻校验：非法/空则丢弃；单层最多 30 键、深度最多 6 层，超限截断 */
+function sanitizeStructure(input?: FieldNode[] | null): FieldNode[] | undefined {
+  if (!Array.isArray(input) || !input.length) return undefined
+  const MAX_DEPTH = 6
+  const MAX_KEYS = 30
+  const walk = (list: FieldNode[], d: number): FieldNode[] | null => {
+    if (d > MAX_DEPTH) return null
+    const out: FieldNode[] = []
+    for (const f of list.slice(0, MAX_KEYS)) {
+      const path = String(f?.path ?? '').trim()
+      if (!path) continue
+      const node: FieldNode = { path, type: f?.type ? String(f.type) : null }
+      if (Array.isArray(f?.children) && f.children.length) {
+        const kids = walk(f.children as FieldNode[], d + 1)
+        if (kids) node.children = kids
+      }
+      out.push(node)
+    }
+    return out.length ? out : null
+  }
+  return walk(input, 1) ?? undefined
+}
 
 /** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string、mode 回退 WHOLE；全空返回 undefined */
 export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | undefined {
@@ -238,6 +445,7 @@ export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | unde
         ? (r.type as ResultVarDef['type'])
         : ('string' as const),
       desc: r?.desc ? String(r.desc).trim() || undefined : undefined,
+      structure: sanitizeStructure(r?.structure),
     }))
     .filter((r) => r.name)
   return rows.length ? rows : undefined
@@ -256,12 +464,12 @@ export interface DslNode {
   errorAction?: ErrorAction
 }
 
-/** DSL 契约边 */
+/** DSL 契约边（branch：CONDITION 真/假出边 + 执行节点失败路由 error 边） */
 export interface DslEdge {
   id?: string
   source: string
   target: string
-  branch?: 'true' | 'false'
+  branch?: 'true' | 'false' | 'error'
 }
 
 export interface LogicFlowDsl {
@@ -288,6 +496,8 @@ export interface FlowNode {
   type: string
   position: { x: number; y: number }
   data: FlowNodeData
+  /** vue-flow 节点级删除豁免：START 置 false（Delete 键交互删除被跳过；角标显隐联动） */
+  deletable?: boolean
 }
 
 /** vue-flow 边（branch 挂在 data 上；CONDITION 出边需 sourceHandle 定位 真/假 连接点） */
@@ -301,7 +511,7 @@ export interface FlowEdge {
   markerEnd?: string
   deletable?: boolean
   class?: string
-  data?: { branch?: 'true' | 'false'; loop?: boolean }
+  data?: { branch?: 'true' | 'false' | 'error'; loop?: boolean }
 }
 
 export interface FlowGraph {
@@ -359,7 +569,16 @@ export const CONFIG_TYPES: LogicNodeType[] = [
   'BATCH',
   'SUBFLOW',
   'DATA_UPDATE',
+  'DATA_UPSERT',
   'SQL_SCRIPT',
+  'DATA_QUERY',
+  'DATA_INSERT',
+  'DATA_DELETE',
+  'NOTIFY',
+  'DELAY',
+  'TRANSFORM',
+  'AGGREGATE',
+  'LLM',
 ]
 
 export function isLogicNodeType(type: unknown): type is LogicNodeType {
@@ -367,7 +586,9 @@ export function isLogicNodeType(type: unknown): type is LogicNodeType {
     type === 'START' || type === 'END' || type === 'HTTP' ||
     type === 'BEAN' || type === 'SCRIPT' || type === 'CONDITION' ||
     type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE' ||
-    type === 'SQL_SCRIPT'
+    type === 'SQL_SCRIPT' || type === 'DATA_UPSERT' || type === 'DATA_QUERY' || type === 'DATA_INSERT' ||
+    type === 'DATA_DELETE' || type === 'NOTIFY' || type === 'DELAY' ||
+    type === 'TRANSFORM' || type === 'AGGREGATE' || type === 'LLM'
   )
 }
 
@@ -383,7 +604,16 @@ export function defaultNodeName(type: LogicNodeType): string {
     BATCH: '批处理',
     SUBFLOW: '子流程',
     DATA_UPDATE: '数据更新',
+    DATA_UPSERT: '数据写入',
     SQL_SCRIPT: 'SQL 批处理',
+    DATA_QUERY: '数据查询',
+    DATA_INSERT: '数据新增',
+    DATA_DELETE: '数据删除',
+    NOTIFY: '消息通知',
+    DELAY: '延时',
+    TRANSFORM: '数据映射',
+    AGGREGATE: '聚合',
+    LLM: 'AI 大模型',
   }
   return names[type]
 }
@@ -420,9 +650,38 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
     case 'SUBFLOW':
       return { flowId: '', passAllVars: true, varsMapping: [] }
     case 'DATA_UPDATE':
-      return { table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }
+      return {
+        table: '',
+        setOps: [],
+        where: [],
+        updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
+      }
+    case 'DATA_UPSERT':
+      return {
+        formKey: '',
+        conflictKey: '',
+        values: [{ column: '', value: '' }],
+        onUpdate: [],
+        upserts: [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }],
+      }
     case 'SQL_SCRIPT':
       return { sql: '', onError: 'abort', maxRows: 200 }
+    case 'DATA_QUERY':
+      return { formKey: '', filter: [], size: 50 }
+    case 'DATA_INSERT':
+      return { formKey: '', data: [{ column: '', value: '' }] }
+    case 'DATA_DELETE':
+      return { formKey: '', id: '', filter: [] }
+    case 'NOTIFY':
+      return { templateCode: '', recipientIds: [], variables: [], messageType: 'PRIVATE', channels: ['IN_APP'] }
+    case 'DELAY':
+      return { durationMs: 1000 }
+    case 'TRANSFORM':
+      return { template: '' }
+    case 'AGGREGATE':
+      return { collection: '', field: '', ops: ['COUNT'], groupBy: '' }
+    case 'LLM':
+      return { prompt: '', system: '', temperature: undefined }
     default:
       return undefined
   }
@@ -567,6 +826,7 @@ export function parseDsl(dsl: string): FlowGraph {
         type,
         required: Boolean(v.required),
         desc: v.desc ? String(v.desc) : undefined,
+        structure: sanitizeStructure(Array.isArray(v.structure) ? (v.structure as FieldNode[]) : undefined),
       }
     })
     .filter((v): v is InputVarDef => v !== null)
@@ -592,8 +852,11 @@ export function parseDsl(dsl: string): FlowGraph {
   const edges: FlowEdge[] = rawEdges
     .map((item, index) => {
       const e = (item ?? {}) as Record<string, unknown>
+      const branchRaw = e.branch
       const branch =
-        e.branch === 'true' || e.branch === 'false' ? (e.branch as 'true' | 'false') : undefined
+        branchRaw === 'true' || branchRaw === 'false' || branchRaw === 'error'
+          ? (branchRaw as 'true' | 'false' | 'error')
+          : undefined
       return {
         id: e.id != null ? String(e.id) : `e_${index}_${shortCode()}`,
         source: String(e.source ?? ''),
@@ -601,9 +864,7 @@ export function parseDsl(dsl: string): FlowGraph {
         // 默认渲染：折线 + 箭头（契约不存 type，回显统一补齐）
         type: 'smoothstep',
         markerEnd: 'arrowclosed',
-        // branch → sourceHandle：vue-flow 依 sourceHandle 定位出发点；
-        // CONDITION 有 true/false 两个 source handle，缺省时渲染会兜底连到第一个（true），
-        // 导致「否」连线重开后错显在「是」上（bug: 条件分支回显丢失）
+        // branch → sourceHandle：vue-flow 依 sourceHandle 定位出发点（true/false/error handle）
         sourceHandle: branch,
         data: branch ? { branch } : undefined,
       }
@@ -617,7 +878,7 @@ export function parseDsl(dsl: string): FlowGraph {
 
 // ==================== 序列化：画布 → DSL 字符串 ====================
 
-/** START/END/CONDITION 不含执行元信息（errorAction/results 仅业务执行七型） */
+/** START/END/CONDITION 不含执行元信息（errorAction/results 仅业务执行型） */
 function hasExecutionMeta(type: LogicNodeType): boolean {
   return (
     type === 'HTTP' ||
@@ -626,8 +887,22 @@ function hasExecutionMeta(type: LogicNodeType): boolean {
     type === 'BATCH' ||
     type === 'SUBFLOW' ||
     type === 'DATA_UPDATE' ||
-    type === 'SQL_SCRIPT'
+    type === 'SQL_SCRIPT' ||
+    type === 'DATA_UPSERT' ||
+    type === 'DATA_QUERY' ||
+    type === 'DATA_INSERT' ||
+    type === 'DATA_DELETE' ||
+    type === 'NOTIFY' ||
+    type === 'DELAY' ||
+    type === 'TRANSFORM' ||
+    type === 'AGGREGATE' ||
+    type === 'LLM'
   )
+}
+
+/** 支持失败分支（branch=error 出边）的节点类型：全部执行型（CONDITION 由容错走 false 语义，不接错误边） */
+export function supportsErrorBranch(type: LogicNodeType): boolean {
+  return hasExecutionMeta(type)
 }
 
 /** 画布节点 → 契约节点（剥离 vue-flow 内部字段） */
@@ -663,9 +938,9 @@ function toDslEdge(edge: FlowEdge): DslEdge | null {
   // branch 以 sourceHandle 为准（连线/重连时与 handle 同步），data.branch 作后备
   const fromHandle = edge.sourceHandle
   const branch =
-    fromHandle === 'true' || fromHandle === 'false'
+    fromHandle === 'true' || fromHandle === 'false' || fromHandle === 'error'
       ? fromHandle
-      : edge.data?.branch === 'true' || edge.data?.branch === 'false'
+      : edge.data?.branch === 'true' || edge.data?.branch === 'false' || edge.data?.branch === 'error'
         ? edge.data.branch
         : undefined
   if (branch) out.branch = branch

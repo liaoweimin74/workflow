@@ -141,6 +141,11 @@ export const dataSourceApi = {
     return http.get(`/v1/data-sources/db/tables/${encodeURIComponent(table)}/columns`)
   },
 
+  /** 按表名列举唯一索引列组（每组为该索引按序列名，如 ['tenant_id','sku']；主键不计入） */
+  getDbSchemaUniqueKeys(table: string): Promise<R<string[][]>> {
+    return http.get(`/v1/data-sources/db/tables/${encodeURIComponent(table)}/unique-keys`)
+  },
+
   /** 执行 SQL 探测列元数据（LIMIT 1 包裹，只取结构不返回数据） */
   exploreSql(sql: string): Promise<R<ColumnMeta[]>> {
     return http.post('/v1/data-sources/explore-sql', { sql })

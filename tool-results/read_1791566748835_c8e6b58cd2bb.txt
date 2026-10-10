@@ -1,0 +1,586 @@
+     1→package com.workflow.engine.logicflow.engine;
+     2→
+     3→import com.fasterxml.jackson.databind.JsonNode;
+     4→import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+     5→import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
+     6→import com.workflow.engine.logicflow.dsl.NodeType;
+     7→import org.springframework.stereotype.Component;
+     8→
+     9→import java.util.ArrayList;
+    10→import java.util.HashSet;
+    11→import java.util.LinkedHashMap;
+    12→import java.util.LinkedHashSet;
+    13→import java.util.List;
+    14→import java.util.Map;
+    15→import java.util.Set;
+    16→
+    17→/**
+    18→ * 逻辑流 DSL 图结构校验器（发布时硬校验；保存草稿时不校验，允许半成品）。
+    19→ *
+    20→ * <p>仅产出<b>硬错误</b>（存在即禁止发布）：
+    21→ * <ul>
+    22→ *   <li>节点 id 重复；</li>
+    23→ *   <li>边引用不存在的节点（source/target）；</li>
+    24→ *   <li>CONDITION 节点缺 branch=true / branch=false 出边；</li>
+    25→ *   <li>HTTP 节点缺 url；BEAN 节点缺 beanName/methodName；SCRIPT 节点缺 source；</li>
+    26→ *   <li>SQL_SCRIPT 节点缺 sql / 语句解析失败 / 类型白名单外 / 别名重复 / 占位符语法错 / onError 或 maxRows 非法；</li>
+    27→ *   <li>DATA_UPDATE 节点：单表形态缺 table/setOps；多表形态（updates 非空）逐项校验
+    28→ *       （table 合法标识符 / setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ MAX_UPDATES）；</li>
+    29→ *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT）
+    30→ *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
+    31→ *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
+    32→ *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
+    33→ * </ul>
+    34→ *
+    35→ * <p>刻意<b>不</b>报错（WARN 级，忽略）：START 缺失、多 START、END 缺失、不可达节点——
+    36→ * 画布允许非完整图形态的草稿演进，运行期引擎自有语义兜底（无 START → FAILED 等）。
+    37→ */
+    38→@Component
+    39→public class LogicFlowDslValidator {
+    40→
+    41→    public List<String> validate(LogicFlowDsl dsl) {
+    42→        List<String> errors = new ArrayList<>();
+    43→        if (dsl == null || dsl.getNodes() == null || dsl.getNodes().isEmpty()) {
+    44→            errors.add("缺少节点定义(nodes)");
+    45→            return errors;
+    46→        }
+    47→
+    48→        // 1) 节点 id 唯一 + 建索引
+    49→        Map<String, NodeType> nodeTypes = new LinkedHashMap<>();
+    50→        Set<String> duplicated = new LinkedHashSet<>();
+    51→        for (LogicFlowDsl.NodeDef node : dsl.getNodes()) {
+    52→            if (node.getId() == null || node.getId().isBlank()) {
+    53→                errors.add("存在缺少 id 的节点");
+    54→                continue;
+    55→            }
+    56→            if (nodeTypes.containsKey(node.getId())) {
+    57→                duplicated.add(node.getId());
+    58→            }
+    59→            nodeTypes.put(node.getId(), node.getType());
+    60→        }
+    61→        for (String id : duplicated) {
+    62→            errors.add("节点 id 重复: " + id);
+    63→        }
+    64→
+    65→        // 2) 出边索引 + 边端点存在性
+    66→        Map<String, List<String>> outBranches = new LinkedHashMap<>();
+    67→        List<LogicFlowDsl.EdgeDef> edges = dsl.getEdges() != null ? dsl.getEdges() : List.of();
+    68→        for (LogicFlowDsl.EdgeDef edge : edges) {
+    69→            String source = edge.getSource();
+    70→            String target = edge.getTarget();
+    71→            if (source == null || !nodeTypes.containsKey(source)) {
+    72→                errors.add("边 " + edge.getId() + " 引用不存在的源节点: " + source);
+    73→            } else {
+    74→                outBranches.computeIfAbsent(source, k -> new ArrayList<>())
+    75→                        .add(edge.getBranch() == null ? "" : edge.getBranch().trim());
+    76→            }
+    77→            if (target == null || !nodeTypes.containsKey(target)) {
+    78→                errors.add("边 " + edge.getId() + " 引用不存在的目标节点: " + target);
+    79→            }
+    80→        }
+    81→
+    82→        // 3) 逐节点硬校验
+    83→        for (LogicFlowDsl.NodeDef node : dsl.getNodes()) {
+    84→            if (node.getId() == null || node.getId().isBlank()) {
+    85→                continue;
+    86→            }
+    87→            NodeType type = node.getType();
+    88→            if (type == null) {
+    89→                errors.add("节点 " + node.getId() + " 类型未知或缺省");
+    90→                continue;
+    91→            }
+    92→            switch (type) {
+    93→                case CONDITION -> {
+    94→                    List<String> branches = outBranches.getOrDefault(node.getId(), List.of());
+    95→                    if (!branches.contains("true")) {
+    96→                        errors.add("CONDITION 节点 " + node.getId() + " 缺少 branch=true 出边");
+    97→                    }
+    98→                    if (!branches.contains("false")) {
+    99→                        errors.add("CONDITION 节点 " + node.getId() + " 缺少 branch=false 出边");
+   100→                    }
+   101→                }
+   102→                case END -> {
+   103→                    // 终点允许无出边
+   104→                }
+   105→                default -> {
+   106→                    if (!outBranches.containsKey(node.getId())) {
+   107→                        errors.add("节点无出边: " + node.getId() + " (" + type + ")");
+   108→                    }
+   109→                }
+   110→            }
+   111→            switch (type) {
+   112→                case HTTP -> {
+   113→                    JsonNode config = node.getConfig();
+   114→                    if (config == null || isBlankText(config, "url")) {
+   115→                        errors.add("HTTP 节点 " + node.getId() + " 缺少 url");
+   116→                    }
+   117→                }
+   118→                case BEAN -> {
+   119→                    JsonNode config = node.getConfig();
+   120→                    if (config == null || isBlankText(config, "beanName") || isBlankText(config, "methodName")) {
+   121→                        errors.add("BEAN 节点 " + node.getId() + " 缺少 beanName/methodName");
+   122→                    }
+   123→                }
+   124→                case SCRIPT -> {
+   125→                    JsonNode config = node.getConfig();
+   126→                    if (config == null || isBlankText(config, "source")) {
+   127→                        errors.add("SCRIPT 节点 " + node.getId() + " 缺少 source");
+   128→                    }
+   129→                }
+   130→                case BATCH -> validateBatch(node, errors);
+   131→                case SUBFLOW -> validateSubflow(node, errors);
+   132→                case DATA_UPDATE -> validateDataUpdate(node, errors);
+   133→                case SQL_SCRIPT -> validateSqlScript(node, errors);
+   134→                default -> {
+   135→                    // 其余类型无 config 硬要求
+   136→                }
+   137→            }
+   138→            // 输出声明校验：全部执行型节点统一 results 单表（WHOLE/KEY）；resultVar 已下线
+   139→            List<LogicFlowDsl.ResultVarDef> results = node.getResults();
+   140→            if (results != null && !results.isEmpty()) {
+   141→                validateResults(results, "节点 " + node.getId() + " (" + type + ")", errors);
+   142→            }
+   143→        }
+   144→        return errors;
+   145→    }
+   146→
+   147→    /**
+   148→     * results 声明硬校验：非空/合法标识符（\\w+，与 VariableResolver 占位符同域）、
+   149→     * 不重复（单一命名空间，WHOLE/KEY 混排同表）、mode 必填且 ∈ WHOLE|KEY。
+   150→     * label 用于错误定位（如 "节点 s1 (HTTP)"）。
+   151→     */
+   152→    private void validateResults(List<LogicFlowDsl.ResultVarDef> results, String label, List<String> errors) {
+   153→        Set<String> seen = new LinkedHashSet<>();
+   154→        for (int i = 0; i < results.size(); i++) {
+   155→            LogicFlowDsl.ResultVarDef def = results.get(i);
+   156→            String name = def != null ? def.getName() : null;
+   157→            if (name == null || name.isBlank()) {
+   158→                errors.add(label + " 第 " + (i + 1) + " 个输出缺少 name");
+   159→                continue;
+   160→            }
+   161→            if (!name.matches("\\w+")) {
+   162→                errors.add(label + " 输出变量名非法（仅字母/数字/下划线）: " + name);
+   163→                continue;
+   164→            }
+   165→            if (!seen.add(name)) {
+   166→                errors.add(label + " 输出变量名重复: " + name);
+   167→                continue;
+   168→            }
+   169→            String mode = def.getMode() == null ? null : def.getMode().trim().toUpperCase();
+   170→            if (mode == null || mode.isBlank()) {
+   171→                errors.add(label + " 输出 '" + name + "' 缺少 mode（WHOLE=整体值 / KEY=按 key 取）");
+   172→            } else if (!Set.of("WHOLE", "KEY").contains(mode)) {
+   173→                errors.add(label + " 输出 '" + name + "' mode 非法(须 WHOLE/KEY): " + def.getMode());
+   174→            }
+   175→        }
+   176→    }
+   177→
+   178→    /**
+   179→     * DATA_UPDATE 节点硬校验（两种形态二选一，updates 非空时为多表形态且优先）：
+   180→     * 单表形态 table 必填且为合法标识符；多表形态 updates 逐项校验（table 合法标识符 /
+   181→     * setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ {@link BackendDataUpdateConfig#MAX_UPDATES}）。
+   182→     * setOps 逐项 column 非空 / mode ∈ SET,ADD,SUB / value 非空（ADD/SUB 须数字）；
+   183→     * where 逐项 column 非空 / op ∈ EQ,NE,GT,GTE,LT,LTE,IS_NULL,NOT_NULL / 非空判定类 op 须带 value。
+   184→     * 表/列存在性运行期校验（发布时目标表可能尚未由表单发布创建）。
+   185→     */
+   186→    private void validateDataUpdate(LogicFlowDsl.NodeDef node, List<String> errors) {
+   187→        JsonNode config = node.getConfig();
+   188→        if (config == null || config.isNull()) {
+   189→            errors.add("DATA_UPDATE 节点 " + node.getId() + " 缺少 config");
+   190→            return;
+   191→        }
+   192→        JsonNode updates = config.get("updates");
+   193→        if (updates != null && updates.isArray() && !updates.isEmpty()) {
+   194→            validateDataUpdateUpdates(node.getId(), updates, errors);
+   195→            return;
+   196→        }
+   197→        if (isBlankText(config, "table")) {
+   198→            errors.add("DATA_UPDATE 节点 " + node.getId() + " 缺少 table");
+   199→        } else if (!config.get("table").asText().trim().matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+   200→            errors.add("DATA_UPDATE 节点 " + node.getId() + " 表名非法: " + config.get("table").asText());
+   201→        }
+   202→        JsonNode setOps = config.get("setOps");
+   203→        if (setOps == null || !setOps.isArray() || setOps.isEmpty()) {
+   204→            errors.add("DATA_UPDATE 节点 " + node.getId() + " 缺少 setOps");
+   205→        } else {
+   206→            validateDataUpdateSetOps(setOps, "DATA_UPDATE 节点 " + node.getId(), errors);
+   207→        }
+   208→        JsonNode where = config.get("where");
+   209→        if (where != null && where.isArray()) {
+   210→            validateDataUpdateWhere(where, "DATA_UPDATE 节点 " + node.getId(), errors);
+   211→        }
+   212→    }
+   213→
+   214→    /** DATA_UPDATE 多表形态逐项硬校验：alias 可选 \w+ 唯一、table 合法、setOps/where 复用单表同款规则。 */
+   215→    private void validateDataUpdateUpdates(String nodeId, JsonNode updates, List<String> errors) {
+   216→        if (updates.size() > BackendDataUpdateConfig.MAX_UPDATES) {
+   217→            errors.add("DATA_UPDATE 节点 " + nodeId + " 多表更新数超出上限("
+   218→                    + BackendDataUpdateConfig.MAX_UPDATES + "): " + updates.size());
+   219→        }
+   220→        Set<String> aliases = new HashSet<>();
+   221→        for (int i = 0; i < updates.size(); i++) {
+   222→            JsonNode u = updates.get(i);
+   223→            String base = "DATA_UPDATE 节点 " + nodeId + " 多表更新第 " + (i + 1) + " 项";
+   224→            String alias = textOrNull(u, "alias");
+   225→            if (alias != null && !alias.isBlank()) {
+   226→                if (!alias.trim().matches("\\w+")) {
+   227→                    errors.add(base + " 别名非法（仅字母/数字/下划线）: " + alias);
+   228→                } else if (!aliases.add(alias.trim())) {
+   229→                    errors.add(base + " 别名重复: " + alias.trim());
+   230→                }
+   231→            }
+   232→            if (isBlankText(u, "table")) {
+   233→                errors.add(base + " 缺少 table");
+   234→            } else if (!u.get("table").asText().trim().matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+   235→                errors.add(base + " 表名非法: " + u.get("table").asText());
+   236→            }
+   237→            JsonNode setOps = u.get("setOps");
+   238→            if (setOps == null || !setOps.isArray() || setOps.isEmpty()) {
+   239→                errors.add(base + " 缺少 setOps");
+   240→            } else {
+   241→                validateDataUpdateSetOps(setOps, base, errors);
+   242→            }
+   243→            JsonNode where = u.get("where");
+   244→            if (where != null && where.isArray()) {
+   245→                validateDataUpdateWhere(where, base, errors);
+   246→            }
+   247→        }
+   248→    }
+   249→
+   250→    /** setOps 逐项硬校验（单表与多表共用；base 为错误定位前缀，如「DATA_UPDATE 节点 du_1」）。 */
+   251→    private void validateDataUpdateSetOps(JsonNode setOps, String base, List<String> errors) {
+   252→        for (int i = 0; i < setOps.size(); i++) {
+   253→            JsonNode setOp = setOps.get(i);
+   254→            String label = base + " SET 第 " + (i + 1) + " 项";
+   255→            if (isBlankText(setOp, "column")) {
+   256→                errors.add(label + "缺少 column");
+   257→            }
+   258→            String mode = textOrNull(setOp, "mode");
+   259→            String normalizedMode = mode == null || mode.isBlank() ? "SET" : mode.trim().toUpperCase();
+   260→            if (!Set.of("SET", "ADD", "SUB").contains(normalizedMode)) {
+   261→                errors.add(label + "mode 非法(须 SET/ADD/SUB): " + mode);
+   262→            } else if (isBlankText(setOp, "value")) {
+   263→                errors.add(label + "缺少 value");
+   264→            } else if (("ADD".equals(normalizedMode) || "SUB".equals(normalizedMode))
+   265→                    && !isNumericText(setOp.get("value").asText())) {
+   266→                errors.add(label + mode + " 模式 value 须为数字或 {{数值变量}}: " + setOp.get("value").asText());
+   267→            }
+   268→        }
+   269→    }
+   270→
+   271→    /** where 逐项硬校验（单表与多表共用；base 为错误定位前缀）。 */
+   272→    private void validateDataUpdateWhere(JsonNode where, String base, List<String> errors) {
+   273→        for (int i = 0; i < where.size(); i++) {
+   274→            JsonNode cond = where.get(i);
+   275→            String label = base + " WHERE 第 " + (i + 1) + " 项";
+   276→            if (isBlankText(cond, "column")) {
+   277→                errors.add(label + "缺少 column");
+   278→            }
+   279→            String op = textOrNull(cond, "op");
+   280→            if (op == null || op.isBlank()) {
+   281→                errors.add(label + "缺少 op");
+   282→                continue;
+   283→            }
+   284→            String normalizedOp = op.trim().toUpperCase();
+   285→            if (!Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "IS_NULL", "NOT_NULL").contains(normalizedOp)) {
+   286→                errors.add(label + "op 非法: " + op);
+   287→            } else if (Set.of("IS_NULL", "NOT_NULL").contains(normalizedOp)) {
+   288→                // 空判定无需 value
+   289→            } else if (isBlankText(cond, "value")) {
+   290→                errors.add(label + "缺少 value");
+   291→            }
+   292→        }
+   293→    }
+   294→
+   295→    /** 数字或 {{数值变量}}（占位符内容运行期解析，此处放行）。 */
+   296→    private static boolean isNumericText(String text) {
+   297→        String trimmed = text == null ? "" : text.trim();
+   298→        if (trimmed.startsWith("{{")) {
+   299→            return true;
+   300→        }
+   301→        try {
+   302→            new java.math.BigDecimal(trimmed);
+   303→            return true;
+   304→        } catch (NumberFormatException e) {
+   305→            return false;
+   306→        }
+   307→    }
+   308→
+   309→    /**
+   310→     * SUBFLOW 节点硬校验：flowId 必填；varsMapping（若填）逐项 source/target 均非空；
+   311→     * 目标流存在性与发布状态留待运行期（发布时目标可能尚未创建/发布）。
+   312→     */
+   313→    private void validateSubflow(LogicFlowDsl.NodeDef node, List<String> errors) {
+   314→        JsonNode config = node.getConfig();
+   315→        if (config == null || isBlankText(config, "flowId")) {
+   316→            errors.add("SUBFLOW 节点 " + node.getId() + " 缺少 flowId");
+   317→        }
+   318→        JsonNode mapping = config == null ? null : config.get("varsMapping");
+   319→        if (mapping != null && mapping.isArray()) {
+   320→            for (int i = 0; i < mapping.size(); i++) {
+   321→                JsonNode pair = mapping.get(i);
+   322→                if (isBlankText(pair, "source") || isBlankText(pair, "target")) {
+   323→                    errors.add("SUBFLOW 节点 " + node.getId() + " varsMapping 第 " + (i + 1)
+   324→                            + " 项缺少 source/target");
+   325→                }
+   326→            }
+   327→        }
+   328→    }
+   329→
+   330→    /**
+   331→     * SQL_SCRIPT 节点硬校验：sql 必填；语句切分成功且非空、数量不超上限；
+   332→     * 逐条类型白名单（kindOf）+ 占位符/引号语法（compile 空变量编译，配置错误尽早暴露）；
+   333→     * 语句别名（含默认 s{i} 键）不重复；onError ∈ abort|continue；maxRows（若填）1~1000。
+   334→     * 目标表/列存在性不做静态校验（运行期由数据库报错，错误进汇总条目）。
+   335→     */
+   336→    private void validateSqlScript(LogicFlowDsl.NodeDef node, List<String> errors) {
+   337→        JsonNode config = node.getConfig();
+   338→        if (config == null || config.isNull()) {
+   339→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 缺少 config");
+   340→            return;
+   341→        }
+   342→        String sql = textOrNull(config, "sql");
+   343→        if (sql == null || sql.isBlank()) {
+   344→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 缺少 sql");
+   345→            return;
+   346→        }
+   347→        List<String> statements;
+   348→        try {
+   349→            statements = SqlScriptSupport.splitStatements(sql);
+   350→        } catch (IllegalArgumentException e) {
+   351→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 语句解析失败: " + e.getMessage());
+   352→            return;
+   353→        }
+   354→        if (statements.isEmpty()) {
+   355→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " sql 未包含可执行语句");
+   356→            return;
+   357→        }
+   358→        if (statements.size() > SqlScriptSupport.MAX_STATEMENTS) {
+   359→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 语句数超出上限("
+   360→                    + SqlScriptSupport.MAX_STATEMENTS + "): " + statements.size());
+   361→        }
+   362→        Set<String> keys = new LinkedHashSet<>();
+   363→        for (int i = 0; i < statements.size(); i++) {
+   364→            String label = "第 " + (i + 1) + " 条";
+   365→            String stmt = statements.get(i);
+   366→            try {
+   367→                SqlScriptSupport.kindOf(stmt);
+   368→            } catch (IllegalArgumentException e) {
+   369→                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + ": " + e.getMessage());
+   370→            }
+   371→            try {
+   372→                // 空变量编译 = 纯语法校验（占位符闭合/路径合法/引号闭合）；变量存在性运行期解析
+   373→                SqlScriptSupport.compile(stmt, Map.of(), null);
+   374→            } catch (Exception e) {
+   375→                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + " 语法错误: " + e.getMessage());
+   376→            }
+   377→            String name = SqlScriptSupport.extractName(stmt);
+   378→            String key = (name != null && !name.isBlank()) ? name.trim() : ("s" + i);
+   379→            if (!keys.add(key)) {
+   380→                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + " 语句别名重复: " + key);
+   381→            }
+   382→        }
+   383→        String onError = textOrNull(config, "onError");
+   384→        if (onError != null && !onError.isBlank()
+   385→                && !Set.of("abort", "continue").contains(onError.trim().toLowerCase())) {
+   386→            errors.add("SQL_SCRIPT 节点 " + node.getId() + " onError 非法(须 abort/continue): " + onError);
+   387→        }
+   388→        JsonNode maxRows = config.get("maxRows");
+   389→        if (maxRows != null && !maxRows.isNull()) {
+   390→            int v = maxRows.asInt(-1);
+   391→            if (v < 1 || v > 1000) {
+   392→                errors.add("SQL_SCRIPT 节点 " + node.getId() + " maxRows 须在 1~1000: " + v);
+   393→            }
+   394→        }
+   395→    }
+   396→
+   397→    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
+   398→    private static final Set<NodeType> BATCH_BODY_ALLOWED = Set.of(
+   399→            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
+   400→            NodeType.SQL_SCRIPT, NodeType.BATCH);
+   401→
+   402→    /** BATCH 最大嵌套深度（发布校验限制，防无限自嵌套） */
+   403→    private static final int MAX_BATCH_NESTING_DEPTH = 3;
+   404→
+   405→    /**
+   406→     * BATCH 节点硬校验（双模式）：
+   407→     * <ul>
+   408→     *   <li>body 模式（config.body 为数组）：循环体非空；逐步 type ∈ 允许集且对应 config 完整；
+   409→     *       DATA_UPDATE/SUBFLOW 复用主节点同款校验；</li>
+   410→     *   <li>legacy 模式（无 body）：actionType ∈ HTTP/SCRIPT/BEAN 且对应 actionConfig 完整。</li>
+   411→     * </ul>
+   412→     * collection 必填；maxItems（若填）须在 1~1000。
+   413→     */
+   414→    private void validateBatch(LogicFlowDsl.NodeDef node, List<String> errors) {
+   415→        validateBatch(node, errors, 0);
+   416→    }
+   417→
+   418→    private void validateBatch(LogicFlowDsl.NodeDef node, List<String> errors, int depth) {
+   419→        if (depth > MAX_BATCH_NESTING_DEPTH) {
+   420→            errors.add("BATCH 节点 " + node.getId() + " 嵌套超过 " + MAX_BATCH_NESTING_DEPTH + " 层");
+   421→            return;
+   422→        }
+   423→        JsonNode config = node.getConfig();
+   424→        if (config == null || config.isNull()) {
+   425→            errors.add("BATCH 节点 " + node.getId() + " 缺少 config");
+   426→            return;
+   427→        }
+   428→        if (isBlankText(config, "collection")) {
+   429→            errors.add("BATCH 节点 " + node.getId() + " 缺少 collection");
+   430→        }
+   431→        JsonNode body = config.get("body");
+   432→        if (body != null && body.isArray()) {
+   433→            if (body.isEmpty()) {
+   434→                errors.add("BATCH 节点 " + node.getId()
+   435→                        + " 循环体为空（请把动作节点拖入批处理循环虚线，或回退 legacy 单动作配置）");
+   436→            }
+   437→            for (int i = 0; i < body.size(); i++) {
+   438→                validateBatchBodyStep(node, body.get(i), i, depth, errors);
+   439→            }
+   440→        } else {
+   441→            validateBatchLegacyAction(node, config, errors);
+   442→        }
+   443→        JsonNode maxItems = config.get("maxItems");
+   444→        if (maxItems != null && !maxItems.isNull()) {
+   445→            int value = maxItems.asInt(-1);
+   446→            if (value < 1 || value > 1000) {
+   447→                errors.add("BATCH 节点 " + node.getId() + " maxItems 须在 1~1000: " + value);
+   448→            }
+   449→        }
+   450→    }
+   451→
+   452→    /** 校验循环体单步：type 合法 + 对应 config 完整（复用主节点同款规则）；BATCH 步骤递归校验（嵌套）。 */
+   453→    private void validateBatchBodyStep(LogicFlowDsl.NodeDef batchNode, JsonNode step,
+   454→                                       int index, int depth, List<String> errors) {
+   455→        String label = "循环体第 " + (index + 1) + " 步";
+   456→        if (step == null || step.isNull() || !step.isObject()) {
+   457→            errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "须为对象");
+   458→            return;
+   459→        }
+   460→        String typeName = textOrNull(step, "type");
+   461→        if (typeName == null || typeName.isBlank()) {
+   462→            errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "缺少 type");
+   463→            return;
+   464→        }
+   465→        NodeType type;
+   466→        try {
+   467→            type = NodeType.fromJson(typeName);
+   468→        } catch (IllegalArgumentException e) {
+   469→            type = null;
+   470→        }
+   471→        if (type == null || !BATCH_BODY_ALLOWED.contains(type)) {
+   472→            errors.add("BATCH 节点 " + batchNode.getId() + " " + label
+   473→                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
+   474→            return;
+   475→        }
+   476→        JsonNode stepConfig = step.get("config");
+   477→        // results 全类型步骤均可配（WHOLE/KEY 单表）；resultVar 已下线
+   478→        JsonNode stepResults = step.get("results");
+   479→        boolean hasStepResults = stepResults != null && stepResults.isArray() && !stepResults.isEmpty();
+   480→        if (hasStepResults) {
+   481→            List<LogicFlowDsl.ResultVarDef> defs = new ArrayList<>();
+   482→            for (int i = 0; i < stepResults.size(); i++) {
+   483→                JsonNode item = stepResults.get(i);
+   484→                LogicFlowDsl.ResultVarDef def = item != null && item.isObject()
+   485→                        ? new LogicFlowDsl.ResultVarDef() : null;
+   486→                if (def != null) {
+   487→                    def.setName(textOrNull(item, "name"));
+   488→                    def.setMode(textOrNull(item, "mode"));
+   489→                }
+   490→                defs.add(def);
+   491→            }
+   492→            validateResults(defs, "BATCH 节点 " + batchNode.getId() + " " + label + "(" + type + ")", errors);
+   493→        }
+   494→        if (type == NodeType.BATCH) {
+   495→            // 嵌套批处理：递归校验子 config（深度限制防自嵌套）
+   496→            LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+   497→            stepNode.setId(batchNode.getId() + " " + label);
+   498→            stepNode.setType(NodeType.BATCH);
+   499→            stepNode.setConfig(stepConfig);
+   500→            validateBatch(stepNode, errors, depth + 1);
+   501→            return;
+   502→        }
+   503→        switch (type) {
+   504→            case HTTP -> {
+   505→                if (stepConfig == null || stepConfig.isNull() || isBlankText(stepConfig, "url")) {
+   506→                    errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(HTTP) 缺少 url");
+   507→                }
+   508→            }
+   509→            case BEAN -> {
+   510→                if (stepConfig == null || stepConfig.isNull()
+   511→                        || isBlankText(stepConfig, "beanName") || isBlankText(stepConfig, "methodName")) {
+   512→                    errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(BEAN) 缺少 beanName/methodName");
+   513→                }
+   514→            }
+   515→            case SCRIPT -> {
+   516→                if (stepConfig == null || stepConfig.isNull() || isBlankText(stepConfig, "source")) {
+   517→                    errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT) 缺少 source");
+   518→                }
+   519→            }
+   520→            case DATA_UPDATE -> {
+   521→                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+   522→                stepNode.setId(batchNode.getId() + " " + label);
+   523→                stepNode.setType(NodeType.DATA_UPDATE);
+   524→                stepNode.setConfig(stepConfig);
+   525→                validateDataUpdate(stepNode, errors);
+   526→            }
+   527→            case SUBFLOW -> {
+   528→                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+   529→                stepNode.setId(batchNode.getId() + " " + label);
+   530→                stepNode.setType(NodeType.SUBFLOW);
+   531→                stepNode.setConfig(stepConfig);
+   532→                validateSubflow(stepNode, errors);
+   533→            }
+   534→            case SQL_SCRIPT -> {
+   535→                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+   536→                stepNode.setId(batchNode.getId() + " " + label);
+   537→                stepNode.setType(NodeType.SQL_SCRIPT);
+   538→                stepNode.setConfig(stepConfig);
+   539→                validateSqlScript(stepNode, errors);
+   540→            }
+   541→            default -> {
+   542→                // 不可达（上方类型白名单已过滤）
+   543→            }
+   544→        }
+   545→    }
+   546→
+   547→    /** legacy 单动作校验（无 body 时）：actionType ∈ HTTP/SCRIPT/BEAN 且 actionConfig 完整。 */
+   548→    private void validateBatchLegacyAction(LogicFlowDsl.NodeDef node, JsonNode config, List<String> errors) {
+   549→        String actionType = textOrNull(config, "actionType");
+   550→        if (actionType == null || actionType.isBlank()) {
+   551→            errors.add("BATCH 节点 " + node.getId() + " 缺少循环体(body)或 actionType");
+   552→            return;
+   553→        }
+   554→        JsonNode actionConfig = config.get("actionConfig");
+   555→        switch (actionType.trim().toUpperCase()) {
+   556→            case "HTTP" -> {
+   557→                if (actionConfig == null || actionConfig.isNull() || isBlankText(actionConfig, "url")) {
+   558→                    errors.add("BATCH 节点 " + node.getId() + " 内嵌 HTTP 动作缺少 url");
+   559→                }
+   560→            }
+   561→            case "SCRIPT" -> {
+   562→                if (actionConfig == null || actionConfig.isNull() || isBlankText(actionConfig, "source")) {
+   563→                    errors.add("BATCH 节点 " + node.getId() + " 内嵌 SCRIPT 动作缺少 source");
+   564→                }
+   565→            }
+   566→            case "BEAN" -> {
+   567→                if (actionConfig == null || actionConfig.isNull()
+   568→                        || isBlankText(actionConfig, "beanName") || isBlankText(actionConfig, "methodName")) {
+   569→                    errors.add("BATCH 节点 " + node.getId() + " 内嵌 BEAN 动作缺少 beanName/methodName");
+   570→                }
+   571→            }
+   572→            default -> errors.add("BATCH 节点 " + node.getId() + " actionType 非法（仅支持 HTTP/SCRIPT/BEAN）: " + actionType);
+   573→        }
+   574→    }
+   575→
+   576→    private static String textOrNull(JsonNode config, String field) {
+   577→        JsonNode node = config.get(field);
+   578→        return node == null || node.isNull() ? null : node.asText();
+   579→    }
+   580→
+   581→    private static boolean isBlankText(JsonNode config, String field) {
+   582→        JsonNode node = config.get(field);
+   583→        return node == null || node.isNull() || node.asText().isBlank();
+   584→    }
+   585→}
+   586→

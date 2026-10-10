@@ -55,7 +55,8 @@
       </span>
     </div>
 
-    <!-- 连接点：CONDITION 两个出边（真/假）上下排布标注；BATCH 侧面闭合循环连线；其余上入下出 -->
+    <!-- 连接点：CONDITION 两个出边（真/假）上下排布标注；BATCH 侧面闭合循环连线；
+         执行型节点主流出点居左 + 失败路由（error）出点居右标注；其余上入下出 -->
     <template v-if="data.nodeType === 'CONDITION'">
       <Handle id="in" type="target" :position="Position.Top" />
       <Handle id="true" type="source" :position="Position.Bottom" class="handle-branch branch-true" :style="{ left: '28%' }" />
@@ -65,7 +66,10 @@
     </template>
     <template v-else-if="data.nodeType === 'BATCH'">
       <Handle id="in" type="target" :position="Position.Top" />
-      <Handle id="out" type="source" :position="Position.Bottom" />
+      <Handle id="out" type="source" :position="Position.Bottom" :style="{ left: '30%' }" />
+      <!-- 失败路由出点（error 边）：失败时优先路由到该分支，替代全局 errorAction 两档 -->
+      <Handle id="error" type="source" :position="Position.Bottom" class="handle-branch branch-error" :style="{ left: '74%' }" />
+      <span class="branch-label label-error">败</span>
       <!-- 闭合循环连线挂在节点右侧：外凸 U 形（LoopEdge.vue），远离主流更醒目 -->
       <Handle id="loop_start" type="source" :position="Position.Right" class="handle-loop" :style="{ top: '30%' }" />
       <Handle id="loop_end" type="target" :position="Position.Right" class="handle-loop" :style="{ top: '74%' }" />
@@ -74,7 +78,12 @@
     </template>
     <template v-else>
       <Handle v-if="data.nodeType !== 'START'" id="in" type="target" :position="Position.Top" />
-      <Handle v-if="data.nodeType !== 'END'" id="out" type="source" :position="Position.Bottom" />
+      <template v-if="data.nodeType !== 'END' && hasErrorBranch">
+        <Handle id="out" type="source" :position="Position.Bottom" :style="{ left: '30%' }" />
+        <Handle id="error" type="source" :position="Position.Bottom" class="handle-branch branch-error" :style="{ left: '74%' }" />
+        <span class="branch-label label-error">败</span>
+      </template>
+      <Handle v-else-if="data.nodeType !== 'END'" id="out" type="source" :position="Position.Bottom" />
     </template>
   </div>
 </template>
@@ -85,6 +94,7 @@ import { Handle, Position } from '@vue-flow/core'
 import { Check, Close, CloseBold, Minus } from '@element-plus/icons-vue'
 import { NODE_COLOR_VAR, nodeMeta } from '../utils/nodeMeta'
 import { sqlStatementKind, splitSqlStatements } from '../utils/sqlScript'
+import { supportsErrorBranch } from '../utils/dsl'
 import type { FlowNodeData } from '../utils/dsl'
 
 const props = withDefaults(
@@ -103,6 +113,9 @@ const emit = defineEmits<{ delete: [id: string] }>()
 
 const meta = computed(() => nodeMeta(props.data.nodeType))
 const badge = computed(() => meta.value.badge)
+
+/** 是否渲染失败路由（error）出点：全部执行型节点（引擎 onError 失败路由） */
+const hasErrorBranch = computed(() => supportsErrorBranch(props.data.nodeType))
 
 const typeColorStyle = computed(() => {
   const colorVar = NODE_COLOR_VAR[props.data.nodeType]
@@ -177,7 +190,16 @@ const summary = computed(() => {
     }
     case 'DATA_UPDATE': {
       const updates = Array.isArray(cfg?.updates) ? (cfg?.updates as unknown[]) : []
-      if (updates.length) {
+      if (updates.length === 1) {
+        // 单条目 = 单表更新（引擎输出与存量单表一致）
+        const u = updates[0] as { table?: unknown; setOps?: unknown[] } | null
+        const uTable = String(u?.table ?? '')
+        if (uTable) {
+          const uFields = Array.isArray(u?.setOps) ? u!.setOps.length : 0
+          return `更新 ${uTable} · ${uFields} 字段`
+        }
+      }
+      if (updates.length > 1) {
         const fields = updates.reduce((sum: number, u) => {
           const ops = (u as { setOps?: unknown[] } | null)?.setOps
           return sum + (Array.isArray(ops) ? ops.length : 0)
@@ -208,6 +230,51 @@ const summary = computed(() => {
       } catch {
         return 'SQL 解析待修正'
       }
+    }
+    case 'DATA_QUERY': {
+      const formKey = String(cfg?.formKey ?? '')
+      const filters = Array.isArray(cfg?.filter) ? (cfg?.filter as unknown[]) : []
+      const bits = [filters.length ? `${filters.length} 筛选` : '', cfg?.keyword ? '含关键字' : '']
+        .filter(Boolean).join(' · ')
+      return formKey ? `查询 ${formKey}${bits ? ` · ${bits}` : ''}` : '未配置表单'
+    }
+    case 'DATA_INSERT': {
+      const formKey = String(cfg?.formKey ?? '')
+      const data = Array.isArray(cfg?.data) ? (cfg?.data as unknown[]) : []
+      return formKey ? `新增至 ${formKey} · ${data.length} 字段` : '未配置表单'
+    }
+    case 'DATA_DELETE': {
+      const formKey = String(cfg?.formKey ?? '')
+      const id = String(cfg?.id ?? '').trim()
+      const filters = Array.isArray(cfg?.filter) ? (cfg?.filter as unknown[]) : []
+      const mode = id ? '按 ID' : filters.length ? `按条件 ${filters.length} 项` : '未配置条件'
+      return formKey ? `删除 ${formKey} · ${mode}` : '未配置表单'
+    }
+    case 'NOTIFY': {
+      const tpl = String(cfg?.templateCode ?? '')
+      const recipients = Array.isArray(cfg?.recipientIds) ? (cfg?.recipientIds as unknown[]) : []
+      return tpl ? `模板 ${tpl} · ${recipients.length} 接收人` : '未配置模板'
+    }
+    case 'DELAY': {
+      const ms = Number(cfg?.durationMs ?? 0)
+      return ms > 0 ? `等待 ${ms >= 1000 ? `${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)}s` : `${ms}ms`}` : '未配置时长'
+    }
+    case 'TRANSFORM': {
+      const tpl = String(cfg?.template ?? '').trim()
+      if (!tpl) return '未配置模板'
+      return `映射模板 · ${tpl.length} 字符`
+    }
+    case 'AGGREGATE': {
+      const collection = String(cfg?.collection ?? '')
+      const ops = Array.isArray(cfg?.ops) ? (cfg?.ops as unknown[]) : []
+      const groupBy = String(cfg?.groupBy ?? '').trim()
+      if (!collection) return '未配置集合'
+      const bits = [ops.join('/'), groupBy ? `按 ${groupBy} 分组` : ''].filter(Boolean).join(' · ')
+      return `${collection}${bits ? ` · ${bits}` : ''}`
+    }
+    case 'LLM': {
+      const prompt = String(cfg?.prompt ?? '').trim()
+      return prompt ? `AI 调用 · ${prompt.slice(0, 18)}${prompt.length > 18 ? '…' : ''}` : '未配置提示词'
     }
     default:
       return ''
@@ -468,5 +535,21 @@ const summary = computed(() => {
   left: 72%;
   color: var(--el-color-danger);
   background: color-mix(in srgb, var(--el-color-danger) 8%, transparent);
+}
+
+/* 失败路由（error）出点：红色实心醒目，与 CONDITION 假分支同色系但形状区分 */
+.lf-node-card .branch-error {
+  width: 10px;
+  height: 10px;
+  cursor: crosshair;
+  background: color-mix(in srgb, var(--el-color-danger) 55%, var(--el-bg-color));
+  border: 1.5px solid var(--el-color-danger);
+}
+
+.label-error {
+  left: 74%;
+  color: var(--el-color-danger);
+  background: color-mix(in srgb, var(--el-color-danger) 10%, transparent);
+  font-weight: 600;
 }
 </style>

@@ -1,0 +1,1442 @@
+     1→package com.workflow.engine.logicflow.engine;
+     2→
+     3→import com.fasterxml.jackson.databind.JsonNode;
+     4→import com.fasterxml.jackson.databind.ObjectMapper;
+     5→import com.workflow.engine.form.column.ColumnInfo;
+     6→import com.workflow.engine.form.column.DynamicTableManager;
+     7→import com.workflow.engine.logic.BackendBeanRegistry;
+     8→import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+     9→import com.workflow.engine.logic.config.BackendSqlScriptConfig;
+    10→import com.workflow.engine.logic.config.BackendLogicBeanConfig;
+    11→import com.workflow.engine.logic.config.BackendLogicHttpConfig;
+    12→import com.workflow.engine.logic.config.BackendLogicScriptConfig;
+    13→import com.workflow.engine.logic.executor.GroovyScriptLogic;
+    14→import com.workflow.engine.logic.executor.HttpLogicExecutor;
+    15→import com.workflow.engine.logic.parse.ParamMapping;
+    16→import com.workflow.engine.logic.parse.VariableResolver;
+    17→import com.workflow.engine.logicflow.dsl.ConditionEvaluator;
+    18→import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
+    19→import com.workflow.engine.logicflow.dsl.NodeType;
+    20→import com.workflow.engine.logicflow.entity.LogicFlowDef;
+    21→import com.workflow.engine.logicflow.repository.LogicFlowDefRepository;
+    22→import org.slf4j.Logger;
+    23→import org.slf4j.LoggerFactory;
+    24→
+    25→import java.math.BigDecimal;
+    26→import java.sql.Connection;
+    27→import java.sql.PreparedStatement;
+    28→import java.sql.ResultSet;
+    29→import java.sql.SQLException;
+    30→import java.sql.Statement;
+    31→import java.util.ArrayDeque;
+    32→import java.util.ArrayList;
+    33→import java.util.Deque;
+    34→import java.util.EnumSet;
+    35→import java.util.HashSet;
+    36→import java.util.LinkedHashMap;
+    37→import java.util.List;
+    38→import java.util.Locale;
+    39→import java.util.Map;
+    40→import java.util.Set;
+    41→
+    42→import org.springframework.jdbc.core.JdbcTemplate;
+    43→
+    44→/**
+    45→ * 独立逻辑流编排解释执行引擎（普通类，由 FlowableEngineConfig 装配为 Bean）。
+    46→ *
+    47→ * <p>执行语义：
+    48→ * <ul>
+    49→ *   <li>从 START 节点出发沿出边行走，到达 END 结束；多个 START 取第一个，无 START → FAILED；</li>
+    50→ *   <li>CONDITION 节点按 branch=true/false 选出边（缺边 → FAILED）；非条件/结束节点缺出边 → FAILED「节点无出边」；</li>
+    51→ *   <li>maxSteps=200：步数超出 → FAILED「超出最大执行步数(疑似死循环)」；</li>
+    52→ *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT 及 CONDITION）输出统一由
+    53→ *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeResults}；
+    54→ *       SCRIPT 严格 / 其余宽松）；resultVar 已全链路下线；</li>
+    55→ *   <li>隐式默认输出（约定优于配置）：未声明 results 的执行型节点自动把整体返回值写入
+    56→ *       以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用；显式声明后按声明执行；</li>
+    57→ *       BATCH 遍历集合并按循环体链（config.body[]，逐项顺序执行链上各节点）执行，
+    58→ *       聚合结果列表为节点返回值（由 results 声明写入）；legacy 单动作（actionType+actionConfig）仍兼容；
+    59→ *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 为节点返回值（由 results 声明写入）；</li>
+    60→ *   <li>节点异常按 errorAction：FAIL_FLOW（默认）→ 整个流 FAILED 停止；
+    61→ *       IGNORE_CONTINUE → 该节点 trace 记 FAILED 后继续走边；</li>
+    62→ *   <li>输出 outputVars = 全部变量快照（容器结构深拷贝）。</li>
+    63→ * </ul>
+    64→ */
+    65→public class LogicFlowEngine {
+    66→
+    67→    private static final Logger log = LoggerFactory.getLogger(LogicFlowEngine.class);
+    68→
+    69→    /** 防环步数上限。 */
+    70→    public static final int MAX_STEPS = 200;
+    71→
+    72→    /** 运行结果状态。 */
+    73→    public static final String STATUS_SUCCESS = "SUCCESS";
+    74→    public static final String STATUS_FAILED = "FAILED";
+    75→
+    76→    /** 节点轨迹状态（SKIPPED 预留：并行/多路分支未走过的节点）。 */
+    77→    public static final String TRACE_SUCCESS = "SUCCESS";
+    78→    public static final String TRACE_FAILED = "FAILED";
+    79→    public static final String TRACE_SKIPPED = "SKIPPED";
+    80→
+    81→    private static final String ACTION_IGNORE_CONTINUE = "IGNORE_CONTINUE";
+    82→
+    83→    private final HttpLogicExecutor httpExecutor;
+    84→    private final GroovyScriptLogic groovyScriptLogic;
+    85→    private final BackendBeanRegistry backendBeanRegistry;
+    86→    private final VariableResolver variableResolver;
+    87→    private final ObjectMapper objectMapper;
+    88→    /** 子流程目标查询（仅读已发布流；可为 null → SUBFLOW 节点报「引擎未装配子流程仓库」）。 */
+    89→    private final LogicFlowDefRepository defRepository;
+    90→    /** 数据更新节点执行依赖（可为 null → DATA_UPDATE 节点报「引擎未装配数据更新能力」）。 */
+    91→    private final JdbcTemplate jdbcTemplate;
+    92→    /** 动态表元数据（表/列存在性校验；可为 null，同上）。 */
+    93→    private final DynamicTableManager tableManager;
+    94→
+    95→    public LogicFlowEngine(HttpLogicExecutor httpExecutor,
+    96→                           GroovyScriptLogic groovyScriptLogic,
+    97→                           BackendBeanRegistry backendBeanRegistry,
+    98→                           VariableResolver variableResolver,
+    99→                           ObjectMapper objectMapper) {
+   100→        this(httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper, null);
+   101→    }
+   102→
+   103→    public LogicFlowEngine(HttpLogicExecutor httpExecutor,
+   104→                           GroovyScriptLogic groovyScriptLogic,
+   105→                           BackendBeanRegistry backendBeanRegistry,
+   106→                           VariableResolver variableResolver,
+   107→                           ObjectMapper objectMapper,
+   108→                           LogicFlowDefRepository defRepository) {
+   109→        this(httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper,
+   110→                defRepository, null, null);
+   111→    }
+   112→
+   113→    public LogicFlowEngine(HttpLogicExecutor httpExecutor,
+   114→                           GroovyScriptLogic groovyScriptLogic,
+   115→                           BackendBeanRegistry backendBeanRegistry,
+   116→                           VariableResolver variableResolver,
+   117→                           ObjectMapper objectMapper,
+   118→                           LogicFlowDefRepository defRepository,
+   119→                           JdbcTemplate jdbcTemplate,
+   120→                           DynamicTableManager tableManager) {
+   121→        this.httpExecutor = httpExecutor;
+   122→        this.groovyScriptLogic = groovyScriptLogic;
+   123→        this.backendBeanRegistry = backendBeanRegistry;
+   124→        this.variableResolver = variableResolver;
+   125→        this.objectMapper = objectMapper;
+   126→        this.defRepository = defRepository;
+   127→        this.jdbcTemplate = jdbcTemplate;
+   128→        this.tableManager = tableManager;
+   129→    }
+   130→
+   131→    /** 单节点执行轨迹（record，可被 Jackson 直接序列化）。 */
+   132→    public record NodeTrace(String nodeId, String nodeName, String type, String status,
+   133→                            Object result, String error, long durationMs) {
+   134→    }
+   135→
+   136→    /** 一次编排执行的结果（outputVars 为变量快照深拷贝）。 */
+   137→    public record RunOutcome(String status, Map<String, Object> outputVars,
+   138→                             List<NodeTrace> traces, String errorMessage) {
+   139→    }
+   140→
+   141→    /** 子流程最大嵌套深度（防递归失控）。 */
+   142→    public static final int MAX_SUBFLOW_DEPTH = 5;
+   143→
+   144→    /** 子流程调用链栈（同一线程内递归执行共享；run 入口初始化，finally 清理）。 */
+   145→    private final ThreadLocal<Deque<String>> subflowStack = new ThreadLocal<>();
+   146→
+   147→    /**
+   148→     * 执行编排（无调用链起点，子流程环检测从空栈开始）。节点级失败/结构性问题
+   149→     * （缺 START、缺出边、未知类型、死循环等）均不抛出，统一收敛为
+   150→     * {@code status=FAILED} 的 RunOutcome，保证运行历史完整留痕。
+   151→     */
+   152→    public RunOutcome run(LogicFlowDsl dsl, Map<String, Object> inputVars) {
+   153→        return run(dsl, inputVars, null);
+   154→    }
+   155→
+   156→    /**
+   157→     * 执行编排（带所属流 id，用于子流程自引用/环检测：ownerFlowId 即在调用链上，
+   158→     * 子流程若调回自身所属流将被拒绝）。
+   159→     */
+   160→    public RunOutcome run(LogicFlowDsl dsl, Map<String, Object> inputVars, String ownerFlowId) {
+   161→        subflowStack.set(new ArrayDeque<>());
+   162→        if (ownerFlowId != null && !ownerFlowId.isBlank()) {
+   163→            subflowStack.get().push(ownerFlowId);
+   164→        }
+   165→        try {
+   166→            return runInternal(dsl, inputVars);
+   167→        } finally {
+   168→            subflowStack.remove();
+   169→        }
+   170→    }
+   171→
+   172→    private RunOutcome runInternal(LogicFlowDsl dsl, Map<String, Object> inputVars) {
+   173→        List<NodeTrace> traces = new ArrayList<>();
+   174→        Map<String, Object> vars = new LinkedHashMap<>();
+   175→        if (inputVars != null) {
+   176→            vars.putAll(inputVars);
+   177→        }
+   178→        if (dsl == null || dsl.getNodes() == null || dsl.getNodes().isEmpty()) {
+   179→            return fail(vars, traces, "DSL 为空：缺少节点定义");
+   180→        }
+   181→
+   182→        Map<String, LogicFlowDsl.NodeDef> nodeById = new LinkedHashMap<>();
+   183→        for (LogicFlowDsl.NodeDef node : dsl.getNodes()) {
+   184→            nodeById.put(node.getId(), node);
+   185→        }
+   186→        Map<String, List<LogicFlowDsl.EdgeDef>> outEdges = new LinkedHashMap<>();
+   187→        for (LogicFlowDsl.EdgeDef edge : dsl.getEdges() != null ? dsl.getEdges() : List.<LogicFlowDsl.EdgeDef>of()) {
+   188→            outEdges.computeIfAbsent(edge.getSource(), k -> new ArrayList<>()).add(edge);
+   189→        }
+   190→
+   191→        LogicFlowDsl.NodeDef start = dsl.getNodes().stream()
+   192→                .filter(n -> n.getType() == NodeType.START)
+   193→                .findFirst()
+   194→                .orElse(null);
+   195→        if (start == null) {
+   196→            return fail(vars, traces, "缺少 START 节点");
+   197→        }
+   198→
+   199→        LogicFlowDsl.NodeDef current = start;
+   200→        int step = 0;
+   201→        try {
+   202→            return walk(current, step, nodeById, outEdges, vars, traces);
+   203→        } catch (FlowAbortedException e) {
+   204→            // 缺出边/边引用缺失节点/FAIL_FLOW 中断 → 统一收敛为 FAILED，引擎不向调用方抛异常
+   205→            return fail(vars, traces, e.getMessage());
+   206→        }
+   207→    }
+   208→
+   209→    /**
+   210→     * 主行走循环：从 current 出发沿边执行，直到 END（返回 SUCCESS outcome）
+   211→     * 或因缺出边/FAIL_FLOW 等抛出 {@link FlowAbortedException} 中断。
+   212→     */
+   213→    private RunOutcome walk(LogicFlowDsl.NodeDef current, int step,
+   214→                            Map<String, LogicFlowDsl.NodeDef> nodeById,
+   215→                            Map<String, List<LogicFlowDsl.EdgeDef>> outEdges,
+   216→                            Map<String, Object> vars,
+   217→                            List<NodeTrace> traces) {
+   218→        while (current != null) {
+   219→            if (++step > MAX_STEPS) {
+   220→                return fail(vars, traces, "超出最大执行步数(疑似死循环)");
+   221→            }
+   222→            NodeType type = current.getType();
+   223→            if (type == null) {
+   224→                return fail(vars, traces, "UNKNOWN_NODE_TYPE: null (node " + current.getId() + ")");
+   225→            }
+   226→            switch (type) {
+   227→                case START -> {
+   228→                    traces.add(new NodeTrace(current.getId(), current.getName(), type.name(),
+   229→                            TRACE_SUCCESS, null, null, 0L));
+   230→                    current = requireNext(nodeById, outEdges, current.getId());
+   231→                }
+   232→                case END -> {
+   233→                    traces.add(new NodeTrace(current.getId(), current.getName(), type.name(),
+   234→                            TRACE_SUCCESS, null, null, 0L));
+   235→                    return new RunOutcome(STATUS_SUCCESS, snapshot(vars), List.copyOf(traces), null);
+   236→                }
+   237→                case CONDITION -> current = executeCondition(current, nodeById, outEdges, vars, traces);
+   238→                default -> current = executeLogicNode(current, nodeById, outEdges, vars, traces);
+   239→            }
+   240→        }
+   241→        // 不可达兜底（所有分支要么推进 current，要么已 return）
+   242→        return fail(vars, traces, "执行中断于未知位置");
+   243→    }
+   244→
+   245→    // ------------------------------------------------------------------
+   246→    // 节点执行
+   247→    // ------------------------------------------------------------------
+   248→
+   249→    /**
+   250→     * 执行 HTTP/BEAN/SCRIPT 三型逻辑节点，返回下一节点。
+   251→     * 失败按 errorAction：FAIL_FLOW → 抛 {@link FlowAbortedException}（run 顶层收敛为 FAILED）；
+   252→     * IGNORE_CONTINUE → trace 记 FAILED 后继续走边。
+   253→     */
+   254→    private LogicFlowDsl.NodeDef executeLogicNode(LogicFlowDsl.NodeDef node,
+   255→                                                  Map<String, LogicFlowDsl.NodeDef> nodeById,
+   256→                                                  Map<String, List<LogicFlowDsl.EdgeDef>> outEdges,
+   257→                                                  Map<String, Object> vars,
+   258→                                                  List<NodeTrace> traces) {
+   259→        long begin = System.currentTimeMillis();
+   260→        try {
+   261→            Object result = dispatch(node, vars, traces);
+   262→            long duration = System.currentTimeMillis() - begin;
+   263→            // 输出统一由 results 声明驱动（全部执行型节点；SCRIPT 严格 / 其余宽松；无声明则隐式整体输出为 <节点id>）
+   264→            writeResults(node, result, vars);
+   265→            traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
+   266→                    TRACE_SUCCESS, result, null, duration));
+   267→        } catch (Exception e) {
+   268→            long duration = System.currentTimeMillis() - begin;
+   269→            String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+   270→            traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
+   271→                    TRACE_FAILED, null, error, duration));
+   272→            if (!ACTION_IGNORE_CONTINUE.equalsIgnoreCase(node.getErrorAction())) {
+   273→                throw new FlowAbortedException("节点执行失败: " + node.getId() + ": " + error);
+   274→            }
+   275→            log.debug("Logic flow node '{}' failed but continues (IGNORE_CONTINUE): {}", node.getId(), error);
+   276→        }
+   277→        return requireNext(nodeById, outEdges, node.getId());
+   278→    }
+   279→
+   280→    /** 执行 CONDITION 节点：求值 → 按 branch=true/false 选边；返回下一节点。 */
+   281→    private LogicFlowDsl.NodeDef executeCondition(LogicFlowDsl.NodeDef node,
+   282→                                                  Map<String, LogicFlowDsl.NodeDef> nodeById,
+   283→                                                  Map<String, List<LogicFlowDsl.EdgeDef>> outEdges,
+   284→                                                  Map<String, Object> vars,
+   285→                                                  List<NodeTrace> traces) {
+   286→        long begin = System.currentTimeMillis();
+   287→        boolean branch;
+   288→        try {
+   289→            JsonNode config = node.getConfig();
+   290→            if (config == null || config.isNull()) {
+   291→                throw new IllegalArgumentException("CONDITION 节点缺少 config: " + node.getId());
+   292→            }
+   293→            String variable = textOrNull(config, "variable");
+   294→            String operator = textOrNull(config, "operator");
+   295→            String value = textOrNull(config, "value");
+   296→            branch = ConditionEvaluator.evaluate(variable, operator, value, vars, variableResolver);
+   297→        } catch (Exception e) {
+   298→            long duration = System.currentTimeMillis() - begin;
+   299→            String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+   300→            traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
+   301→                    TRACE_FAILED, null, error, duration));
+   302→            if (!ACTION_IGNORE_CONTINUE.equalsIgnoreCase(node.getErrorAction())) {
+   303→                throw new FlowAbortedException("条件评估失败: " + node.getId() + ": " + error);
+   304→            }
+   305→            // 容错继续：条件失败默认走 false 分支
+   306→            branch = false;
+   307→        }
+   308→        long duration = System.currentTimeMillis() - begin;
+   309→        // 输出统一由 results 声明（宽松语义）：WHOLE 写回布尔；未声明则隐式写入 <节点id>=布尔
+   310→        writeResults(node, branch, vars);
+   311→        traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
+   312→                TRACE_SUCCESS, String.valueOf(branch), null, duration));
+   313→        return resolveBranchTarget(node, nodeById, outEdges.get(node.getId()), branch);
+   314→    }
+   315→
+   316→    /** 四型逻辑 + 批处理/子流程分发。 */
+   317→    private Object dispatch(LogicFlowDsl.NodeDef node, Map<String, Object> vars, List<NodeTrace> traces) {
+   318→        return switch (node.getType()) {
+   319→            case HTTP -> executeHttp(node, vars);
+   320→            case BEAN -> executeBean(node, vars);
+   321→            case SCRIPT -> executeScript(node, vars);
+   322→            case BATCH -> executeBatch(node, vars, traces);
+   323→            case SUBFLOW -> executeSubflow(node, vars);
+   324→            case DATA_UPDATE -> executeDataUpdate(node, vars);
+   325→            case SQL_SCRIPT -> executeSqlScript(node, vars);
+   326→            default -> throw new IllegalArgumentException("节点 " + node.getId() + " 不支持执行: " + node.getType());
+   327→        };
+   328→    }
+   329→
+   330→    private Object executeHttp(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   331→        BackendLogicHttpConfig config = readConfig(node, BackendLogicHttpConfig.class);
+   332→        if (config == null || config.getUrl() == null || config.getUrl().isBlank()) {
+   333→            throw new IllegalArgumentException("HTTP 节点缺少 url 配置: " + node.getId());
+   334→        }
+   335→        String method = config.getMethod() == null || config.getMethod().isBlank()
+   336→                ? "GET" : config.getMethod();
+   337→        Map<String, String> headers = config.getHeaders() != null ? config.getHeaders() : Map.of();
+   338→        List<ParamMapping> query = config.getQueryParams() != null ? config.getQueryParams() : List.of();
+   339→        List<ParamMapping> body = config.getBodyParams() != null ? config.getBodyParams() : List.of();
+   340→        // url/headers 的 {{var}} 展开由 HttpLogicExecutor 内部完成（占位符替换后、发请求前做白名单校验）
+   341→        return httpExecutor.execute(config.getUrl(), method, headers, query, body, vars,
+   342→                config.getConnTimeoutMs(), config.getReadTimeoutMs(), Math.max(0, config.getRetryCount()));
+   343→    }
+   344→
+   345→    private Object executeBean(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   346→        BackendLogicBeanConfig config = readConfig(node, BackendLogicBeanConfig.class);
+   347→        if (config == null || isBlank(config.getBeanName()) || isBlank(config.getMethodName())) {
+   348→            throw new IllegalArgumentException("BEAN 节点缺少 beanName/methodName 配置: " + node.getId());
+   349→        }
+   350→        List<ParamMapping> params = config.getParams() != null ? config.getParams() : List.of();
+   351→        Object[] args = params.stream()
+   352→                .map(pm -> vars.get(pm.source()))
+   353→                .toArray();
+   354→        // 未注册的 bean 方法由 BackendBeanRegistry 抛出 IllegalArgumentException → 走 errorAction
+   355→        return backendBeanRegistry.invoke(config.getBeanName(), config.getMethodName(), args);
+   356→    }
+   357→
+   358→    private Object executeScript(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   359→        BackendLogicScriptConfig config = readConfig(node, BackendLogicScriptConfig.class);
+   360→        if (config == null) {
+   361→            throw new IllegalArgumentException("SCRIPT 节点缺少 config: " + node.getId());
+   362→        }
+   363→        if (!"groovy".equalsIgnoreCase(config.getLanguage())) {
+   364→            throw new IllegalArgumentException("UNSUPPORTED_LANGUAGE: " + config.getLanguage());
+   365→        }
+   366→        return groovyScriptLogic.execute(config.getSource(), null, vars);
+   367→    }
+   368→
+   369→    /**
+   370→     * 节点统一输出写回（results 声明式单表模型，适用于全部执行型节点）：
+   371→     * <ul>
+   372→     *   <li>mode=WHOLE：节点返回值整体写入变量；值为 null → 跳过并警告（防覆盖上游变量）；</li>
+   373→     *   <li>mode=KEY：要求输出源为 Map，按声明名取对应 key 写入；缺 key → 跳过不写；
+   374→     *       输出源为字符串时先尝试 JSON 解析为对象（HTTP body 载体拍板 2A）；</li>
+   375→     *   <li>严格度分流（拍板 3B）：SCRIPT 严格——声明 KEY 而末行非 Map → 抛
+   376→     *       IllegalArgumentException（节点 FAILED，配置错误尽早暴露）；其余节点宽松——
+   377→     *       非 Map/解析失败 → 警告跳过，节点继续（外部系统输出不受本流控制）；</li>
+   378→     *   <li>输出名与上游同名变量冲突 → log.warn 警告后放行（运行期宽容策略）；</li>
+   379→     *   <li>未声明 results → 隐式整体输出（见 {@link #writeImplicitResult}）。</li>
+   380→     * </ul>
+   381→     * 调用点须在 trace 记 SUCCESS 之前（失败归入节点异常路径）。
+   382→     */
+   383→    private void writeResults(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+   384→        List<LogicFlowDsl.ResultVarDef> results = node.getResults();
+   385→        if (results == null || results.isEmpty()) {
+   386→            // 未声明输出：隐式约定——整体返回值写入以节点 id 命名的变量（零配置即可被下游引用）
+   387→            writeImplicitResult(node, result, vars);
+   388→            return;
+   389→        }
+   390→        String nodeLabel = node.getName() != null && !node.getName().isBlank()
+   391→                ? node.getName() : node.getId();
+   392→        boolean strict = node.getType() == NodeType.SCRIPT;
+   393→        boolean needsMap = results.stream()
+   394→                .anyMatch(r -> r != null && r.getMode() != null && "KEY".equalsIgnoreCase(r.getMode().trim()));
+   395→        Map<?, ?> keyMap = needsMap ? resolveKeyMap(node, nodeLabel, result, strict) : null;
+   396→        for (LogicFlowDsl.ResultVarDef def : results) {
+   397→            String name = def != null ? def.getName() : null;
+   398→            if (name == null || name.isBlank()) {
+   399→                continue;
+   400→            }
+   401→            Object value;
+   402→            if (def.getMode() != null && "KEY".equalsIgnoreCase(def.getMode().trim())) {
+   403→                if (keyMap == null || !keyMap.containsKey(name)) {
+   404→                    continue; // 解析失败已警告 / 缺 key 跳过不写（防 null 覆盖上游同名变量）
+   405→                }
+   406→                value = keyMap.get(name);
+   407→            } else {
+   408→                if (result == null) {
+   409→                    log.warn("节点 '{}' 输出 '{}' 返回值为 null，跳过写入（防覆盖上游同名变量）",
+   410→                            nodeLabel, name);
+   411→                    continue;
+   412→                }
+   413→                value = result;
+   414→            }
+   415→            if (vars.containsKey(name)) {
+   416→                log.warn("节点 '{}' 输出 '{}' 覆盖上游同名变量（警告放行）", nodeLabel, name);
+   417→            }
+   418→            vars.put(name, value);
+   419→        }
+   420→    }
+   421→
+   422→    /**
+   423→     * 隐式默认输出（约定优于配置）：未声明 results 的执行型节点把整体返回值写入
+   424→     * 以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用；需要重命名/拆包时才显式声明。
+   425→     * <ul>
+   426→     *   <li>null 结果静默跳过（纯副作用节点常见，不刷警告）；</li>
+   427→     *   <li>节点 id 须为合法变量名（\w+）才写——循环体步骤 fallback id 含 '#' 时跳过；</li>
+   428→     *   <li>同名覆盖沿用警告放行策略（节点 id 带类型前缀，与用户变量撞名概率极低）。</li>
+   429→     * </ul>
+   430→     */
+   431→    private void writeImplicitResult(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+   432→        if (result == null) {
+   433→            return;
+   434→        }
+   435→        String id = node.getId();
+   436→        if (id == null || !id.matches("\\w+")) {
+   437→            return;
+   438→        }
+   439→        if (vars.containsKey(id)) {
+   440→            // debug 级：隐式输出属赠品语义，自环/同名场景高频触发，避免刷屏
+   441→            log.debug("节点 '{}' 隐式输出 '{}' 覆盖同名变量（放行）",
+   442→                    node.getName() != null && !node.getName().isBlank() ? node.getName() : id, id);
+   443→        }
+   444→        vars.put(id, result);
+   445→    }
+   446→
+   447→    /**
+   448→     * KEY 模式输出源归一为 Map：Map 直通；字符串尝试 JSON 解析（宽松失败返回 null 并警告）；
+   449→     * 严格模式（SCRIPT）非 Map 直接抛 IllegalArgumentException。
+   450→     */
+   451→    private Map<?, ?> resolveKeyMap(LogicFlowDsl.NodeDef node, String nodeLabel,
+   452→                                    Object result, boolean strict) {
+   453→        if (result instanceof Map<?, ?> map) {
+   454→            return map;
+   455→        }
+   456→        if (result instanceof String text) {
+   457→            try {
+   458→                JsonNode tree = objectMapper.readTree(text);
+   459→                if (tree != null && tree.isObject()) {
+   460→                    return objectMapper.convertValue(tree, Map.class);
+   461→                }
+   462→            } catch (Exception e) {
+   463→                // 落入下方统一警告
+   464→            }
+   465→        }
+   466→        if (strict) {
+   467→            throw new IllegalArgumentException("SCRIPT 节点 " + node.getId()
+   468→                    + " 声明了 mode=KEY 的输出但脚本未返回 Map（实际 "
+   469→                    + (result == null ? "null" : result.getClass().getSimpleName())
+   470→                    + "）：KEY 输出需脚本以 [key: value, ...] 形式返回");
+   471→        }
+   472→        log.warn("节点 '{}' 声明了 mode=KEY 输出但返回值非 Map/JSON 对象（实际 {}），KEY 输出跳过写入",
+   473→                nodeLabel, result == null ? "null" : result.getClass().getSimpleName());
+   474→        return null;
+   475→    }
+   476→
+   477→    // ------------------------------------------------------------------
+   478→    // 数据更新（DATA_UPDATE）节点
+   479→    // ------------------------------------------------------------------
+   480→
+   481→    /** 数据更新节点 SET 禁改列（租户隔离列，防止跨租户污染）。 */
+   482→    private static final String DATA_UPDATE_FORBIDDEN_COLUMN = "tenant_id";
+   483→
+   484→    /** DATA_UPDATE 多表更新（updates）条目数上限（与发布校验同值）。 */
+   485→    private static final int DATA_UPDATE_MAX_UPDATES = BackendDataUpdateConfig.MAX_UPDATES;
+   486→
+   487→    /** 单表 UPDATE 编译产物（key 为多表汇总输出键=别名或 t{序号}；单表路径仅用 sql/params）。 */
+   488→    private record BuiltUpdate(String key, String table, String sql, List<Object> params) {
+   489→    }
+   490→
+   491→    /**
+   492→     * 执行数据更新节点：纯配置 UPDATE 动态表。
+   493→     * 表名/列名经元数据校验，值经参数绑定执行（防注入）。
+   494→     *
+   495→     * <p>两种 config 形态：
+   496→     * <ul>
+   497→     *   <li>单表（存量）：{@code {table, setOps, where}} → 返回受影响行数 Integer（存量流零影响）；</li>
+   498→     *   <li>多表（{@code updates} 存在且非空，优先）：各表单事务顺序执行、全有或全无，
+   499→     *       返回汇总 Map（见 {@link #executeDataUpdateMulti}）。</li>
+   500→     * </ul>
+   501→     * 返回值由 results 声明写入（未声明走隐式整体输出）。
+   502→     */
+   503→    private Object executeDataUpdate(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   504→        BackendDataUpdateConfig config = readConfig(node, BackendDataUpdateConfig.class);
+   505→        if (config == null) {
+   506→            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 config: " + node.getId());
+   507→        }
+   508→        if (config.getUpdates() != null && !config.getUpdates().isEmpty()) {
+   509→            return executeDataUpdateMulti(node, config, vars);
+   510→        }
+   511→        if (isBlank(config.getTable())) {
+   512→            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 table 配置: " + node.getId());
+   513→        }
+   514→        if (config.getSetOps() == null || config.getSetOps().isEmpty()) {
+   515→            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 setOps 配置: " + node.getId());
+   516→        }
+   517→        if (jdbcTemplate == null || tableManager == null) {
+   518→            throw new IllegalStateException("引擎未装配数据更新能力(JdbcTemplate/DynamicTableManager): " + node.getId());
+   519→        }
+   520→        BackendDataUpdateConfig.TableUpdate single = new BackendDataUpdateConfig.TableUpdate();
+   521→        single.setTable(config.getTable());
+   522→        single.setSetOps(config.getSetOps());
+   523→        single.setWhere(config.getWhere());
+   524→        BuiltUpdate built = buildDataUpdate(node.getId(), single, vars);
+   525→
+   526→        int affected = jdbcTemplate.update(built.sql(), built.params().toArray());
+   527→        if (log.isDebugEnabled()) {
+   528→            log.debug("DATA_UPDATE node '{}' -> {} rows: {}", node.getId(), affected, built.sql());
+   529→        }
+   530→        return affected;
+   531→    }
+   532→
+   533→    /**
+   534→     * 多表更新（config.updates）：各表 UPDATE 逐条编译（表/列校验等配置类错误在任何语句
+   535→     * 执行前全部暴露）后，于单连接单事务内顺序执行——全成提交；任一失败整体回滚且节点抛错
+   536→     * （走 errorAction；多表数据一致性优先，需要逐表独立失败语义请拆多个 DATA_UPDATE 节点）。
+   537→     *
+   538→     * <p>返回汇总 Map（条目键 = 别名或 t{序号}）：
+   539→     * {@code { total, affected, t0|别名: {table, affected}, ... }}，
+   540→     * 未声明 results 时按隐式约定写入 {@code <节点id>}（下游如 du_x1.t0.affected、du_x1.order.affected）。
+   541→     */
+   542→    private Map<String, Object> executeDataUpdateMulti(LogicFlowDsl.NodeDef node,
+   543→                                                       BackendDataUpdateConfig config,
+   544→                                                       Map<String, Object> vars) {
+   545→        if (jdbcTemplate == null || tableManager == null) {
+   546→            throw new IllegalStateException("引擎未装配数据更新能力(JdbcTemplate/DynamicTableManager): " + node.getId());
+   547→        }
+   548→        List<BackendDataUpdateConfig.TableUpdate> updates = config.getUpdates();
+   549→        if (updates.size() > DATA_UPDATE_MAX_UPDATES) {
+   550→            throw new IllegalArgumentException("DATA_UPDATE 节点多表更新数超出上限("
+   551→                    + DATA_UPDATE_MAX_UPDATES + "): " + updates.size() + " (" + node.getId() + ")");
+   552→        }
+   553→        // 编译 + 键名冲突预检：全部配置错误在任何语句执行前暴露
+   554→        List<BuiltUpdate> built = new ArrayList<>(updates.size());
+   555→        Set<String> keys = new HashSet<>();
+   556→        for (int i = 0; i < updates.size(); i++) {
+   557→            BackendDataUpdateConfig.TableUpdate u = updates.get(i);
+   558→            String alias = u.getAlias() == null ? "" : u.getAlias().trim();
+   559→            if (!alias.isEmpty() && !alias.matches("\\w+")) {
+   560→                throw new IllegalArgumentException("DATA_UPDATE 节点多表更新别名非法（仅字母/数字/下划线）: "
+   561→                        + u.getAlias() + " (" + node.getId() + ")");
+   562→            }
+   563→            String key = alias.isEmpty() ? ("t" + i) : alias;
+   564→            if (!keys.add(key)) {
+   565→                throw new IllegalArgumentException(
+   566→                        "DATA_UPDATE 节点多表更新别名重复: " + key + " (" + node.getId() + ")");
+   567→            }
+   568→            BuiltUpdate b = buildDataUpdate(node.getId(), u, vars);
+   569→            built.add(new BuiltUpdate(key, b.table(), b.sql(), b.params()));
+   570→        }
+   571→        long begin = System.currentTimeMillis();
+   572→        return jdbcTemplate.execute((Connection con) -> runDataUpdateMulti(con, built, begin));
+   573→    }
+   574→
+   575→    /**
+   576→     * 单连接单事务顺序执行多表 UPDATE：全成提交并返回汇总；任一失败回滚并抛出（节点失败走
+   577→     * errorAction）。汇总条目键 = 别名或 t{序号}，值为 {table, affected}。
+   578→     */
+   579→    private Map<String, Object> runDataUpdateMulti(Connection con, List<BuiltUpdate> built,
+   580→                                                   long begin) throws SQLException {
+   581→        boolean oldAuto = con.getAutoCommit();
+   582→        con.setAutoCommit(false);
+   583→        try {
+   584→            Map<String, Object> items = new LinkedHashMap<>();
+   585→            int total = 0;
+   586→            for (BuiltUpdate u : built) {
+   587→                int affected;
+   588→                try (PreparedStatement ps = con.prepareStatement(u.sql())) {
+   589→                    List<Object> params = u.params();
+   590→                    for (int i = 0; i < params.size(); i++) {
+   591→                        ps.setObject(i + 1, params.get(i));
+   592→                    }
+   593→                    affected = ps.executeUpdate();
+   594→                }
+   595→                Map<String, Object> item = new LinkedHashMap<>();
+   596→                item.put("table", u.table());
+   597→                item.put("affected", affected);
+   598→                items.put(u.key(), item);
+   599→                total += affected;
+   600→            }
+   601→            con.commit();
+   602→            Map<String, Object> summary = new LinkedHashMap<>();
+   603→            summary.put("total", built.size());
+   604→            summary.put("affected", total);
+   605→            summary.put("durationMs", System.currentTimeMillis() - begin);
+   606→            summary.putAll(items);
+   607→            if (log.isDebugEnabled()) {
+   608→                log.debug("DATA_UPDATE multi-table -> {} tables / {} rows: {}", built.size(), total, items);
+   609→            }
+   610→            return summary;
+   611→        } catch (SQLException | RuntimeException ex) {
+   612→            try {
+   613→                con.rollback();
+   614→            } catch (SQLException re) {
+   615→                ex.addSuppressed(re);
+   616→            }
+   617→            throw ex;
+   618→        } finally {
+   619→            con.setAutoCommit(oldAuto);
+   620→        }
+   621→    }
+   622→
+   623→    /**
+   624→     * 编译单表 UPDATE（单表与多表形态共用）：表名/列名经元数据校验，值经参数绑定（防注入）。
+   625→     * 配置类错误（缺 table/setOps、表/列不存在、mode 非法、禁改列等）在执行前抛出。
+   626→     */
+   627→    private BuiltUpdate buildDataUpdate(String nodeId, BackendDataUpdateConfig.TableUpdate u,
+   628→                                        Map<String, Object> vars) {
+   629→        if (isBlank(u.getTable())) {
+   630→            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 table 配置: " + nodeId);
+   631→        }
+   632→        if (u.getSetOps() == null || u.getSetOps().isEmpty()) {
+   633→            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 setOps 配置: " + nodeId);
+   634→        }
+   635→        String table = u.getTable().trim();
+   636→        validateDataUpdateTable(table);
+   637→        Map<String, ColumnInfo> columns = columnsOf(table);
+   638→
+   639→        StringBuilder sql = new StringBuilder("UPDATE ").append(table).append(" SET ");
+   640→        List<Object> params = new ArrayList<>();
+   641→        List<String> setParts = new ArrayList<>();
+   642→        for (BackendDataUpdateConfig.SetOp setOp : u.getSetOps()) {
+   643→            String column = requireColumn(columns, table, setOp.getColumn(), "SET");
+   644→            if (DATA_UPDATE_FORBIDDEN_COLUMN.equalsIgnoreCase(column)) {
+   645→                throw new IllegalArgumentException("DATA_UPDATE 节点禁止修改列 tenant_id: " + nodeId);
+   646→            }
+   647→            String mode = setOp.getMode() == null || setOp.getMode().isBlank()
+   648→                    ? BackendDataUpdateConfig.MODE_SET : setOp.getMode().trim().toUpperCase(Locale.ROOT);
+   649→            Object value = resolveDataUpdateValue(setOp.getValue(), vars);
+   650→            switch (mode) {
+   651→                case BackendDataUpdateConfig.MODE_SET -> setParts.add(column + " = ?");
+   652→                case BackendDataUpdateConfig.MODE_ADD -> {
+   653→                    setParts.add(column + " = " + column + " + ?");
+   654→                    value = requireNumeric(value, nodeId, column, "ADD");
+   655→                }
+   656→                case BackendDataUpdateConfig.MODE_SUB -> {
+   657→                    setParts.add(column + " = " + column + " - ?");
+   658→                    value = requireNumeric(value, nodeId, column, "SUB");
+   659→                }
+   660→                default -> throw new IllegalArgumentException(
+   661→                        "DATA_UPDATE 节点 setOp.mode 非法(须 SET/ADD/SUB): " + setOp.getMode());
+   662→            }
+   663→            params.add(value);
+   664→        }
+   665→        sql.append(String.join(", ", setParts));
+   666→
+   667→        List<BackendDataUpdateConfig.WhereCond> where = u.getWhere() != null
+   668→                ? u.getWhere() : List.of();
+   669→        if (!where.isEmpty()) {
+   670→            sql.append(" WHERE ");
+   671→            List<String> whereParts = new ArrayList<>();
+   672→            for (BackendDataUpdateConfig.WhereCond cond : where) {
+   673→                String column = requireColumn(columns, table, cond.getColumn(), "WHERE");
+   674→                String op = cond.getOp() == null ? "" : cond.getOp().trim().toUpperCase(Locale.ROOT);
+   675→                switch (op) {
+   676→                    case "IS_NULL" -> whereParts.add(column + " IS NULL");
+   677→                    case "NOT_NULL" -> whereParts.add(column + " IS NOT NULL");
+   678→                    case "EQ", "NE", "GT", "GTE", "LT", "LTE" -> {
+   679→                        String symbol = switch (op) {
+   680→                            case "EQ" -> "=";
+   681→                            case "NE" -> "<>";
+   682→                            case "GT" -> ">";
+   683→                            case "GTE" -> ">=";
+   684→                            case "LT" -> "<";
+   685→                            default -> "<=";
+   686→                        };
+   687→                        whereParts.add(column + " " + symbol + " ?");
+   688→                        params.add(resolveDataUpdateValue(cond.getValue(), vars));
+   689→                    }
+   690→                    default -> throw new IllegalArgumentException(
+   691→                            "DATA_UPDATE 节点 where.op 非法(须 EQ/NE/GT/GTE/LT/LTE/IS_NULL/NOT_NULL): " + cond.getOp());
+   692→                }
+   693→            }
+   694→            if (whereParts.isEmpty()) {
+   695→                throw new IllegalArgumentException("DATA_UPDATE 节点 WHERE 条件为空: " + nodeId);
+   696→            }
+   697→            sql.append(String.join(" AND ", whereParts));
+   698→        }
+   699→
+   700→        return new BuiltUpdate("", table, sql.toString(), params);
+   701→    }
+   702→
+   703→    /** 表名校验：合法标识符 + 存在（目标表放开为全库表清单，表名经标识符校验后拼接，值一律参数绑定防注入）。 */
+   704→    private void validateDataUpdateTable(String table) {
+   705→        if (!table.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+   706→            throw new IllegalArgumentException("DATA_UPDATE 表名非法: " + table);
+   707→        }
+   708→        if (!tableManager.tableExists(table)) {
+   709→            throw new IllegalArgumentException("DATA_UPDATE 目标表不存在: " + table);
+   710→        }
+   711→    }
+   712→
+   713→    private Map<String, ColumnInfo> columnsOf(String table) {
+   714→        Map<String, ColumnInfo> columns = new LinkedHashMap<>();
+   715→        for (ColumnInfo info : tableManager.findTableColumns(table)) {
+   716→            columns.put(info.getKey().toLowerCase(Locale.ROOT), info);
+   717→        }
+   718→        return columns;
+   719→    }
+   720→
+   721→    /** 列存在性校验（大小写不敏感），返回规范化列名。 */
+   722→    private String requireColumn(Map<String, ColumnInfo> columns, String table, String column, String clause) {
+   723→        if (column == null || column.isBlank()) {
+   724→            throw new IllegalArgumentException("DATA_UPDATE " + clause + " 列名为空: " + table);
+   725→        }
+   726→        String name = column.trim();
+   727→        if (!columns.containsKey(name.toLowerCase(Locale.ROOT))) {
+   728→            throw new IllegalArgumentException("DATA_UPDATE 目标表缺少列: " + table + "." + name);
+   729→        }
+   730→        return name;
+   731→    }
+   732→
+   733→    /**
+   734→     * 取值解析：纯单占位符 {@code {{path}}} 返回变量原始对象（保留数值类型）；
+   735→     * 含占位符的混合模板做字符串插值；其余按字面量返回。
+   736→     * path 支持 {@code var} 与 {@code var.sub.sub}（逐层 Map 取值）。
+   737→     */
+   738→    private Object resolveDataUpdateValue(String expr, Map<String, Object> vars) {
+   739→        if (expr == null) {
+   740→            return null;
+   741→        }
+   742→        String trimmed = expr.trim();
+   743→        java.util.regex.Matcher pure = java.util.regex.Pattern
+   744→                .compile("\\{\\{\\s*([\\w]+(?:\\.[\\w]+)*)\\s*}}").matcher(trimmed);
+   745→        if (pure.matches()) {
+   746→            return resolvePath(pure.group(1), vars);
+   747→        }
+   748→        if (trimmed.contains("{{")) {
+   749→            java.util.regex.Matcher matcher = java.util.regex.Pattern
+   750→                    .compile("\\{\\{\\s*([\\w]+(?:\\.[\\w]+)*)\\s*}}").matcher(trimmed);
+   751→            StringBuilder sb = new StringBuilder();
+   752→            int last = 0;
+   753→            while (matcher.find()) {
+   754→                sb.append(trimmed, last, matcher.start());
+   755→                Object value = resolvePath(matcher.group(1), vars);
+   756→                sb.append(value != null ? value.toString() : "");
+   757→                last = matcher.end();
+   758→            }
+   759→            sb.append(trimmed.substring(last));
+   760→            return sb.toString();
+   761→        }
+   762→        return trimmed;
+   763→    }
+   764→
+   765→    /** 点路径取值：首段为变量名，后续逐层 Map 取值；任一层缺失返回 null。 */
+   766→    private Object resolvePath(String path, Map<String, Object> vars) {
+   767→        String[] parts = path.split("\\.");
+   768→        Object current = vars.get(parts[0]);
+   769→        for (int i = 1; i < parts.length && current != null; i++) {
+   770→            if (current instanceof Map<?, ?> map) {
+   771→                current = map.get(parts[i]);
+   772→            } else {
+   773→                throw new IllegalArgumentException(
+   774→                        "DATA_UPDATE 取值路径中间层非对象: " + path + " (于 " + parts[i - 1] + ")");
+   775→            }
+   776→        }
+   777→        return current;
+   778→    }
+   779→
+   780→    /** ADD/SUB 模式数值校验：Number 直通，字符串须可解析为 BigDecimal。 */
+   781→    private Object requireNumeric(Object value, String nodeId, String column, String mode) {
+   782→        if (value instanceof Number number) {
+   783→            return new BigDecimal(number.toString());
+   784→        }
+   785→        if (value == null || value.toString().isBlank()) {
+   786→            throw new IllegalArgumentException("DATA_UPDATE 节点 " + mode + " 模式列 " + column + " 值不能为空");
+   787→        }
+   788→        try {
+   789→            return new BigDecimal(value.toString().trim());
+   790→        } catch (NumberFormatException e) {
+   791→            throw new IllegalArgumentException(
+   792→                    "DATA_UPDATE 节点 " + mode + " 模式列 " + column + " 值须为数字: " + value);
+   793→        }
+   794→    }
+   795→
+   796→    // ------------------------------------------------------------------
+   797→    // SQL 批处理（SQL_SCRIPT）节点
+   798→    // ------------------------------------------------------------------
+   799→
+   800→    /** SQL_SCRIPT 单语句数上限（防超长脚本；与发布校验同值）。 */
+   801→    private static final int SQL_SCRIPT_MAX_STATEMENTS = SqlScriptSupport.MAX_STATEMENTS;
+   802→
+   803→    /** SQL_SCRIPT 单语句超时（秒）。 */
+   804→    private static final int SQL_STATEMENT_TIMEOUT_SECONDS = 30;
+   805→
+   806→    /** SQL_SCRIPT 查询行数缺省上限（可配 maxRows 覆盖，硬上限 1000）。 */
+   807→    private static final int SQL_DEFAULT_MAX_ROWS = 200;
+   808→    private static final int SQL_MAX_ROWS_HARD_CAP = 1000;
+   809→
+   810→    /**
+   811→     * 执行 SQL 批处理节点：多条 SQL 按 {@code ;} 顺序执行（切分/编译见 {@link SqlScriptSupport}），
+   812→     * {{var.path}} 占位符编译为 JDBC ? 参数绑定（防注入）。返回执行汇总 Map 作为节点返回值
+   813→     * （未声明 results 时按隐式约定写入 {@code <节点id>}，如 sql_script_x1.s0.affected）。
+   814→     *
+   815→     * <p>config 形态：{@code {sql, onError?: abort(默认)|continue, maxRows?: 1~1000}}。
+   816→     *
+   817→     * <p>失败语义：abort（默认）——单事务（setAutoCommit=false），任一语句失败整体回滚，
+   818→     * 汇总标 aborted=true 且后续语句不再执行，节点<b>不抛错</b>（下游按 failed/aborted 变量分支）；
+   819→     * continue——自动提交逐条执行，失败记入 sN.error 继续。
+   820→     * 配置类错误（空 sql/语句超限/别名重复/类型白名单外/占位符语法）在任何语句执行前抛出（走 errorAction）。
+   821→     */
+   822→    private Object executeSqlScript(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   823→        if (jdbcTemplate == null) {
+   824→            throw new IllegalStateException("引擎未装配 SQL 执行能力(JdbcTemplate): " + node.getId());
+   825→        }
+   826→        BackendSqlScriptConfig config = readConfig(node, BackendSqlScriptConfig.class);
+   827→        if (config == null || config.getSql() == null || config.getSql().isBlank()) {
+   828→            throw new IllegalArgumentException("SQL_SCRIPT 节点缺少 sql 配置: " + node.getId());
+   829→        }
+   830→        boolean abort = !BackendSqlScriptConfig.ON_ERROR_CONTINUE.equalsIgnoreCase(config.getOnError());
+   831→        int maxRows = config.getMaxRows() == null
+   832→                ? SQL_DEFAULT_MAX_ROWS
+   833→                : Math.max(1, Math.min(SQL_MAX_ROWS_HARD_CAP, config.getMaxRows()));
+   834→
+   835→        List<String> statements = SqlScriptSupport.splitStatements(config.getSql());
+   836→        if (statements.isEmpty()) {
+   837→            throw new IllegalArgumentException("SQL_SCRIPT 节点 sql 未包含可执行语句: " + node.getId());
+   838→        }
+   839→        if (statements.size() > SQL_SCRIPT_MAX_STATEMENTS) {
+   840→            throw new IllegalArgumentException("SQL_SCRIPT 节点语句数超出上限("
+   841→                    + SQL_SCRIPT_MAX_STATEMENTS + "): " + statements.size() + " (" + node.getId() + ")");
+   842→        }
+   843→        // 编译 + 键名冲突预检：配置错误在任何语句执行前暴露（编译同时校验占位符语法与引号闭合）
+   844→        List<SqlScriptSupport.CompiledStatement> entries = new ArrayList<>(statements.size());
+   845→        Set<String> keys = new HashSet<>();
+   846→        for (int i = 0; i < statements.size(); i++) {
+   847→            String stmt = statements.get(i);
+   848→            String name = SqlScriptSupport.extractName(stmt);
+   849→            String key = (name != null && !name.isBlank()) ? name.trim() : ("s" + i);
+   850→            if (!keys.add(key)) {
+   851→                throw new IllegalArgumentException(
+   852→                        "SQL_SCRIPT 节点语句别名重复: " + key + " (" + node.getId() + ")");
+   853→            }
+   854→            SqlScriptSupport.Kind kind = SqlScriptSupport.kindOf(stmt);
+   855→            SqlScriptSupport.CompiledSql compiled = SqlScriptSupport.compile(stmt, vars, objectMapper);
+   856→            entries.add(new SqlScriptSupport.CompiledStatement(key, kind, stmt, compiled.jdbcSql(), compiled.params()));
+   857→        }
+   858→        long begin = System.currentTimeMillis();
+   859→        return jdbcTemplate.execute((Connection con) ->
+   860→                runSqlScript(con, entries, abort, maxRows, begin));
+   861→    }
+   862→
+   863→    /**
+   864→     * 在单连接上顺序执行已编译语句并构建汇总（条目键=别名或 s{i}）：
+   865→     * QUERY → {data, rows, truncated?}；INSERT → {affected, insertKey?}；DML → {affected}；
+   866→     * 失败条目 → {ok:false, error}。abort 模式失败即回滚并终止。
+   867→     */
+   868→    private Map<String, Object> runSqlScript(Connection con, List<SqlScriptSupport.CompiledStatement> entries,
+   869→                                             boolean abort, int maxRows, long begin) throws SQLException {
+   870→        boolean oldAuto = con.getAutoCommit();
+   871→        if (abort) {
+   872→            con.setAutoCommit(false);
+   873→        }
+   874→        boolean aborted = false;
+   875→        int succeeded = 0;
+   876→        int failed = 0;
+   877→        Map<String, Object> items = new LinkedHashMap<>();
+   878→        try {
+   879→            for (int i = 0; i < entries.size(); i++) {
+   880→                SqlScriptSupport.CompiledStatement e = entries.get(i);
+   881→                Map<String, Object> item = new LinkedHashMap<>();
+   882→                item.put("index", i);
+   883→                item.put("kind", e.kind().name());
+   884→                try {
+   885→                    switch (e.kind()) {
+   886→                        case QUERY -> {
+   887→                            try (PreparedStatement ps = con.prepareStatement(e.jdbcSql())) {
+   888→                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+   889→                                SqlScriptSupport.bindParams(ps, e.params());
+   890→                                try (ResultSet rs = ps.executeQuery()) {
+   891→                                    SqlScriptSupport.QueryResult qr = SqlScriptSupport.extractRows(rs, maxRows);
+   892→                                    item.put("data", qr.rows());
+   893→                                    item.put("rows", qr.rows().size());
+   894→                                    if (qr.truncated()) {
+   895→                                        item.put("truncated", true);
+   896→                                    }
+   897→                                }
+   898→                            }
+   899→                        }
+   900→                        case INSERT -> {
+   901→                            try (PreparedStatement ps =
+   902→                                         con.prepareStatement(e.jdbcSql(), Statement.RETURN_GENERATED_KEYS)) {
+   903→                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+   904→                                SqlScriptSupport.bindParams(ps, e.params());
+   905→                                item.put("affected", ps.executeUpdate());
+   906→                                List<Object> keys = SqlScriptSupport.extractGeneratedKeys(ps);
+   907→                                if (!keys.isEmpty()) {
+   908→                                    item.put("insertKey", keys.get(0));
+   909→                                }
+   910→                            }
+   911→                        }
+   912→                        default -> {
+   913→                            try (PreparedStatement ps = con.prepareStatement(e.jdbcSql())) {
+   914→                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+   915→                                SqlScriptSupport.bindParams(ps, e.params());
+   916→                                item.put("affected", ps.executeUpdate());
+   917→                            }
+   918→                        }
+   919→                    }
+   920→                    item.put("ok", true);
+   921→                    succeeded++;
+   922→                } catch (Exception ex) {
+   923→                    String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+   924→                    item.put("ok", false);
+   925→                    item.put("error", msg);
+   926→                    failed++;
+   927→                    if (abort) {
+   928→                        con.rollback();
+   929→                        aborted = true;
+   930→                    }
+   931→                }
+   932→                items.put(e.key(), item);
+   933→                if (aborted) {
+   934→                    break;
+   935→                }
+   936→            }
+   937→            if (abort && !aborted) {
+   938→                con.commit();
+   939→            }
+   940→        } finally {
+   941→            con.setAutoCommit(oldAuto);
+   942→        }
+   943→        Map<String, Object> summary = new LinkedHashMap<>();
+   944→        summary.put("total", entries.size());
+   945→        summary.put("succeeded", succeeded);
+   946→        summary.put("failed", failed);
+   947→        if (aborted) {
+   948→            summary.put("aborted", true);
+   949→        }
+   950→        summary.put("durationMs", System.currentTimeMillis() - begin);
+   951→        summary.putAll(items);
+   952→        return summary;
+   953→    }
+   954→
+   955→    // ------------------------------------------------------------------
+   956→    // 子流程（SUBFLOW）节点
+   957→    // ------------------------------------------------------------------
+   958→
+   959→    /**
+   960→     * 执行子流程节点：查目标已发布流 → 构建子入参 → 递归执行 → outputVars 作为节点结果。
+   961→     *
+   962→     * <p>config 形态：{@code {flowId, passAllVars=true, varsMapping:[{source,target}]}}。
+   963→     *
+   964→     * <p>语义：passAllVars=true（默认）时全量继承当前上下文，varsMapping 在此基础上
+   965→     * 逐项覆盖/改名（后写胜出）；passAllVars=false 时仅传映射后的变量。
+   966→     * 环检测：目标 flowId 已在调用链（含当前流自身）→ 拒绝；嵌套深度上限
+   967→     * {@link #MAX_SUBFLOW_DEPTH}。子流程未发布/不存在 → 节点异常（走 errorAction）。
+   968→     * 子流程自身轨迹不并入父轨迹；节点 result = 子流程 outputVars（由 results 声明写入）。
+   969→     */
+   970→    private Object executeSubflow(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+   971→        JsonNode config = node.getConfig();
+   972→        if (config == null || config.isNull()) {
+   973→            throw new IllegalArgumentException("SUBFLOW 节点缺少 config: " + node.getId());
+   974→        }
+   975→        if (defRepository == null) {
+   976→            throw new IllegalStateException("引擎未装配子流程仓库，无法执行 SUBFLOW: " + node.getId());
+   977→        }
+   978→        String targetId = textOrNull(config, "flowId");
+   979→        if (targetId == null || targetId.isBlank()) {
+   980→            throw new IllegalArgumentException("SUBFLOW 节点缺少 flowId 配置: " + node.getId());
+   981→        }
+   982→        Deque<String> stack = subflowStack.get();
+   983→        if (stack == null) {
+   984→            // 防御：run 内部必已初始化；直接调用 runInternal 时才可能到达
+   985→            stack = new ArrayDeque<>();
+   986→            subflowStack.set(stack);
+   987→        }
+   988→        if (stack.contains(targetId)) {
+   989→            throw new IllegalArgumentException("检测到子流程循环调用: " + targetId);
+   990→        }
+   991→        if (stack.size() >= MAX_SUBFLOW_DEPTH) {
+   992→            throw new IllegalArgumentException("超出子流程最大嵌套深度(" + MAX_SUBFLOW_DEPTH + "): " + targetId);
+   993→        }
+   994→        LogicFlowDef target = defRepository.findById(targetId)
+   995→                .orElseThrow(() -> new IllegalArgumentException("目标子流程不存在: " + targetId));
+   996→        if (!"PUBLISHED".equals(target.getStatus())) {
+   997→            throw new IllegalArgumentException("目标子流程未发布，无法调用: " + target.getFlowKey());
+   998→        }
+   999→        LogicFlowDsl subDsl = LogicFlowDsl.parse(target.getDslJson(), objectMapper);
+  1000→
+  1001→        boolean passAllVars = !config.has("passAllVars") || config.get("passAllVars").asBoolean(true);
+  1002→        Map<String, Object> subVars = new LinkedHashMap<>();
+  1003→        if (passAllVars) {
+  1004→            subVars.putAll(vars);
+  1005→        }
+  1006→        JsonNode mapping = config.get("varsMapping");
+  1007→        if (mapping != null && mapping.isArray()) {
+  1008→            for (JsonNode pair : mapping) {
+  1009→                String source = textOrNull(pair, "source");
+  1010→                String targetName = textOrNull(pair, "target");
+  1011→                if (source == null || source.isBlank() || targetName == null || targetName.isBlank()) {
+  1012→                    continue; // 校验器已拦；运行期宽容跳过空映射
+  1013→                }
+  1014→                subVars.put(targetName, vars.get(source));
+  1015→            }
+  1016→        }
+  1017→
+  1018→        stack.push(targetId);
+  1019→        try {
+  1020→            RunOutcome sub = runInternal(subDsl, subVars);
+  1021→            if (STATUS_SUCCESS.equals(sub.status())) {
+  1022→                return sub.outputVars();
+  1023→            }
+  1024→            throw new IllegalStateException("子流程执行失败(" + target.getFlowKey() + "): "
+  1025→                    + (sub.errorMessage() != null ? sub.errorMessage() : "未知原因"));
+  1026→        } finally {
+  1027→            stack.pop();
+  1028→        }
+  1029→    }
+  1030→
+  1031→    // ------------------------------------------------------------------
+  1032→    // 批处理（BATCH）节点
+  1033→    // ------------------------------------------------------------------
+  1034→
+  1035→    /** 批处理单次最大迭代数（缺省值）。 */
+  1036→    public static final int BATCH_DEFAULT_MAX_ITEMS = 100;
+  1037→    /** 批处理迭代数硬上限（防失控）。 */
+  1038→    public static final int BATCH_HARD_MAX_ITEMS = 1000;
+  1039→    /** 批处理轨迹 result 中保留的单项结果/错误明细上限（防止轨迹膨胀）。 */
+  1040→    public static final int BATCH_TRACE_DETAIL_LIMIT = 20;
+  1041→    /** 循环体节点 trace 记录的迭代上限（只记首轮 + 失败项，防轨迹膨胀）。 */
+  1042→    private static final int BATCH_BODY_TRACE_ITERATIONS = 1;
+  1043→
+  1044→    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套）。 */
+  1045→    private static final Set<NodeType> BATCH_BODY_ALLOWED = EnumSet.of(
+  1046→            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
+  1047→            NodeType.SQL_SCRIPT, NodeType.BATCH);
+  1048→
+  1049→    /** BATCH 嵌套深度运行时上限（发布校验限 3 层，此处纵深防御防绕过校验的自引用 DSL） */
+  1050→    private static final int MAX_BATCH_NESTING_DEPTH = 5;
+  1051→    private static final ThreadLocal<Integer> BATCH_DEPTH = ThreadLocal.withInitial(() -> 0);
+  1052→
+  1053→    /** 批处理汇总（节点返回值，由 results 声明写入 / 节点轨迹 result）。 */
+  1054→    record BatchSummary(int total, int succeeded, int failed, boolean truncated,
+  1055→                        List<Object> results, List<Map<String, Object>> errors) {
+  1056→    }
+  1057→
+  1058→    /**
+  1059→     * 执行批处理节点：解析集合 → 逐项执行循环体链（或 legacy 单动作）→ 聚合结果列表。
+  1060→     *
+  1061→     * <p>config 形态（body 模式，推荐）：{@code {collection, itemVar="item", indexVar="index",
+  1062→     * body:[{id?, type, name?, config, results?, errorAction?}...], stopOnError=true, maxItems=100}}。
+  1063→     * legacy 模式（无 body）：{@code {actionType: HTTP|SCRIPT|BEAN, actionConfig:{...}}}。
+  1064→     *
+  1065→     * <p>语义：每项在「主变量上下文的副本」中执行（itemVar/indexVar 注入），
+  1066→     * 循环体链按序逐节点执行，节点输出由 results 声明写入副本，迭代后副本并回主上下文
+  1067→     * （后写胜出，脚本副作用跨项保留）；聚合结果作为节点返回值由 results 声明写入
+  1068→     * （汇总 Map：total/succeeded/failed/truncated/results/errors，results 取每项链末结果）；
+  1069→     * 链内节点 errorAction=IGNORE_CONTINUE → 跳过该步继续后续节点；
+  1070→     * 否则该项失败，stopOnError=true 时首个失败项向上抛出（由外层 errorAction 决定中断或跳过继续）。
+  1071→     */
+  1072→    private Object executeBatch(LogicFlowDsl.NodeDef node, Map<String, Object> vars, List<NodeTrace> traces) {
+  1073→        int depth = BATCH_DEPTH.get();
+  1074→        if (depth >= MAX_BATCH_NESTING_DEPTH) {
+  1075→            throw new IllegalArgumentException(
+  1076→                    "BATCH 嵌套过深（>" + MAX_BATCH_NESTING_DEPTH + " 层）：" + node.getId());
+  1077→        }
+  1078→        BATCH_DEPTH.set(depth + 1);
+  1079→        try {
+  1080→            return doExecuteBatch(node, vars, traces);
+  1081→        } finally {
+  1082→            BATCH_DEPTH.set(depth);
+  1083→        }
+  1084→    }
+  1085→
+  1086→    private Object doExecuteBatch(LogicFlowDsl.NodeDef node, Map<String, Object> vars, List<NodeTrace> traces) {
+  1087→        JsonNode config = node.getConfig();
+  1088→        if (config == null || config.isNull()) {
+  1089→            throw new IllegalArgumentException("BATCH 节点缺少 config: " + node.getId());
+  1090→        }
+  1091→        String collectionExpr = textOrNull(config, "collection");
+  1092→        if (collectionExpr == null || collectionExpr.isBlank()) {
+  1093→            throw new IllegalArgumentException("BATCH 节点缺少 collection 配置: " + node.getId());
+  1094→        }
+  1095→        JsonNode bodyNode = config.get("body");
+  1096→        List<LogicFlowDsl.NodeDef> body = bodyNode != null && bodyNode.isArray()
+  1097→                ? parseBatchBody(node, bodyNode)
+  1098→                : List.of();
+  1099→        String itemVar = orDefault(textOrNull(config, "itemVar"), "item");
+  1100→        String indexVar = orDefault(textOrNull(config, "indexVar"), "index");
+  1101→        boolean stopOnError = !config.has("stopOnError") || config.get("stopOnError").isNull()
+  1102→                || config.get("stopOnError").asBoolean(true);
+  1103→        int maxItems = normalizeMaxItems(config.get("maxItems"));
+  1104→        if (body.isEmpty() && (textOrNull(config, "actionType") == null || textOrNull(config, "actionType").isBlank())) {
+  1105→            throw new IllegalArgumentException(
+  1106→                    "BATCH 节点缺少循环体(body)或 legacy actionType 配置: " + node.getId());
+  1107→        }
+  1108→
+  1109→        List<Object> items = resolveCollection(collectionExpr, vars);
+  1110→        boolean truncated = items.size() > maxItems;
+  1111→        if (truncated) {
+  1112→            items = items.subList(0, maxItems);
+  1113→        }
+  1114→
+  1115→        List<Object> results = new ArrayList<>(items.size());
+  1116→        List<Map<String, Object>> errors = new ArrayList<>();
+  1117→        int succeeded = 0;
+  1118→        int failed = 0;
+  1119→        for (int i = 0; i < items.size(); i++) {
+  1120→            Object item = items.get(i);
+  1121→            Map<String, Object> childVars = new LinkedHashMap<>(vars);
+  1122→            childVars.put(itemVar, item);
+  1123→            childVars.put(indexVar, i);
+  1124→            try {
+  1125→                Object last = null;
+  1126→                if (!body.isEmpty()) {
+  1127→                    for (int k = 0; k < body.size(); k++) {
+  1128→                        last = executeBatchBodyStep(node, body.get(k), i, k, childVars, traces);
+  1129→                    }
+  1130→                } else {
+  1131→                    // legacy 单动作路径（兼容旧 DSL）
+  1132→                    String actionTypeName = textOrNull(config, "actionType");
+  1133→                    NodeType actionType;
+  1134→                    try {
+  1135→                        actionType = NodeType.fromJson(actionTypeName);
+  1136→                    } catch (IllegalArgumentException e) {
+  1137→                        throw new IllegalArgumentException("BATCH 节点 actionType 非法: " + actionTypeName);
+  1138→                    }
+  1139→                    if (actionType != NodeType.HTTP && actionType != NodeType.SCRIPT && actionType != NodeType.BEAN) {
+  1140→                        throw new IllegalArgumentException("BATCH 节点 actionType 仅支持 HTTP/SCRIPT/BEAN: " + actionTypeName);
+  1141→                    }
+  1142→                    LogicFlowDsl.NodeDef inner = new LogicFlowDsl.NodeDef();
+  1143→                    inner.setId(node.getId() + "#" + i);
+  1144→                    inner.setName(node.getName());
+  1145→                    inner.setType(actionType);
+  1146→                    inner.setConfig(config.get("actionConfig"));
+  1147→                    last = dispatch(inner, childVars, traces);
+  1148→                }
+  1149→                results.add(last);
+  1150→                succeeded++;
+  1151→                vars.putAll(childVars);
+  1152→            } catch (Exception e) {
+  1153→                failed++;
+  1154→                String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+  1155→                if (errors.size() < BATCH_TRACE_DETAIL_LIMIT) {
+  1156→                    Map<String, Object> err = new LinkedHashMap<>();
+  1157→                    err.put("index", i);
+  1158→                    err.put("error", error);
+  1159→                    errors.add(err);
+  1160→                }
+  1161→                if (stopOnError) {
+  1162→                    throw new IllegalArgumentException("BATCH 第 " + (i + 1) + "/" + items.size()
+  1163→                            + " 项执行失败: " + error);
+  1164→                }
+  1165→                log.debug("Batch node '{}' item {} failed but continues: {}", node.getId(), i, error);
+  1166→            }
+  1167→        }
+  1168→        List<Object> traceResults = results.size() > BATCH_TRACE_DETAIL_LIMIT
+  1169→                ? new ArrayList<>(results.subList(0, BATCH_TRACE_DETAIL_LIMIT)) : results;
+  1170→        return new BatchSummary(items.size(), succeeded, failed, truncated,
+  1171→                traceResults, errors);
+  1172→    }
+  1173→
+  1174→    /**
+  1175→     * 执行循环体链中的单步。链内节点失败语义：errorAction=IGNORE_CONTINUE → 记失败轨迹后
+  1176→     * 跳过该步继续链内后续节点；否则向上抛出（该项失败，由 stopOnError 决定整批走向）。
+  1177→     * trace 记录：首轮迭代（i==0）与失败步记录（画布循环体节点 id 不含 '#'，可点亮运行状态）。
+  1178→     */
+  1179→    private Object executeBatchBodyStep(LogicFlowDsl.NodeDef batchNode, LogicFlowDsl.NodeDef step,
+  1180→                                        int iteration, int stepIndex,
+  1181→                                        Map<String, Object> childVars, List<NodeTrace> traces) {
+  1182→        String stepId = step.getId() != null && !step.getId().isBlank()
+  1183→                ? step.getId() : batchNode.getId() + "#b" + stepIndex;
+  1184→        LogicFlowDsl.NodeDef inner = new LogicFlowDsl.NodeDef();
+  1185→        inner.setId(stepId);
+  1186→        inner.setName(step.getName());
+  1187→        inner.setType(step.getType());
+  1188→        inner.setConfig(step.getConfig());
+  1189→        inner.setResults(step.getResults());
+  1190→        inner.setErrorAction(step.getErrorAction());
+  1191→        boolean traceable = iteration < BATCH_BODY_TRACE_ITERATIONS;
+  1192→        long begin = System.currentTimeMillis();
+  1193→        try {
+  1194→            Object result = dispatch(inner, childVars, traces);
+  1195→            // 统一结果写回：results 声明驱动（SCRIPT 严格 / 其余宽松；无声明则隐式整体输出为 <步骤id>）
+  1196→            writeResults(inner, result, childVars);
+  1197→            if (traceable && traces != null) {
+  1198→                traces.add(new NodeTrace(stepId, inner.getName(), inner.getType().name(),
+  1199→                        TRACE_SUCCESS, result, null, System.currentTimeMillis() - begin));
+  1200→            }
+  1201→            return result;
+  1202→        } catch (Exception e) {
+  1203→            String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+  1204→            if (ACTION_IGNORE_CONTINUE.equalsIgnoreCase(inner.getErrorAction())) {
+  1205→                if (traces != null) {
+  1206→                    traces.add(new NodeTrace(stepId, inner.getName(), inner.getType().name(),
+  1207→                            TRACE_FAILED, null, error, System.currentTimeMillis() - begin));
+  1208→                }
+  1209→                log.debug("Batch body step '{}' failed but continues: {}", stepId, error);
+  1210→                return null;
+  1211→            }
+  1212→            throw e;
+  1213→        }
+  1214→    }
+  1215→
+  1216→    /**
+  1217→     * 解析循环体配置（config.body 数组）为节点定义列表。
+  1218→     * 每项须为对象且 type ∈ HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH，否则抛 IllegalArgumentException。
+  1219→     */
+  1220→    private List<LogicFlowDsl.NodeDef> parseBatchBody(LogicFlowDsl.NodeDef node, JsonNode bodyNode) {
+  1221→        List<LogicFlowDsl.NodeDef> steps = new ArrayList<>();
+  1222→        for (JsonNode entry : bodyNode) {
+  1223→            if (entry == null || entry.isNull() || !entry.isObject()) {
+  1224→                continue;
+  1225→            }
+  1226→            String typeName = textOrNull(entry, "type");
+  1227→            NodeType type;
+  1228→            try {
+  1229→                type = typeName == null ? null : NodeType.fromJson(typeName);
+  1230→            } catch (IllegalArgumentException e) {
+  1231→                type = null;
+  1232→            }
+  1233→            if (type == null) {
+  1234→                throw new IllegalArgumentException(
+  1235→                        "BATCH 节点 " + node.getId() + " 循环体步骤缺少/非法 type: " + typeName);
+  1236→            }
+  1237→            if (!BATCH_BODY_ALLOWED.contains(type)) {
+  1238→                throw new IllegalArgumentException(
+  1239→                        "BATCH 节点 " + node.getId() + " 循环体不支持节点类型: " + type);
+  1240→            }
+  1241→            LogicFlowDsl.NodeDef step = new LogicFlowDsl.NodeDef();
+  1242→            step.setId(textOrNull(entry, "id"));
+  1243→            step.setName(textOrNull(entry, "name"));
+  1244→            step.setType(type);
+  1245→            step.setConfig(entry.get("config"));
+  1246→            step.setResults(parseResultsList(entry.get("results")));
+  1247→            step.setErrorAction(textOrNull(entry, "errorAction"));
+  1248→            steps.add(step);
+  1249→        }
+  1250→        return steps;
+  1251→    }
+  1252→
+  1253→    /** results 数组 → ResultVarDef 列表（null/空安全；忽略无名行）。 */
+  1254→    private List<LogicFlowDsl.ResultVarDef> parseResultsList(JsonNode resultsNode) {
+  1255→        if (resultsNode == null || !resultsNode.isArray() || resultsNode.isEmpty()) {
+  1256→            return null;
+  1257→        }
+  1258→        List<LogicFlowDsl.ResultVarDef> results = new ArrayList<>();
+  1259→        for (JsonNode item : resultsNode) {
+  1260→            LogicFlowDsl.ResultVarDef def = objectMapper.convertValue(item, LogicFlowDsl.ResultVarDef.class);
+  1261→            if (def != null && def.getName() != null && !def.getName().isBlank()) {
+  1262→                results.add(def);
+  1263→            }
+  1264→        }
+  1265→        return results.isEmpty() ? null : results;
+  1266→    }
+  1267→
+  1268→    /** maxItems 归一化：缺省 100，钳位 1~1000。 */
+  1269→    private int normalizeMaxItems(JsonNode raw) {
+  1270→        int value = raw == null || raw.isNull() ? BATCH_DEFAULT_MAX_ITEMS : raw.asInt(BATCH_DEFAULT_MAX_ITEMS);
+  1271→        return Math.max(1, Math.min(value, BATCH_HARD_MAX_ITEMS));
+  1272→    }
+  1273→
+  1274→    /**
+  1275→     * 解析批处理集合：{@code {{var}}} 精确形态直接取变量（List/数组/JSON 数组串均可）；
+  1276→     * 其余先占位符展开再按 JSON 数组字面量解析。解析失败/非集合抛 IllegalArgumentException。
+  1277→     */
+  1278→    private List<Object> resolveCollection(String expression, Map<String, Object> vars) {
+  1279→        String trimmed = expression.trim();
+  1280→        java.util.regex.Matcher direct = java.util.regex.Pattern
+  1281→                .compile("^\\{\\{\\s*(\\w+)\\s*}}$").matcher(trimmed);
+  1282→        if (direct.matches()) {
+  1283→            Object value = vars.get(direct.group(1));
+  1284→            if (value == null) {
+  1285→                throw new IllegalArgumentException("BATCH 集合变量不存在或为 null: " + direct.group(1));
+  1286→            }
+  1287→            return toItemList(value, direct.group(1));
+  1288→        }
+  1289→        String resolved = variableResolver.resolve(trimmed, vars);
+  1290→        try {
+  1291→            JsonNode array = objectMapper.readTree(resolved);
+  1292→            if (!array.isArray()) {
+  1293→                throw new IllegalArgumentException("BATCH 集合表达式解析结果不是 JSON 数组: " + trimmed);
+  1294→            }
+  1295→            List<Object> items = new ArrayList<>(array.size());
+  1296→            array.forEach(entry -> items.add(objectMapper.convertValue(entry, Object.class)));
+  1297→            return items;
+  1298→        } catch (IllegalArgumentException e) {
+  1299→            throw e;
+  1300→        } catch (Exception e) {
+  1301→            throw new IllegalArgumentException("BATCH 集合表达式不是合法 JSON 数组: " + trimmed);
+  1302→        }
+  1303→    }
+  1304→
+  1305→    /** 变量值 → 遍历列表（List/数组/Collection 原样转换；字符串按 JSON 数组解析）。 */
+  1306→    private List<Object> toItemList(Object value, String name) {
+  1307→        if (value instanceof List<?> list) {
+  1308→            return new ArrayList<>(list);
+  1309→        }
+  1310→        if (value instanceof Object[] array) {
+  1311→            return new ArrayList<>(List.of(array));
+  1312→        }
+  1313→        if (value instanceof java.util.Collection<?> collection) {
+  1314→            return new ArrayList<>(collection);
+  1315→        }
+  1316→        if (value instanceof String text) {
+  1317→            String trimmed = text.trim();
+  1318→            if (trimmed.startsWith("[")) {
+  1319→                try {
+  1320→                    JsonNode array = objectMapper.readTree(trimmed);
+  1321→                    if (array.isArray()) {
+  1322→                        List<Object> items = new ArrayList<>(array.size());
+  1323→                        array.forEach(entry -> items.add(objectMapper.convertValue(entry, Object.class)));
+  1324→                        return items;
+  1325→                    }
+  1326→                } catch (Exception ignored) {
+  1327→                    // 落入下方统一报错
+  1328→                }
+  1329→            }
+  1330→            throw new IllegalArgumentException("BATCH 集合变量不是数组: " + name);
+  1331→        }
+  1332→        throw new IllegalArgumentException("BATCH 集合变量类型不支持（需数组）: " + name);
+  1333→    }
+  1334→
+  1335→    private static String orDefault(String value, String fallback) {
+  1336→        return value == null || value.isBlank() ? fallback : value.trim();
+  1337→    }
+  1338→
+  1339→    /** config JsonNode → 三型强类型配置（复用 engine/logic/config 既有类）。 */
+  1340→    private <T> T readConfig(LogicFlowDsl.NodeDef node, Class<T> type) {
+  1341→        JsonNode config = node.getConfig();
+  1342→        if (config == null || config.isNull()) {
+  1343→            return null;
+  1344→        }
+  1345→        try {
+  1346→            return objectMapper.treeToValue(config, type);
+  1347→        } catch (Exception e) {
+  1348→            throw new IllegalArgumentException("节点 " + node.getId() + " config 反序列化失败: "
+  1349→                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+  1350→        }
+  1351→    }
+  1352→
+  1353→    // ------------------------------------------------------------------
+  1354→    // 图行走
+  1355→    // ------------------------------------------------------------------
+  1356→
+  1357→    /** 非 CONDITION 节点的后继：取首条出边；缺出边/边引用缺失节点 → FAILED（经 FlowAbortedException 收敛）。 */
+  1358→    private LogicFlowDsl.NodeDef requireNext(Map<String, LogicFlowDsl.NodeDef> nodeById,
+  1359→                                             Map<String, List<LogicFlowDsl.EdgeDef>> outEdges,
+  1360→                                             String nodeId) {
+  1361→        List<LogicFlowDsl.EdgeDef> edges = outEdges.get(nodeId);
+  1362→        if (edges == null || edges.isEmpty()) {
+  1363→            throw new FlowAbortedException("节点无出边: " + nodeId);
+  1364→        }
+  1365→        String target = edges.get(0).getTarget();
+  1366→        LogicFlowDsl.NodeDef next = target != null ? nodeById.get(target) : null;
+  1367→        if (next == null) {
+  1368→            throw new FlowAbortedException("边引用不存在的节点: " + target);
+  1369→        }
+  1370→        return next;
+  1371→    }
+  1372→
+  1373→    /** CONDITION 节点的后继：按 branch=true/false 选边；缺边 → FAILED。 */
+  1374→    private LogicFlowDsl.NodeDef resolveBranchTarget(LogicFlowDsl.NodeDef node,
+  1375→                                                     Map<String, LogicFlowDsl.NodeDef> nodeById,
+  1376→                                                     List<LogicFlowDsl.EdgeDef> edges,
+  1377→                                                     boolean branch) {
+  1378→        String want = String.valueOf(branch);
+  1379→        if (edges != null) {
+  1380→            for (LogicFlowDsl.EdgeDef edge : edges) {
+  1381→                if (want.equalsIgnoreCase(edge.getBranch() == null ? "" : edge.getBranch().trim())) {
+  1382→                    LogicFlowDsl.NodeDef next = edge.getTarget() != null
+  1383→                            ? nodeById.get(edge.getTarget()) : null;
+  1384→                    if (next == null) {
+  1385→                        throw new FlowAbortedException("边引用不存在的节点: " + edge.getTarget());
+  1386→                    }
+  1387→                    return next;
+  1388→                }
+  1389→            }
+  1390→        }
+  1391→        throw new FlowAbortedException("CONDITION 节点 " + node.getId() + " 缺少 branch=" + want + " 出边");
+  1392→    }
+  1393→
+  1394→    // ------------------------------------------------------------------
+  1395→    // 结果收敛
+  1396→    // ------------------------------------------------------------------
+  1397→
+  1398→    private RunOutcome fail(Map<String, Object> vars, List<NodeTrace> traces, String errorMessage) {
+  1399→        log.debug("Logic flow run failed: {}", errorMessage);
+  1400→        return new RunOutcome(STATUS_FAILED, snapshot(vars), List.copyOf(traces), errorMessage);
+  1401→    }
+  1402→
+  1403→    /** 变量快照：容器结构深拷贝（Map/List 递归复制），标量与不可变对象原样引用。 */
+  1404→    private Map<String, Object> snapshot(Map<String, Object> vars) {
+  1405→        Map<String, Object> copy = new LinkedHashMap<>();
+  1406→        vars.forEach((key, value) -> copy.put(key, deepCopyValue(value)));
+  1407→        return copy;
+  1408→    }
+  1409→
+  1410→    private Object deepCopyValue(Object value) {
+  1411→        if (value instanceof Map<?, ?> map) {
+  1412→            Map<Object, Object> copy = new LinkedHashMap<>();
+  1413→            map.forEach((k, v) -> copy.put(k, deepCopyValue(v)));
+  1414→            return copy;
+  1415→        }
+  1416→        if (value instanceof List<?> list) {
+  1417→            List<Object> copy = new ArrayList<>(list.size());
+  1418→            for (Object item : list) {
+  1419→                copy.add(deepCopyValue(item));
+  1420→            }
+  1421→            return copy;
+  1422→        }
+  1423→        return value;
+  1424→    }
+  1425→
+  1426→    private static boolean isBlank(String text) {
+  1427→        return text == null || text.isBlank();
+  1428→    }
+  1429→
+  1430→    private static String textOrNull(JsonNode config, String field) {
+  1431→        JsonNode node = config.get(field);
+  1432→        return node == null || node.isNull() ? null : node.asText();
+  1433→    }
+  1434→
+  1435→    /** 流程中断信号（内部控制流）：图行走/节点执行处抛出，由 {@link #run} 捕获收敛为 FAILED。 */
+  1436→    private static final class FlowAbortedException extends RuntimeException {
+  1437→        FlowAbortedException(String message) {
+  1438→            super(message);
+  1439→        }
+  1440→    }
+  1441→}
+  1442→

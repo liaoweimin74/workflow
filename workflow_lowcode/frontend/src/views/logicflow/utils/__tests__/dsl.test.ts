@@ -545,11 +545,12 @@ describe('SUBFLOW', () => {
 })
 
 describe('DATA_UPDATE 数据更新节点', () => {
-  it('defaultConfig(DATA_UPDATE) 给出默认结构；默认名为数据更新', () => {
+  it('defaultConfig(DATA_UPDATE) 给出统一多表默认结构（单条目=单表更新）；默认名为数据更新', () => {
     expect(defaultConfig('DATA_UPDATE')).toEqual({
       table: '',
-      setOps: [{ column: '', mode: 'SET', value: '' }],
+      setOps: [],
       where: [],
+      updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
     })
     expect(defaultNodeName('DATA_UPDATE')).toBe('数据更新')
   })
@@ -686,5 +687,133 @@ describe('collectReferencedVars', () => {
     expect(refs).not.toContain('resp')
     expect(refs).not.toContain('item')
     expect(refs).not.toContain('index')
+  })
+})
+
+describe('DATA_UPSERT 数据写入节点', () => {
+  it('defaultConfig(DATA_UPSERT) 给出 upsert 默认结构（含 upserts 空条目）；默认名为数据写入', () => {
+    expect(defaultConfig('DATA_UPSERT')).toEqual({
+      formKey: '',
+      conflictKey: '',
+      values: [{ column: '', value: '' }],
+      onUpdate: [],
+      upserts: [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }],
+    })
+    expect(defaultNodeName('DATA_UPSERT')).toBe('数据写入')
+  })
+
+  it('DATA_UPSERT 属合法类型：parse 保留 config 与 results/errorAction', () => {
+    const dsl = JSON.stringify({
+      nodes: [
+        { id: 'start_1', type: 'START', name: '开始', x: 100, y: 80 },
+        {
+          id: 'up_1',
+          type: 'DATA_UPSERT',
+          name: '台账写入',
+          x: 300,
+          y: 160,
+          config: {
+            formKey: 'warehouse',
+            conflictKey: 'sku',
+            values: [
+              { column: 'sku', value: '{{formData.sku}}' },
+              { column: 'qty', value: '{{formData.qty}}' },
+            ],
+            onUpdate: [{ column: 'qty', value: '{{formData.qty}}' }],
+          },
+          results: [{ name: 'upserted', mode: 'WHOLE' }],
+          errorAction: 'IGNORE_CONTINUE',
+        },
+        { id: 'end_1', type: 'END', name: '结束', x: 500, y: 240 },
+      ],
+      edges: [
+        { source: 'start_1', target: 'up_1' },
+        { source: 'up_1', target: 'end_1' },
+      ],
+    })
+    const graph = parseDsl(dsl)
+    const up = graph.nodes[1]
+    expect(up.data.nodeType).toBe('DATA_UPSERT')
+    expect(up.data.results).toEqual([{ name: 'upserted', mode: 'WHOLE', type: 'string' }])
+    expect(up.data.errorAction).toBe('IGNORE_CONTINUE')
+    const cfg = up.data.config as { formKey: string; conflictKey: string; values: unknown[]; onUpdate?: unknown[] }
+    expect(cfg.formKey).toBe('warehouse')
+    expect(cfg.conflictKey).toBe('sku')
+    expect(cfg.values).toHaveLength(2)
+    expect(cfg.onUpdate).toHaveLength(1)
+  })
+
+  it('DATA_UPSERT DSL 往返：serialize → parse → serialize 稳定', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('up_1', 'DATA_UPSERT', 300, 160, {
+        config: {
+          formKey: 'warehouse',
+          conflictKey: 'sku',
+          values: [{ column: 'sku', value: 'A-001' }],
+        },
+        results: [{ name: 'upserted', mode: 'WHOLE' }],
+      }),
+    ]
+    const edges: FlowEdge[] = [makeEdge('e1', 'start_1', 'up_1')]
+    const once = serializeDsl(nodes, edges)
+    const graph = parseDsl(once)
+    const twice = serializeDsl(graph.nodes, graph.edges, graph.inputVars)
+    expect(isDslEqual(once, twice)).toBe(true)
+    const raw = JSON.parse(once)
+    expect(raw.nodes[1].config).toEqual({
+      formKey: 'warehouse',
+      conflictKey: 'sku',
+      values: [{ column: 'sku', value: 'A-001' }],
+    })
+    expect(raw.nodes[1].results).toEqual([{ name: 'upserted', mode: 'WHOLE', type: 'string' }])
+  })
+
+  it('DATA_UPSERT 可入 BATCH 循环体：parse/serialize 往返保留循环体步骤', () => {
+    const dsl = JSON.stringify({
+      nodes: [
+        { id: 'start_1', type: 'START', name: '开始', x: 100, y: 80 },
+        {
+          id: 'batch_1',
+          type: 'BATCH',
+          name: '批处理',
+          x: 300,
+          y: 160,
+          config: {
+            collection: '{{items}}',
+            itemVar: 'item',
+            indexVar: 'index',
+            stopOnError: true,
+            maxItems: 100,
+            body: [
+              {
+                type: 'DATA_UPSERT',
+                name: '数据写入',
+                config: {
+                  formKey: 'warehouse',
+                  conflictKey: 'sku',
+                  values: [{ column: 'sku', value: '{{item.sku}}' }],
+                },
+              },
+            ],
+          },
+        },
+        { id: 'end_1', type: 'END', name: '结束', x: 500, y: 240 },
+      ],
+      edges: [
+        { source: 'start_1', target: 'batch_1' },
+        { source: 'batch_1', target: 'end_1' },
+      ],
+    })
+    const graph = parseDsl(dsl)
+    // 循环体节点被合成到画布（body 链），类型为 DATA_UPSERT
+    const bodyNode = graph.nodes.find((n) => n.data.nodeType === 'DATA_UPSERT')
+    expect(bodyNode).toBeTruthy()
+    const once = serializeDsl(graph.nodes, graph.edges, graph.inputVars)
+    const raw = JSON.parse(once)
+    const batch = raw.nodes.find((n: { type: string }) => n.type === 'BATCH')
+    expect(batch.config.body).toHaveLength(1)
+    expect(batch.config.body[0].type).toBe('DATA_UPSERT')
+    expect(batch.config.body[0].config.formKey).toBe('warehouse')
   })
 })

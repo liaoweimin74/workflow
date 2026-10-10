@@ -1,0 +1,1393 @@
+     1→     1→<template>
+     2→     2→  <div class="page-renderer">
+     3→     3→    <!-- 自定义页面（PAGE）：独立渲染组件（数据源注册 + 动作总线）；definition 由宿主下传，避免二次请求 -->
+     4→     4→    <PageRendererPage v-if="page?.type === 'PAGE'" :definition="page" />
+     5→     5→    <!-- 错误态：不存在/未发布/schema 畸形，不白屏 -->
+     6→     6→    <el-result
+     7→     7→      v-else-if="error"
+     8→     8→      icon="error"
+     9→     9→      :title="error"
+    10→    10→      style="padding: 80px 0"
+    11→    11→    />
+    12→    12→
+    13→    13→    <template v-else>
+    14→    14→      <!-- 查询条件区（由编译产物 searchFields 生成） -->
+    15→    15→      <el-card v-if="searchRules.length" class="search-card">
+    16→    16→        <el-form inline :size="tableSize">
+    17→    17→          <el-form-item v-for="r in searchRules" :key="r.field" :label="r.title">
+    18→    18→            <el-input
+    19→    19→              v-if="r.type === 'input'"
+    20→    20→              v-model="query[r.field]"
+    21→    21→              :placeholder="r.title"
+    22→    22→              :style="(r.props && r.props.style) || 'width: 180px'"
+    23→    23→              clearable
+    24→    24→            />
+    25→    25→            <el-date-picker
+    26→    26→              v-else-if="r.type === 'datePicker'"
+    27→    27→              v-model="query[r.field]"
+    28→    28→              type="datetimerange"
+    29→    29→              start-placeholder="开始"
+    30→    30→              end-placeholder="结束"
+    31→    31→              value-format="YYYY-MM-DD HH:mm:ss"
+    32→    32→              style="width: 360px"
+    33→    33→            />
+    34→    34→          </el-form-item>
+    35→    35→          <el-form-item>
+    36→    36→            <div class="toolbar-buttons">
+    37→    37→              <el-button type="primary" :icon="Search" circle @click="handleSearch" />
+    38→    38→              <el-button :icon="Refresh" circle @click="handleReset" />
+    39→    39→            </div>
+    40→    40→          </el-form-item>
+    41→    41→        </el-form>
+    42→    42→      </el-card>
+    43→    43→
+    44→    44→      <!-- 数据表格（统一基于 SearchTable） / 卡片列表（display=card，字段由表格列自动映射） -->
+    45→    45→      <SearchTable
+    46→    46→        v-if="ready && displayMode === 'table'"
+    47→    47→        ref="searchTableRef"
+    48→    48→        class="page-search-table"
+    49→    49→        :columns="searchTableColumns"
+    50→    50→        :action-buttons="searchTableActionButtons"
+    51→    51→        :toolbar-buttons="searchTableToolbarButtons"
+    52→    52→        :fetch-api="searchTableFetchApi"
+    53→    53→        :show-search="false"
+    54→    54→        :show-pagination="paginationConfig.show"
+    55→    55→        :default-page-size="paginationConfig.pageSize"
+    56→    56→        :page-sizes="paginationConfig.pageSizes"
+    57→    57→         :table-size="tableSize"
+    58→    58→         :style-rule="tableStyle"
+    59→    59→        :max-visible-buttons="20"
+    60→    60→        :show-selection="batchEnabled"
+    61→    61→        :show-summary="summaryEnabled"
+    62→    62→        :summary-method="summaryMethod"
+    63→    63→        @row-click="handleRowClick"
+    64→    64→        @cell-click="handleCellClick"
+    65→    65→        @selection-change="handleSelectionChange"
+    66→    66→        @sort-change="handleSortChange"
+    67→    67→      >
+    68→    68→        <!-- 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+    69→    69→        <template #default>
+    70→    70→          <TableBatchBar
+    71→    71→            v-if="batchEnabled && selectedRows.length > 0"
+    72→    72→            :count="selectedRows.length"
+    73→    73→            :deletable="batchDeleteOn"
+    74→    74→            :deleting="batchDeleting"
+    75→    75→            @batch-delete="handleBatchDelete"
+    76→    76→            @clear="clearSelection"
+    77→    77→          />
+    78→    78→        </template>
+    79→    79→      </SearchTable>
+    80→    80→      <ListCards
+    81→    81→        v-else-if="ready && displayMode === 'card'"
+    82→    82→        ref="cardsRef"
+    83→    83→        class="page-search-cards"
+    84→    84→        :columns="cardColumns"
+    85→    85→        :actions="cardActions"
+    86→    86→        :fetch-api="cardFetchApi"
+    87→    87→        :show-search="false"
+    88→    88→        :show-pagination="paginationConfig.show"
+    89→    89→        :default-page-size="paginationConfig.pageSize"
+    90→    90→         :page-sizes="paginationConfig.pageSizes"
+    91→    91→         :style="cardStyle"
+    92→    92→        @row-click="handleRowClick"
+    93→    93→        @action-click="handleCardActionClick"
+    94→    94→      />
+    95→    95→    </template>
+    96→    96→
+    97→    97→    <!-- 详情弹窗双轨：FORM 数据源/遗留页 → 只读表单；WORKFLOW 等只读数据源 → KV 表格 -->
+    98→    98→    <el-dialog v-model="detailVisible" :title="detailTitle" :width="detailWidth">
+    99→    99→      <div class="dialog-body-scroll" :style="{ height: detailHeight || undefined }">
+   100→   100→        <FormRenderer
+   101→   101→          v-if="detailVisible && isFormDetail"
+   102→   102→          :rule="detailRules"
+   103→   103→          :option="detailOption"
+   104→   104→          :data-sources="detailDataSources"
+   105→   105→          :initial-values="currentRow && currentRow.data"
+   106→   106→          readonly
+   107→   107→        />
+   108→   108→        <el-descriptions v-else-if="detailVisible" :column="1" border>
+   109→   109→          <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+   110→   110→            {{ cellValue(currentRow, col.key) }}
+   111→   111→          </el-descriptions-item>
+   112→   112→        </el-descriptions>
+   113→   113→      </div>
+   114→   114→    </el-dialog>
+   115→   115→
+   116→   116→    <!-- 新增/编辑弹窗（可编辑，提交后刷新） -->
+   117→   117→    <el-dialog v-model="editVisible" :title="editTitle" :width="detailWidth">
+   118→   118→      <div class="dialog-body-scroll" :style="{ height: detailHeight || undefined }">
+   119→   119→        <FormRenderer
+   120→   120→          v-if="editVisible"
+   121→   121→          ref="editFormRef"
+   122→   122→          :rule="detailRules"
+   123→   123→          :option="detailOption"
+   124→   124→          :data-sources="detailDataSources"
+   125→   125→          :initial-values="editInitialValues"
+   126→   126→        />
+   127→   127→      </div>
+   128→   128→      <template #footer>
+   129→   129→        <el-button @click="editVisible = false">取消</el-button>
+   130→   130→        <el-button type="primary" :loading="saving" @click="handleEditSubmit">保存</el-button>
+   131→   131→      </template>
+   132→   132→    </el-dialog>
+   133→   133→
+   134→   134→    <!-- 内嵌表单（formMode=inline）：全屏覆盖视图，关闭后恢复 -->
+   135→   135→    <div v-if="inlineVisible" class="inline-form-overlay">
+   136→   136→      <div class="inline-form-container">
+   137→   137→        <div class="inline-form-header">
+   138→   138→          <span class="inline-form-title">{{ inlineTitle }}</span>
+   139→   139→          <el-button text :icon="Close" @click="inlineVisible = false" />
+   140→   140→        </div>
+   141→   141→        <div class="inline-form-body">
+   142→   142→          <FormRenderer
+   143→   143→            v-if="isFormDetail"
+   144→   144→            ref="inlineFormRef"
+   145→   145→            :rule="detailRules"
+   146→   146→            :option="detailOption"
+   147→   147→            :data-sources="detailDataSources"
+   148→   148→            :initial-values="inlineInitialValues"
+   149→   149→            :readonly="inlineMode === 'view'"
+   150→   150→          />
+   151→   151→          <el-descriptions v-else :column="1" border>
+   152→   152→            <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+   153→   153→              {{ cellValue(inlineRow, col.key) }}
+   154→   154→            </el-descriptions-item>
+   155→   155→          </el-descriptions>
+   156→   156→        </div>
+   157→   157→        <div class="inline-form-footer">
+   158→   158→          <template v-if="inlineMode === 'view'">
+   159→   159→            <el-button type="primary" @click="inlineVisible = false">关闭</el-button>
+   160→   160→          </template>
+   161→   161→          <template v-else>
+   162→   162→            <el-button @click="inlineVisible = false">取消</el-button>
+   163→   163→            <el-button type="primary" :loading="saving" @click="handleInlineSubmit">保存</el-button>
+   164→   164→          </template>
+   165→   165→        </div>
+   166→   166→      </div>
+   167→   167→    </div>
+   168→   168→
+   169→   169→    <!-- 抽屉表单（formMode=drawer）：右侧弹出 -->
+   170→   170→    <el-drawer v-model="drawerVisible" :title="drawerTitle" :size="detailWidth" destroy-on-close>
+   171→   171→      <FormRenderer
+   172→   172→        v-if="isFormDetail"
+   173→   173→        ref="drawerFormRef"
+   174→   174→        :rule="detailRules"
+   175→   175→        :option="detailOption"
+   176→   176→        :data-sources="detailDataSources"
+   177→   177→        :initial-values="drawerInitialValues"
+   178→   178→        :readonly="drawerMode === 'view'"
+   179→   179→      />
+   180→   180→      <el-descriptions v-else :column="1" border>
+   181→   181→        <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+   182→   182→          {{ cellValue(drawerRow, col.key) }}
+   183→   183→        </el-descriptions-item>
+   184→   184→      </el-descriptions>
+   185→   185→      <template #footer>
+   186→   186→        <template v-if="drawerMode === 'view'">
+   187→   187→          <el-button type="primary" @click="drawerVisible = false">关闭</el-button>
+   188→   188→        </template>
+   189→   189→        <template v-else>
+   190→   190→          <el-button @click="drawerVisible = false">取消</el-button>
+   191→   191→          <el-button type="primary" :loading="saving" @click="handleDrawerSubmit">保存</el-button>
+   192→   192→        </template>
+   193→   193→      </template>
+   194→   194→    </el-drawer>
+   195→   195→  </div>
+   196→   196→</template>
+   197→   197→
+   198→   198→<script setup lang="ts">
+   199→   199→// 路由组件 name 与路由 name 一致，供 AdminLayout keep-alive include 匹配缓存
+   200→   200→defineOptions({ name: 'PageRenderer' })
+   201→   201→
+   202→   202→import { ref, computed, reactive, onMounted, watch, h } from 'vue'
+   203→   203→import { useRoute, useRouter } from 'vue-router'
+   204→   204→import { ElMessage, ElMessageBox } from 'element-plus'
+   205→   205→import {
+   206→   206→  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+   207→   207→  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+   208→   208→} from '@element-plus/icons-vue'
+   209→   209→import FormRenderer from '@/views/form/components/FormRenderer.vue'
+   210→   210→import PageRendererPage from './PageRendererPage.vue'
+   211→   211→import SearchTable from '@/components/business/SearchTable.vue'
+   212→   212→import ListCards from '@/components/business/ListCards.vue'
+   213→   213→import type { TableColumn, ActionButton, ToolbarButton, QueryParams, CardColumn, ListQueryParams, ListPageResult } from '@/components/business/types'
+   214→   214→import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
+   215→   215→import { formApi } from '@/api/form'
+   216→   216→import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
+   217→   217→import { bizDataApi } from '@/api/bizData'
+   218→   218→import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
+   219→   219→import { buildCellRender, renderCellContent, type CellContentConfig } from '@/utils/tableColumnRenderer'
+   220→   220→import TableHeaderFilter from './components/TableHeaderFilter.vue'
+   221→   221→import TableBatchBar from './components/TableBatchBar.vue'
+   222→   222→import {
+   223→   223→  buildHeaderFilterCondition,
+   224→   224→  buildSummaryMethod,
+   225→   225→  extractDistinctValues,
+   226→   226→  featureEnabled,
+   227→   227→  headerFilterKindOf,
+   228→   228→  selectedRowIds,
+   229→   229→  type HeaderFilterValue,
+   230→   230→  type SummaryColumnSpec,
+   231→   231→} from './components/tableEnhance'
+   232→   232→import type { CardStyle } from '@/components/business/ListCards.types'
+   233→   233→
+   234→   234→const route = useRoute()
+   235→   235→const router = useRouter()
+   236→   236→
+   237→   237→// 挂载时快照：keep-alive 按 :key="route.path" 隔离实例，不同 pageKey 是独立实例；
+   238→   238→// 缓存实例的全局 route 会随其他页签导航变化，此处不能 watch route.params（否则缓存实例错误重载）
+   239→   239→const pageKey = ref(route.params.pageKey as string)
+   240→   240→
+   241→   241→// ========== 加载状态 ==========
+   242→   242→const error = ref('')
+   243→   243→const page = ref<PageDefinitionDetailDTO | null>(null)
+   244→   244→/** schema 解析 + 数据源 metadata 就绪后置 true，挂载 SearchTable（避免空 schema 提前请求） */
+   245→   245→const ready = ref(false)
+   246→   246→/** SearchTable 实例 ref（供 setQuery / sort / clearSelection / fetchList 控制） */
+   247→   247→const searchTableRef = ref<InstanceType<typeof SearchTable> | null>(null)
+   248→   248→/** ListCards 实例 ref（display=card 时的取数/刷新控制） */
+   249→   249→const cardsRef = ref<InstanceType<typeof ListCards> | null>(null)
+   250→   250→/** 当前选中行（selection-change 事件） */
+   251→   251→const selectedRows = ref<any[]>([])
+   252→   252→
+   253→   253→// ==================== 表格增强（Task ⑤：汇总行 + 表头筛选 + 批量操作） ====================
+   254→   254→/** 最近一次取数的行（汇总行统计 + 表头筛选候选；BizDataVO 形态 {id, data:{...}}） */
+   255→   255→const lastRows = ref<any[]>([])
+   256→   256→/** 汇总列声明（原始 schema columns[].aggregate；编译产物 columns 不含该字段，从顶层原始 columns 读取） */
+   257→   257→const summarySpecs = ref<SummaryColumnSpec[]>([])
+   258→   258→const summaryEnabled = computed(() => summarySpecs.value.length > 0)
+   259→   259→const summaryMethod = computed(() => buildSummaryMethod(summarySpecs.value))
+   260→   260→/** 表头筛选开关（原始 schema headerFilter.enabled） */
+   261→   261→const headerFilterOn = ref(false)
+   262→   262→/** 列 → 筛选值状态（运行态，不持久化） */
+   263→   263→const headerFilters = ref<Record<string, HeaderFilterValue>>({})
+   264→   264→/** 批量操作开关（原始 schema batch） */
+   265→   265→const batchEnabled = ref(false)
+   266→   266→/** 批量删除可见：批量启用 且 数据源可写且绑定表单（走 bizDataApi.remove 删除链路） */
+   267→   267→const batchDeleteOn = computed(() => batchEnabled.value && batchDeleteFlag.value && !isReadonly.value && !!boundFormKey.value)
+   268→   268→const batchDeleteFlag = ref(true)
+   269→   269→const batchDeleting = ref(false)
+   270→   270→
+   271→   271→// ========== 数据源协议（dataSourceId → metadata/类型缓存，双轨渲染依据） ==========
+   272→   272→/** 绑定数据源 metadata（列 + 可写标记）；null=遗留 formKey 页未绑定数据源 */
+   273→   273→const dataSourceMeta = ref<DataSourceMetadataDTO | null>(null)
+   274→   274→/** 绑定数据源定义（type/formKey 反查用） */
+   275→   275→const boundDataSource = ref<DataSourceDTO | null>(null)
+   276→   276→/** 详情/CRUD 用表单 key：遗留页取 page.formKey；FORM 数据源取 ds.formKey；WORKFLOW 数据源为 null（KV 只读） */
+   277→   277→const boundFormKey = computed(
+   278→   278→  () =>
+   279→   279→    page.value?.formKey ||
+   280→   280→    (boundDataSource.value?.type === 'FORM' ? (boundDataSource.value.formKey || null) : null),
+   281→   281→)
+   282→   282→/** 是否只读数据源（无 metadata=遗留可编辑页 → false；有 metadata 按 writable） */
+   283→   283→const isReadonly = computed(() => (dataSourceMeta.value ? !dataSourceMeta.value.writable : false))
+   284→   284→/** 详情渲染形态：有 formKey → 表单；否则 KV 只读表格 */
+   285→   285→const isFormDetail = computed(() => !!boundFormKey.value)
+   286→   286→/** KV 详情列（metadata 列；无 metadata 时回退当前表格列） */
+   287→   287→const kvDetailColumns = computed(() => {
+   288→   288→  const meta = dataSourceMeta.value
+   289→   289→  if (meta?.columns?.length) return meta.columns
+   290→   290→  return tableColumns.value.map((c) => ({ key: c.prop, label: c.label }))
+   291→   291→})
+   292→   292→
+   293→   293→/** 确保数据源定义已加载（打开表单前调用，单次加载） */
+   294→   294→async function ensureBoundDataSource() {
+   295→   295→  if (boundDataSource.value || !page.value?.dataSourceId) return
+   296→   296→  try {
+   297→   297→    boundDataSource.value = (await dataSourceApi.getDataSource(page.value.dataSourceId)).data
+   298→   298→  } catch {
+   299→   299→    boundDataSource.value = null
+   300→   300→  }
+   301→   301→}
+   302→   302→
+   303→   303→// ========== 编译产物解析结果 ==========
+   304→   304→interface CompiledColumn {
+   305→   305→  prop: string
+   306→   306→  label: string
+   307→   307→  minWidth?: number | string
+   308→   308→  width?: number | string
+   309→   309→  align?: string
+   310→   310→  sortable?: boolean
+   311→   311→  /** 固定列（left/right） */
+   312→   312→  fixed?: string
+   313→   313→  /** 列值格式化器（currency/date/datetime/boolean/enum） */
+   314→   314→  formatter?: string
+   315→   315→  /** 列内容类型：expression（JS 表达式）/ template（${字段} 插值） */
+   316→   316→  contentType?: 'expression' | 'template'
+   317→   317→  /** 列内容值（与 contentType 配对） */
+   318→   318→  contentValue?: string
+   319→   319→  /** 列内容模板（${字段} 插值；优先级高于 formatter，低于 expression） */
+   320→   320→  template?: string
+   321→   321→  /** 列动态内容表达式（$row.xxx 求值，结果仅作文本渲染；优先级最高） */
+   322→   322→  expression?: string
+   323→   323→  /** 单元格 class（透传 <td> 静态样式） */
+   324→   324→  className?: string
+   325→   325→  /** 单元格样式表达式（返回样式字符串/CSSProperties 对象） */
+   326→   326→  styleExpr?: string
+   327→   327→  /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
+   328→   328→  onCellClick?: { actions: any[] }
+   329→   329→  style?: import('@/utils/fieldStyle').FieldStyle
+   330→   330→}
+   331→   331→interface SearchRule {
+   332→   332→  type: string
+   333→   333→  field: string
+   334→   334→  title: string
+   335→   335→  matchType: string
+   336→   336→  value?: any
+   337→   337→  props?: Record<string, any>
+   338→   338→}
+   339→   339→// eslint-disable-next-line @typescript-eslint/no-unused-vars
+   340→   340→const searchRules = ref<SearchRule[]>([])
+   341→   341→const tableColumns = ref<CompiledColumn[]>([])
+   342→   342→/** 显示方式：table（表格，默认）/ card（卡片，由视图 schema.display 编译透传） */
+   343→   343→const displayMode = ref<'table' | 'card'>('table')
+   344→   344→const tableStyle = ref<CardStyle | undefined>(undefined)
+   345→   345→const cardStyle = ref<CardStyle | undefined>(undefined)
+   346→   346→/** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
+   347→   347→const sortableFieldKeys = ref<string[]>([])
+   348→   348→/** 分页配置（编译产物 pagination；缺省显示分页 / 20 条 / [10,20,50]） */
+   349→   349→const paginationConfig = ref<{ show: boolean; pageSize: number; pageSizes: number[] }>({
+   350→   350→  show: true,
+   351→   351→  pageSize: 20,
+   352→   352→  pageSizes: [10, 20, 50],
+   353→   353→})
+   354→   354→const actionConfig = ref<Record<string, any>>({})
+   355→   355→const detailConfig = ref<Record<string, any>>({ enabled: false, width: '800px', type: 'form' })
+   356→   356→const eventsList = ref<any[]>([])
+   357→   357→const detailRules = ref<any[]>([])
+   358→   358→const detailOption = ref<Record<string, any>>({})
+   359→   359→/** 绑定表单级数据源绑定（供 FormRenderer 选项数据源/数据组件按 dataSourceId 解析 refId） */
+   360→   360→const detailDataSources = ref<Array<{ id: string; refId: string; name?: string }>>([])
+   361→   361→
+   362→   362→// ========== 查询 ==========
+   363→   363→const query = reactive<Record<string, any>>({})
+   364→   364→const queryDefaults = ref<Record<string, any>>({})
+   365→   365→
+   366→   366→// ========== 详情 ==========
+   367→   367→const detailVisible = ref(false)
+   368→   368→const detailTitle = ref('详情')
+   369→   369→const detailWidth = ref('800px')
+   370→   370→/** 表单容器内容区高度（detailConfig.height；弹窗内容区固定高度滚动） */
+   371→   371→const detailHeight = computed(() => (detailConfig.value.height as string) || '')
+   372→   372→const currentRow = ref<any>(null)
+   373→   373→
+   374→   374→// ========== 新增/编辑 ==========
+   375→   375→const editVisible = ref(false)
+   376→   376→const editTitle = ref('新增')
+   377→   377→const editMode = ref<'create' | 'edit'>('create')
+   378→   378→const editInitialValues = ref<Record<string, any>>({})
+   379→   379→const editFormRef = ref<InstanceType<typeof FormRenderer>>()
+   380→   380→const saving = ref(false)
+   381→   381→
+   382→   382→// ========== 内嵌表单（formMode=inline） ==========
+   383→   383→const inlineVisible = ref(false)
+   384→   384→const inlineTitle = ref('新增')
+   385→   385→const inlineMode = ref<'create' | 'edit' | 'view'>('create')
+   386→   386→const inlineRow = ref<any>(null)
+   387→   387→const inlineInitialValues = ref<Record<string, any>>({})
+   388→   388→const inlineFormRef = ref<InstanceType<typeof FormRenderer>>()
+   389→   389→
+   390→   390→// ========== 抽屉表单（formMode=drawer，右侧弹出） ==========
+   391→   391→const drawerVisible = ref(false)
+   392→   392→const drawerTitle = ref('新增')
+   393→   393→const drawerMode = ref<'create' | 'edit' | 'view'>('create')
+   394→   394→const drawerRow = ref<any>(null)
+   395→   395→const drawerInitialValues = ref<Record<string, any>>({})
+   396→   396→const drawerFormRef = ref<InstanceType<typeof FormRenderer>>()
+   397→   397→
+   398→   398→// ========== 加载页面 ==========
+   399→   399→onMounted(load)
+   400→   400→// 说明：不同 pageKey 由 AdminLayout keep-alive :key="route.path" 隔离为独立实例，
+   401→   401→// 各自 onMounted 时按快照 pageKey 加载；缓存实例不再监听 route.params 变化。
+   402→   402→
+   403→   403→// ========== 强制刷新（keep-alive 场景） ==========
+   404→   404→// AdminLayout 菜单重击当前页签时携带 query._t 强制导航（keep-alive 下组件不重挂载）。
+   405→   405→// 缓存的所有实例都会收到全局 route 变化，仅当前激活实例（path 匹配自身）响应。
+   406→   406→const ownPath = route.path
+   407→   407→watch(
+   408→   408→  () => route.query._t,
+   409→   409→  () => {
+   410→   410→    if (route.path !== ownPath) return
+   411→   411→    refresh()
+   412→   412→  },
+   413→   413→)
+   414→   414→
+   415→   415→/** 强制刷新：重新拉取列表数据（保留搜索条件/分页/排序，不重置表单状态） */
+   416→   416→function refresh() {
+   417→   417→  if (page.value?.type === 'PAGE') return
+   418→   418→  if (displayMode.value === 'card') cardsRef.value?.fetchData()
+   419→   419→  else searchTableRef.value?.fetchList()
+   420→   420→}
+   421→   421→
+   422→   422→async function load() {
+   423→   423→  try {
+   424→   424→    // preview=true（视图设计器预览）：取最新 DRAFT 定义而非已发布版本
+   425→   425→    const preview = route.query.preview === 'true'
+   426→   426→    const res = await pageApi.getPageByKey(pageKey.value, preview)
+   427→   427→    page.value = res.data
+   428→   428→    if (res.data.type === 'PAGE') {
+   429→   429→      // 自定义页面（阶段二）：交给 PageRendererPage 渲染（数据源注册 + 动作总线）
+   430→   430→      return
+   431→   431→    }
+   432→   432→    if (res.data.type !== 'VIEW') {
+   433→   433→      error.value = '未知页面类型'
+   434→   434→      return
+   435→   435→    }
+   436→   436→    if (!parseSchema(res.data.schema)) {
+   437→   437→      error.value = '页面配置异常，请联系管理员'
+   438→   438→      return
+   439→   439→    }
+   440→   440→    // 数据源协议：绑定 dataSourceId 时拉取 metadata（列 + writable），定义（FORM 反查 formKey）延迟到首次表单打开时加载
+   441→   441→    if (res.data.dataSourceId) {
+   442→   442→      try {
+   443→   443→        dataSourceMeta.value = (await dataSourceApi.getMetadata(res.data.dataSourceId)).data
+   444→   444→      } catch {
+   445→   445→        dataSourceMeta.value = null
+   446→   446→      }
+   447→   447→    }
+   448→   448→    ready.value = true
+   449→   449→  } catch (e: any) {
+   450→   450→    error.value = e?.message || '页面加载失败'
+   451→   451→    ElMessage.error(error.value)
+   452→   452→  }
+   453→   453→}
+   454→   454→
+   455→   455→/** 解析编译产物 {rule, option}，按 rule.type 分段提取 */
+   456→   456→function parseSchema(schema: string): boolean {
+   457→   457→  try {
+   458→   458→    const parsed = JSON.parse(schema || '{}')
+   459→   459→    const rule: any[] = Array.isArray(parsed) ? parsed : (parsed.rule || [])
+   460→   460→    // 显示方式（编译产物顶层 display；缺省表格）
+   461→   461→    displayMode.value = parsed.display === 'card' ? 'card' : 'table'
+   462→   462→    detailOption.value = Array.isArray(parsed) ? {} : (parsed.option || {})
+   463→   463→    searchRules.value = rule.filter((r) => r.type === 'input' || r.type === 'datePicker')
+   464→   464→    // 视图级可排序字段（编译产物顶层 sortableFields；未声明=跟随数据源全部可排字段）
+   465→   465→    sortableFieldKeys.value = Array.isArray(parsed.sortableFields) ? parsed.sortableFields : []
+   466→   466→    // 分页配置（编译产物顶层 pagination；未声明使用默认）
+   467→   467→    const pag = parsed.pagination || {}
+   468→   468→    paginationConfig.value = {
+   469→   469→      show: pag.show !== false,
+   470→   470→      pageSize: Number(pag.pageSize) > 0 ? Number(pag.pageSize) : 20,
+   471→   471→      pageSizes: Array.isArray(pag.pageSizes) && pag.pageSizes.length ? [...pag.pageSizes] : [10, 20, 50],
+   472→   472→    }
+   473→   473→    const tableRule = rule.find((r) => r.type === 'table')
+   474→   474→    tableColumns.value = (tableRule?.props?.columns || []) as CompiledColumn[]
+   475→   475→    // 表格增强（Task ⑤）：从顶层原始 schema 读取（ViewCompiler 编译产物不含这些字段，
+   476→   476→    // mergeCompiled 保留原始字段，预览/发布后均可读；未配置时全部关闭 = 现状行为）
+   477→   477→    const rawColumns: any[] = Array.isArray(parsed.columns) ? parsed.columns : []
+   478→   478→    summarySpecs.value = rawColumns
+   479→   479→      .filter((c: any) => c && !c.hidden && c.aggregate)
+   480→   480→      .map((c: any) => ({ key: c.key, aggregate: c.aggregate }))
+   481→   481→    headerFilterOn.value = featureEnabled(parsed.headerFilter)
+   482→   482→    headerFilters.value = {}
+   483→   483→    batchEnabled.value = featureEnabled(parsed.batch)
+   484→   484→    batchDeleteFlag.value = typeof parsed.batch === 'boolean' ? true : parsed.batch?.delete !== false
+   485→   485→    tableStyle.value = tableRule?.props?.style as CardStyle | undefined
+   486→   486→    cardStyle.value = tableRule?.props?.cardStyle as CardStyle | undefined
+   487→   487→    const actionsRule = rule.find((r) => r.type === '__page_actions')
+   488→   488→    actionConfig.value = actionsRule?.props || {}
+   489→   489→    const detailRule = rule.find((r) => r.type === '__page_detail')
+   490→   490→    if (detailRule?.props?.enabled) {
+   491→   491→      detailConfig.value = detailRule.props
+   492→   492→    }
+   493→   493→    const eventsRule = rule.find((r) => r.type === '__page_events')
+   494→   494→    eventsList.value = eventsRule?.events || []
+   495→   495→    // 查询默认值（编译产物 rule.value）
+   496→   496→    queryDefaults.value = Object.fromEntries(searchRules.value.map((r) => [r.field, r.value ?? '']))
+   497→   497→    Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
+   498→   498→    return true
+   499→   499→  } catch {
+   500→   500→    return false
+   501→   501→  }
+   502→   502→}
+   503→   503→
+   504→   504→/** 构建结构化 filter {logic, conditions:[{column,op,value}]}；空条件返回 undefined */
+   505→   505→function buildFilter(params: Record<string, any>): string | undefined {
+   506→   506→  const conditions: { column: string; op: string; value: any }[] = []
+   507→   507→  for (const r of searchRules.value) {
+   508→   508→    const v = params[r.field]
+   509→   509→    if (v === undefined || v === null || v === '') continue
+   510→   510→    if (r.matchType === 'like') conditions.push({ column: r.field, op: 'like', value: v })
+   511→   511→    else if (r.matchType === 'range') conditions.push({ column: r.field, op: 'range', value: v })
+   512→   512→    else conditions.push({ column: r.field, op: 'eq', value: v })
+   513→   513→  }
+   514→   514→  // 表头筛选条件（Task ⑤：漏斗按列筛选；多选→in / 区间→range；与查询条件 AND 合并）
+   515→   515→  for (const [hfKey, hfValue] of Object.entries(headerFilters.value)) {
+   516→   516→    const cond = buildHeaderFilterCondition(hfKey, hfValue)
+   517→   517→    if (cond) conditions.push(cond as { column: string; op: string; value: any })
+   518→   518→  }
+   519→   519→  if (!conditions.length) return undefined
+   520→   520→  return JSON.stringify({ logic: 'AND', conditions })
+   521→   521→}
+   522→   522→
+   523→   523→/** SearchTable 数据获取：page 为 1-based，转后端 0-based；搜索条件从 params（含外部注入 query）提取 */
+   524→   524→const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; total: number }> => {
+   525→   525→  // 不分页（pagination.show=false）：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
+   526→   526→  const p: Record<string, any> = paginationConfig.value.show === false
+   527→   527→    ? { size: -1 }
+   528→   528→    : { page: params.page || 1, size: params.size || 20 }
+   529→   529→  // 排序状态透传（SearchTable 内部维护，服务器端排序）
+   530→   530→  if (params.sort) p.sort = params.sort
+   531→   531→  if (params.order) p.order = params.order
+   532→   532→  const filter = buildFilter(params)
+   533→   533→  if (filter) p.filter = filter
+   534→   534→  const res = await pageApi.queryPageData(pageKey.value, p)
+   535→   535→  const data = res.data as any
+   536→   536→  // 最近一次取数的行：汇总行统计 + 表头筛选文本候选读取
+   537→   537→  lastRows.value = data.records || []
+   538→   538→  triggerEvents('refresh', 'table', { row: null, params: route.query || {} })
+   539→   539→  return { rows: data.records || [], total: data.total || 0 }
+   540→   540→}
+   541→   541→
+   542→   542→/** 卡片取数：ListCards 仅传 {page,size}，合并当前搜索 query 后经同一 fetchApi 取数（与表格共享查询/分页/排序语义） */
+   543→   543→const cardFetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
+   544→   544→  const merged: QueryParams = { ...query, page: params.page, size: params.size }
+   545→   545→  return searchTableFetchApi(merged)
+   546→   546→}
+   547→   547→
+   548→   548→// ========== 查询交互 ==========
+   549→   549→function handleSearch() {
+   550→   550→  searchTableRef.value?.setQuery({ ...query })
+   551→   551→  if (displayMode.value === 'card') cardsRef.value?.fetchData()
+   552→   552→  triggerEvents('search', 'search', { row: null, params: route.query || {} })
+   553→   553→}
+   554→   554→
+   555→   555→function handleReset() {
+   556→   556→  Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
+   557→   557→  searchTableRef.value?.setQuery({ ...query })
+   558→   558→  if (displayMode.value === 'card') cardsRef.value?.fetchData()
+   559→   559→}
+   560→   560→
+   561→   561→/** 行取值：优先 BizDataVO 内层 row.data[key]，回退顶层 row[key] */
+   562→   562→function cellValue(row: any, key: string): unknown {
+   563→   563→  const v = row?.data != null && typeof row.data === 'object' ? row.data[key] : row?.[key]
+   564→   564→  return v === null || v === undefined ? '—' : v
+   565→   565→}
+   566→   566→
+   567→   567→// ========== 操作按钮 ==========
+   568→   568→interface ActionButtonConfig {
+   569→   569→  label: string
+   570→   570→  type: '' | 'primary' | 'danger'
+   571→   571→  icon?: any
+   572→   572→  link?: boolean
+   573→   573→  circle?: boolean
+   574→   574→  onClick: (row?: any) => void
+   575→   575→  /** 按钮形态：button（带图标+文字）/ icon（仅图标）/ text（文字链接） */
+   576→   576→  style: 'button' | 'icon' | 'text'
+   577→   577→}
+   578→   578→
+   579→   579→/** 内置按钮 key（固定行为映射） */
+   580→   580→const BUILTIN_ACTION_KEYS = ['create', 'edit', 'delete', 'view']
+   581→   581→
+   582→   582→/** 按钮显隐：数据源只读时隐藏写操作内置按钮（create/edit/delete），保留查看与自定义按钮 */
+   583→   583→function isActionVisible(b: { key: string; events?: any[] }): boolean {
+   584→   584→  if (!isReadonly.value) return true
+   585→   585→  if (b.events && b.events.length > 0) return true
+   586→   586→  return b.key === 'view'
+   587→   587→}
+   588→   588→
+   589→   589→/** 行级按钮可见性：根据 visible 表达式判断（$row 变量替换求值） */
+   590→   590→function isButtonVisibleForRow(b: { key: string; visible?: string; events?: any[] }, row: any): boolean {
+   591→   591→  // 先通过全局可见性检查
+   592→   592→  if (!isActionVisible(b)) return false
+   593→   593→  // 无 visible 表达式 → 始终显示
+   594→   594→  if (!b.visible) return true
+   595→   595→  // 替换 $row.xxx 变量后求值
+   596→   596→  try {
+   597→   597→    const expr = b.visible.replace(/\$row\.([\w]+)/g, (_: string, k: string) => {
+   598→   598→      const v = row?.data != null && typeof row.data === 'object' ? row.data[k] : row?.[k]
+   599→   599→      return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+   600→   600→    }).replace(/\$param\.([\w]+)/g, (_: string, k: string) => {
+   601→   601→      const v = route.query?.[k]
+   602→   602→      return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+   603→   603→    })
+   604→   604→    // 安全求值：仅允许比较运算，禁止函数调用
+   605→   605→    if (/[a-zA-Z_$]\s*\(/.test(expr)) return false
+   606→   606→    return !!Function('"use strict"; return (' + expr + ')')()
+   607→   607→  } catch {
+   608→   608→    return true // 求值失败时默认显示
+   609→   609→  }
+   610→   610→}
+   611→   611→
+   612→   612→/** 视图表格使用正常（normal）尺寸，不使用 compact 紧凑模式。 */
+   613→   613→const tableSize = computed<'default' | 'small'>(() => 'default')
+   614→   614→
+   615→   615→/** 内置按钮默认图标（未配置 icon 时按 key 注入，操作列圆形图标用） */
+   616→   616→const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }
+   617→   617→/** 图标名 → 组件（对齐 ViewDesigner ActionsConfig.iconOptions value） */
+   618→   618→const iconMap: Record<string, any> = {
+   619→   619→  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+   620→   620→  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+   621→   621→}
+   622→   622→
+   623→   623→/** 编译产物按钮列表（buttons[] 或兼容旧布尔格式归一化） */
+   624→   624→const actionButtonsConfig = computed<{ key: string; label: string; placement: 'toolbar' | 'column'; style: 'button' | 'icon' | 'text'; icon?: string; events?: any[] }[]>(() => {
+   625→   625→  const cfg = actionConfig.value
+   626→   626→  if (Array.isArray(cfg.buttons) && cfg.buttons.length > 0) {
+   627→   627→    return cfg.buttons
+   628→   628→  }
+   629→   629→  // 兼容旧布尔格式：create/edit/delete/view + 全局 placement/style
+   630→   630→  const placement = (cfg.placement === 'toolbar' ? 'toolbar' : 'column') as 'toolbar' | 'column'
+   631→   631→  const style = (cfg.style || 'button') as 'button' | 'icon' | 'text'
+   632→   632→  const out: any[] = []
+   633→   633→  if (cfg.create) out.push({ key: 'create', label: '新增', placement: 'toolbar', style })
+   634→   634→  if (cfg.edit) out.push({ key: 'edit', label: '编辑', placement, style })
+   635→   635→  if (cfg.delete) out.push({ key: 'delete', label: '删除', placement, style })
+   636→   636→  if (cfg.view) out.push({ key: 'view', label: '查看', placement, style })
+   637→   637→  return out
+   638→   638→})
+   639→   639→
+   640→   640→/** 列 → SearchTable TableColumn：render 经公共模块承载 contentType/contentValue/styleExpr/className。
+   641→   641→ * 排序能力由数据源 metadata 声明（方案 A：视图零配置），schema 残留 sortable 忽略。
+   642→   642→ * 表头筛选开启时为可筛列注入 headerRender（漏斗图标）。 */
+   643→   643→const searchTableColumns = computed<TableColumn[]>(() => {
+   644→   644→  const cols = tableColumns.value.map((c) => ({
+   645→   645→    prop: c.prop,
+   646→   646→    label: c.label,
+   647→   647→    minWidth: c.minWidth,
+   648→   648→    width: c.width,
+   649→   649→    align: (c.align || 'left') as any,
+   650→   650→    fixed: (c.fixed || undefined) as any,
+   651→   651→    cellClassName: c.className,
+   652→   652→    sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable
+   653→   653→      && (sortableFieldKeys.value.length === 0 || sortableFieldKeys.value.includes(c.prop)),
+   654→   654→    render: buildCellRender({
+   655→   655→      key: c.prop,
+   656→   656→      contentType: c.contentType,
+   657→   657→      contentValue: c.contentValue,
+   658→   658→      // 兼容旧编译产物（expression/template/formatter 字段）
+   659→   659→      expression: c.expression,
+   660→   660→      template: c.template,
+   661→   661→      formatter: c.formatter,
+   662→   662→      className: c.className,
+   663→   663→      styleExpr: c.styleExpr,
+   664→   664→      style: c.style,
+   665→   665→    }),
+   666→   666→  }))
+   667→   667→  // 表头筛选（Task ⑤）：headerFilter 开启时为可筛列注入 headerRender；未配置时与现状一致
+   668→   668→  if (!headerFilterOn.value) return cols
+   669→   669→  return cols.map((col) => {
+   670→   670→    const meta = headerFilterMetaOf(col.prop)
+   671→   671→    if (!meta) return col
+   672→   672→    return {
+   673→   673→      ...col,
+   674→   674→      headerRender: () =>
+   675→   675→        h(TableHeaderFilter, {
+   676→   676→          columnKey: meta.key,
+   677→   677→          label: meta.label,
+   678→   678→          kind: meta.kind,
+   679→   679→          ...(meta.dateType ? { dateType: meta.dateType } : {}),
+   680→   680→          ...(meta.loadOptions ? { loadOptions: meta.loadOptions } : {}),
+   681→   681→          getValue: () => headerFilters.value[meta.key],
+   682→   682→          onApply: (payload: { key: string; value: HeaderFilterValue | null }) => applyHeaderFilter(payload.key, payload.value),
+   683→   683→        }),
+   684→   684→    }
+   685→   685→  })
+   686→   686→})
+   687→   687→
+   688→   688→/** 表头筛选列元信息：形态按数据源 metadata columnType（缺省文本多选）；自定义计算列不在服务端白名单，不可筛 */
+   689→   689→function headerFilterMetaOf(prop: string | undefined) {
+   690→   690→  if (!prop) return null
+   691→   691→  const compiled = tableColumns.value.find((c) => c.prop === prop)
+   692→   692→  if (compiled && (compiled as any).custom) return null
+   693→   693→  const meta = dataSourceMeta.value?.columns?.find((m) => m.key === prop)
+   694→   694→  const kind = headerFilterKindOf(meta?.columnType)
+   695→   695→  if (kind === 'text') {
+   696→   696→    return { key: prop, label: compiled?.label || prop, kind, loadOptions: () => headerTextOptionsFor(prop) }
+   697→   697→  }
+   698→   698→  if (kind === 'number') return { key: prop, label: compiled?.label || prop, kind }
+   699→   699→  return {
+   700→   700→    key: prop,
+   701→   701→    label: compiled?.label || prop,
+   702→   702→    kind,
+   703→   703→    dateType: (meta?.columnType || '').toUpperCase() === 'DATE' ? 'daterange' as const : 'datetimerange' as const,
+   704→   704→  }
+   705→   705→}
+   706→   706→
+   707→   707→/** 文本多选候选：当前页数据去重值（每次打开弹层惰性读取） */
+   708→   708→function headerTextOptionsFor(key: string): { label: string; value: any }[] {
+   709→   709→  return extractDistinctValues(lastRows.value, key).map((v) => ({ label: String(v), value: v }))
+   710→   710→}
+   711→   711→
+   712→   712→/** 应用/清空某列表头筛选：写回状态 → 重置第一页并按新条件取数 */
+   713→   713→function applyHeaderFilter(key: string, value: HeaderFilterValue | null) {
+   714→   714→  const next = { ...headerFilters.value }
+   715→   715→  if (value) next[key] = value
+   716→   716→  else delete next[key]
+   717→   717→  headerFilters.value = next
+   718→   718→  searchTableRef.value?.setQuery({}, true)
+   719→   719→}
+   720→   720→
+   721→   721→/** 工具栏按钮（placement=toolbar）→ SearchTable ToolbarButton：button=普通按钮+图标+文字，text=文本按钮+图标，icon=圆形图标按钮 */
+   722→   722→const searchTableToolbarButtons = computed<ToolbarButton[]>(() =>
+   723→   723→  actionButtonsConfig.value
+   724→   724→    .filter((b) => b.placement === 'toolbar' && isActionVisible(b))
+   725→   725→    .map((b) => {
+   726→   726→      const cfg = toButtonConfig(b)
+   727→   727→      return {
+   728→   728→        label: cfg.label,
+   729→   729→        type: cfg.type || undefined,
+   730→   730→        link: cfg.link,
+   731→   731→        circle: cfg.circle,
+   732→   732→        icon: cfg.icon,
+   733→   733→        onClick: () => cfg.onClick(),
+   734→   734→      }
+   735→   735→    }),
+   736→   736→)
+   737→   737→
+   738→   738→/** 操作列按钮（placement=column）→ SearchTable ActionButton（onClick 注入事件链/内建行为，show 注入行级 visible） */
+   739→   739→const searchTableActionButtons = computed<ActionButton[]>(() =>
+   740→   740→  actionButtonsConfig.value
+   741→   741→    .filter((b) => b.placement === 'column' && isActionVisible(b))
+   742→   742→    .map((b) => {
+   743→   743→      const cfg = toButtonConfig(b)
+   744→   744→      return {
+   745→   745→        label: cfg.label,
+   746→   746→        type: cfg.type || undefined,
+   747→   747→        icon: cfg.style === 'icon' ? cfg.icon : undefined,
+   748→   748→        show: (row: any) => isButtonVisibleForRow(b, row),
+   749→   749→        onClick: (row: any) => cfg.onClick(row),
+   750→   750→      }
+   751→   751→    }),
+   752→   752→)
+   753→   753→
+   754→   754→// ========== 卡片显示（display=card）：表格列自动映射卡片字段，复用同一查询/分页/取数/操作按钮 ==========
+   755→   755→/** 卡片字段：由表格列（CompiledColumn）自动映射（role=field；contentType/contentValue/expression/template/formatter 兼容属性保留原生渲染）
+   756→   756→ *  formatter 为字符串格式化器，转成 CardColumn.formatter 函数以复用同一渲染语义 */
+   757→   757→const cardColumns = computed<CardColumn[]>(() =>
+   758→   758→  tableColumns.value
+   759→   759→    .filter((c) => !(c as any).hidden)
+   760→   760→    .map((c): CardColumn => {
+   761→   761→      const contentConfig: CellContentConfig = {
+   762→   762→        key: c.prop,
+   763→   763→        contentType: c.contentType,
+   764→   764→        contentValue: c.contentValue,
+   765→   765→        expression: c.expression,
+   766→   766→        template: c.template,
+   767→   767→        formatter: c.formatter,
+   768→   768→      }
+   769→   769→      const hasContent = !!(contentConfig.contentType && contentConfig.contentValue) || !!(contentConfig.expression) || !!(contentConfig.template) || !!(contentConfig.formatter)
+   770→   770→      return {
+   771→   771→        prop: c.prop,
+   772→   772→        label: c.label,
+   773→   773→        width: c.width,
+   774→   774→        minWidth: c.minWidth,
+   775→   775→        align: (c.align as CardColumn['align']) || undefined,
+   776→   776→        sortable: c.sortable,
+   777→   777→        fixed: (c.fixed as CardColumn['fixed']) || undefined,
+   778→   778→        // 表格列默认卡片字段角色；内容列走 renderCellContent（含表达式/模板/格式化器）
+   779→   779→        role: 'field' as const,
+   780→   780→        formatter: hasContent
+   781→   781→          ? (row: any) => renderCellContent(contentConfig, row)
+   782→   782→          : undefined,
+   783→   783→        valueType: undefined,
+   784→   784→        style: c.style,
+   785→   785→      }
+   786→   786→    }),
+   787→   787→)
+   788→   788→
+   789→   789→/** 卡片操作按钮（placement=column）→ ListCards action（复用同一 onClick；icon 传图标名字符串，ListCards 内部经 getIcon 解析为组件）
+   790→   790→ *  注：ListCards 不消费 show（行级 visible），按钮统一渲染后由 handleActionClick 决定行为 */
+   791→   791→const cardActions = computed<Array<{ key: string; label: string; style: 'button' | 'icon' | 'text'; icon?: string; type?: string; onClick: (row: any) => void }>>(() =>
+   792→   792→  actionButtonsConfig.value
+   793→   793→    .filter((b) => b.placement === 'column' && isActionVisible(b))
+   794→   794→    .map((b) => {
+   795→   795→      const cfg = toButtonConfig(b)
+   796→   796→      return {
+   797→   797→        key: b.key,
+   798→   798→        label: cfg.label,
+   799→   799→        style: cfg.style,
+   800→   800→        icon: b.icon && iconMap[b.icon] ? b.icon : undefined,
+   801→   801→        type: cfg.type || undefined,
+   802→   802→        onClick: (row: any) => cfg.onClick(row),
+   803→   803→      }
+   804→   804→    }),
+   805→   805→)
+   806→   806→
+   807→   807→/** 卡片行点击 → 与表格行点击一致（复用 handleRowClick：设 currentRow + 触发 row-click 事件链） */
+   808→   808→// (见模板 @row-click="handleRowClick" 卡片分支)
+   809→   809→
+   810→   810→/** 卡片操作点击（ListCards 统一 emit，action 仅带 key/label）：按 key 匹配 cardActions 执行同一行为 */
+   811→   811→function handleCardActionClick(action: { key: string; label: string }, row: any) {
+   812→   812→  const matched = cardActions.value.find((a) => a.key === action.key)
+   813→   813→  if (matched) matched.onClick(row)
+   814→   814→}
+   815→   815→
+   816→   816→/** 自定义按钮：点击触发其绑定事件链（trigger 恒为 click，target=按钮 key） */
+   817→   817→function handleCustomButton(btn: { key: string; events?: any[] }, row?: any) {
+   818→   818→  if (row) currentRow.value = row
+   819→   819→  for (const ev of btn.events || []) {
+   820→   820→    for (const action of ev.actions || []) {
+   821→   821→      dispatchAction(action, { row: currentRow.value, params: route.query || {} })
+   822→   822→    }
+   823→   823→  }
+   824→   824→}
+   825→   825→
+   826→   826→function toButtonConfig(b: { key: string; label: string; style: 'button' | 'icon' | 'text'; icon?: string; events?: any[] }): ActionButtonConfig {
+   827→   827→  const handlers: Record<string, (row?: any) => void> = {
+   828→   828→    create: () => openCreate(),
+   829→   829→    edit: (row?: any) => openEdit(row),
+   830→   830→    delete: (row?: any) => handleDelete(row),
+   831→   831→    view: (row?: any) => openDetail(row),
+   832→   832→  }
+   833→   833→  const type = b.key === 'create' ? 'primary' : b.key === 'delete' ? 'danger' : ''
+   834→   834→  const isBuiltin = BUILTIN_ACTION_KEYS.includes(b.key)
+   835→   835→  const hasEvents = !!(b.events && b.events.length > 0)
+   836→   836→  // 有绑定事件 → 优先执行事件链（内建/自定义都一样）
+   837→   837→  const onClick = hasEvents
+   838→   838→    ? (row?: any) => handleCustomButton(b, row)
+   839→   839→    : isBuiltin
+   840→   840→      ? handlers[b.key]
+   841→   841→      : () => {}
+   842→   842→  return {
+   843→   843→    label: b.label,
+   844→   844→    type: type as '' | 'primary' | 'danger',
+   845→   845→    icon: (b.icon && iconMap[b.icon]) || defaultIcons[b.key],
+   846→   846→    style: b.style,
+   847→   847→    link: b.style === 'text',
+   848→   848→    circle: b.style === 'icon',
+   849→   849→    onClick,
+   850→   850→  }
+   851→   851→}
+   852→   852→
+   853→   853→function requireRow(): any | null {
+   854→   854→  if (currentRow.value) return currentRow.value
+   855→   855→  ElMessage.warning('请先点击一行数据')
+   856→   856→  return null
+   857→   857→}
+   858→   858→
+   859→   859→// ========== 详情弹窗 ==========
+   860→   860→/** 表单方式分发：drawer 打开抽屉 / inline 打开内嵌覆盖层；返回 true 表示已由非弹窗容器处理 */
+   861→   861→function openFormContainer(mode: 'create' | 'edit' | 'view', row?: any): boolean {
+   862→   862→  const fm = (detailConfig.value.formMode as string) || 'popup'
+   863→   863→  if (fm === 'drawer') {
+   864→   864→    if (mode !== 'create' && !row) {
+   865→   865→      row = requireRow()
+   866→   866→      if (!row) return true
+   867→   867→    }
+   868→   868→    openDrawerForm(mode, row)
+   869→   869→    return true
+   870→   870→  }
+   871→   871→  if (fm === 'inline') {
+   872→   872→    if (mode !== 'create' && !row) {
+   873→   873→      row = requireRow()
+   874→   874→      if (!row) return true
+   875→   875→    }
+   876→   876→    openInlineForm(mode, row)
+   877→   877→    return true
+   878→   878→  }
+   879→   879→  return false
+   880→   880→}
+   881→   881→
+   882→   882→/** 内嵌表单：覆盖视图打开（新增/编辑/查看共用），关闭后恢复视图 */
+   883→   883→function openInlineForm(mode: 'create' | 'edit' | 'view', row?: any) {
+   884→   884→  inlineMode.value = mode
+   885→   885→  inlineRow.value = mode === 'create' ? null : (row || null)
+   886→   886→  inlineInitialValues.value = mode === 'create' ? {} : (row?.data || {})
+   887→   887→  inlineTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+   888→   888→  inlineVisible.value = true
+   889→   889→  if (!detailRules.value.length) {
+   890→   890→    loadDetailSchema()
+   891→   891→  }
+   892→   892→}
+   893→   893→
+   894→   894→/** 抽屉表单：右侧抽屉打开（新增/编辑/查看共用） */
+   895→   895→function openDrawerForm(mode: 'create' | 'edit' | 'view', row?: any) {
+   896→   896→  drawerMode.value = mode
+   897→   897→  drawerRow.value = mode === 'create' ? null : (row || null)
+   898→   898→  drawerInitialValues.value = mode === 'create' ? {} : (row?.data || {})
+   899→   899→  drawerTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+   900→   900→  drawerVisible.value = true
+   901→   901→  if (!detailRules.value.length) {
+   902→   902→    loadDetailSchema()
+   903→   903→  }
+   904→   904→}
+   905→   905→
+   906→   906→/** 抽屉表单提交（新增/编辑，成功后关闭抽屉并刷新列表） */
+   907→   907→async function handleDrawerSubmit() {
+   908→   908→  const formKey = boundFormKey.value
+   909→   909→  if (!formKey) return
+   910→   910→  const formData = drawerFormRef.value?.getFormData() || {}
+   911→   911→  saving.value = true
+   912→   912→  try {
+   913→   913→    if (drawerMode.value === 'create') {
+   914→   914→      await bizDataApi.create(formKey, formData)
+   915→   915→      ElMessage.success('新增成功')
+   916→   916→      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
+   917→   917→    } else {
+   918→   918→      const row = drawerRow.value
+   919→   919→      if (!row) return
+   920→   920→      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
+   921→   921→      ElMessage.success('更新成功')
+   922→   922→    }
+   923→   923→    drawerVisible.value = false
+   924→   924→    searchTableRef.value?.fetchList()
+   925→   925→  } catch {
+   926→   926→    // http 拦截器已弹出错误消息
+   927→   927→  } finally {
+   928→   928→    saving.value = false
+   929→   929→  }
+   930→   930→}
+   931→   931→
+   932→   932→/** 内嵌表单提交（新增/编辑，成功后关闭覆盖层并刷新列表） */
+   933→   933→async function handleInlineSubmit() {
+   934→   934→  const formKey = boundFormKey.value
+   935→   935→  if (!formKey) return
+   936→   936→  const formData = inlineFormRef.value?.getFormData() || {}
+   937→   937→  saving.value = true
+   938→   938→  try {
+   939→   939→    if (inlineMode.value === 'create') {
+   940→   940→      await bizDataApi.create(formKey, formData)
+   941→   941→      ElMessage.success('新增成功')
+   942→   942→      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
+   943→   943→    } else {
+   944→   944→      const row = inlineRow.value
+   945→   945→      if (!row) return
+   946→   946→      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
+   947→   947→      ElMessage.success('更新成功')
+   948→   948→    }
+   949→   949→    inlineVisible.value = false
+   950→   950→    searchTableRef.value?.fetchList()
+   951→   951→  } catch {
+   952→   952→    // http 拦截器已弹出错误消息
+   953→   953→  } finally {
+   954→   954→    saving.value = false
+   955→   955→  }
+   956→   956→}
+   957→   957→
+   958→   958→async function openDetail(row?: any) {
+   959→   959→  await ensureBoundDataSource()
+   960→   960→  if (openFormContainer('view', row)) return
+   961→   961→  if (!row) {
+   962→   962→    row = requireRow()
+   963→   963→  }
+   964→   964→  if (!row) return
+   965→   965→  currentRow.value = row
+   966→   966→  detailTitle.value = '详情'
+   967→   967→  detailWidth.value = detailConfig.value.width || '800px'
+   968→   968→  detailVisible.value = true
+   969→   969→  // 表单形态详情才需要加载表单 schema；KV 只读详情直接展示行数据
+   970→   970→  if (isFormDetail.value && !detailRules.value.length) {
+   971→   971→    await loadDetailSchema()
+   972→   972→  }
+   973→   973→}
+   974→   974→
+   975→   975→/** 加载绑定表单 schema（详情/新增/编辑共用；FORM 数据源经 ds.formKey，遗留页经 page.formKey） */
+   976→   976→async function loadDetailSchema() {
+   977→   977→  const formKey = boundFormKey.value
+   978→   978→  if (!formKey) return
+   979→   979→  try {
+   980→   980→    const res = await formApi.getFormDefinitionByKey(formKey)
+   981→   981→    const schema = JSON.parse(res.data?.schema || '[]')
+   982→   982→    if (Array.isArray(schema)) {
+   983→   983→      detailRules.value = schema
+   984→   984→    } else if (schema?.rule) {
+   985→   985→      detailRules.value = schema.rule
+   986→   986→      detailOption.value = schema.option || {}
+   987→   987→      detailDataSources.value = schema.dataSources || []
+   988→   988→    }
+   989→   989→  } catch {
+   990→   990→    ElMessage.error('绑定表单 schema 加载失败')
+   991→   991→  }
+   992→   992→}
+   993→   993→
+   994→   994→// ========== 新增/编辑 ==========
+   995→   995→async function openCreate() {
+   996→   996→  await ensureBoundDataSource()
+   997→   997→  if (isReadonly.value) {
+   998→   998→    ElMessage.warning('数据源为只读，不支持新增')
+   999→   999→    return
+  1000→  1000→  }
+  1001→  1001→  if (openFormContainer('create')) return
+  1002→  1002→  editMode.value = 'create'
+  1003→  1003→  editTitle.value = '新增'
+  1004→  1004→  editInitialValues.value = {}
+  1005→  1005→  editVisible.value = true
+  1006→  1006→  if (!detailRules.value.length) {
+  1007→  1007→    loadDetailSchema()
+  1008→  1008→  }
+  1009→  1009→}
+  1010→  1010→
+  1011→  1011→async function openEdit(row?: any) {
+  1012→  1012→  await ensureBoundDataSource()
+  1013→  1013→  if (isReadonly.value) {
+  1014→  1014→    ElMessage.warning('数据源为只读，不支持编辑')
+  1015→  1015→    return
+  1016→  1016→  }
+  1017→  1017→  if (openFormContainer('edit', row)) return
+  1018→  1018→  if (!row) {
+  1019→  1019→    row = requireRow()
+  1020→  1020→    if (!row) return
+  1021→  1021→  }
+  1022→  1022→  currentRow.value = row
+  1023→  1023→  editMode.value = 'edit'
+  1024→  1024→  editTitle.value = '编辑'
+  1025→  1025→  editInitialValues.value = row.data || {}
+  1026→  1026→  editVisible.value = true
+  1027→  1027→  if (!detailRules.value.length) {
+  1028→  1028→    loadDetailSchema()
+  1029→  1029→  }
+  1030→  1030→}
+  1031→  1031→
+  1032→  1032→async function handleEditSubmit() {
+  1033→  1033→  const formKey = boundFormKey.value
+  1034→  1034→  if (!formKey) return
+  1035→  1035→  const formData = editFormRef.value?.getFormData() || {}
+  1036→  1036→  saving.value = true
+  1037→  1037→  try {
+  1038→  1038→    if (editMode.value === 'create') {
+  1039→  1039→      await bizDataApi.create(formKey, formData)
+  1040→  1040→      ElMessage.success('新增成功')
+  1041→  1041→      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
+  1042→  1042→    } else {
+  1043→  1043→      const row = currentRow.value
+  1044→  1044→      if (!row) return
+  1045→  1045→      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
+  1046→  1046→      ElMessage.success('更新成功')
+  1047→  1047→    }
+  1048→  1048→    editVisible.value = false
+  1049→  1049→    searchTableRef.value?.fetchList()
+  1050→  1050→  } catch {
+  1051→  1051→    // http 拦截器已弹出错误消息
+  1052→  1052→  } finally {
+  1053→  1053→    saving.value = false
+  1054→  1054→  }
+  1055→  1055→}
+  1056→  1056→
+  1057→  1057→// ========== 删除 ==========
+  1058→  1058→async function handleDelete(row?: any) {
+  1059→  1059→  const formKey = boundFormKey.value
+  1060→  1060→  if (!row) {
+  1061→  1061→    row = requireRow()
+  1062→  1062→  }
+  1063→  1063→  if (!row || !formKey) return
+  1064→  1064→  currentRow.value = row
+  1065→  1065→  try {
+  1066→  1066→    await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
+  1067→  1067→  } catch {
+  1068→  1068→    return
+  1069→  1069→  }
+  1070→  1070→  try {
+  1071→  1071→    await bizDataApi.remove(formKey, row.id)
+  1072→  1072→    ElMessage.success('删除成功')
+  1073→  1073→    searchTableRef.value?.fetchList()
+  1074→  1074→  } catch {
+  1075→  1075→    // http 拦截器已弹出错误消息
+  1076→  1076→  }
+  1077→  1077→}
+  1078→  1078→
+  1079→  1079→// ========== 批量删除 / 清空选择（Task ⑤） ==========
+  1080→  1080→/** 批量删除：确认后逐行调用单行删除同款 API（bizDataApi.remove），完成后清空选择并刷新 */
+  1081→  1081→async function handleBatchDelete() {
+  1082→  1082→  const formKey = boundFormKey.value
+  1083→  1083→  const rows = selectedRows.value
+  1084→  1084→  if (!rows.length || !formKey) return
+  1085→  1085→  try {
+  1086→  1086→    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 条记录吗？`, '批量删除', { type: 'warning' })
+  1087→  1087→  } catch {
+  1088→  1088→    return
+  1089→  1089→  }
+  1090→  1090→  batchDeleting.value = true
+  1091→  1091→  try {
+  1092→  1092→    const ids = selectedRowIds(rows)
+  1093→  1093→    await Promise.all(ids.map((id: any) => bizDataApi.remove(formKey, id)))
+  1094→  1094→    ElMessage.success(`已删除 ${ids.length} 条记录`)
+  1095→  1095→    selectedRows.value = []
+  1096→  1096→    searchTableRef.value?.clearSelection()
+  1097→  1097→    searchTableRef.value?.fetchList()
+  1098→  1098→  } catch {
+  1099→  1099→    // http 拦截器已弹出错误消息
+  1100→  1100→  } finally {
+  1101→  1101→    batchDeleting.value = false
+  1102→  1102→  }
+  1103→  1103→}
+  1104→  1104→
+  1105→  1105→/** 清空行选择（批量操作条「清空选择」按钮） */
+  1106→  1106→function clearSelection() {
+  1107→  1107→  searchTableRef.value?.clearSelection()
+  1108→  1108→}
+  1109→  1109→
+  1110→  1110→// ========== 导出 ==========
+  1111→  1111→function exportData() {
+  1112→  1112→  const rows = searchTableRef.value?.getList() || []
+  1113→  1113→  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
+  1114→  1114→  const url = URL.createObjectURL(blob)
+  1115→  1115→  const a = document.createElement('a')
+  1116→  1116→  a.href = url
+  1117→  1117→  a.download = `${pageKey.value || 'page'}-data.json`
+  1118→  1118→  a.click()
+  1119→  1119→  URL.revokeObjectURL(url)
+  1120→  1120→}
+  1121→  1121→
+  1122→  1122→// ========== 事件动作执行器 ==========
+  1123→  1123→/** 模板变量替换：$row.字段（当前行，优先 row.data 内层）/ $param.参数（路由参数） */
+  1124→  1124→function resolveTemplate(tpl: string, ctx: { row: any; params: Record<string, any> }): string {
+  1125→  1125→  return tpl
+  1126→  1126→    .replace(/\$row\.([\w]+)/g, (_, k) => {
+  1127→  1127→      const row = ctx.row || {}
+  1128→  1128→      const v = row.data != null && typeof row.data === 'object' ? row.data[k] : row[k]
+  1129→  1129→      return v === null || v === undefined ? '' : String(v)
+  1130→  1130→    })
+  1131→  1131→    .replace(/\$param\.([\w]+)/g, (_, k) => (ctx.params?.[k] == null ? '' : String(ctx.params[k])))
+  1132→  1132→}
+  1133→  1133→
+  1134→  1134→/** 解析动作参数 [{key,value}] → {key: 模板替换后的值} */
+  1135→  1135→function resolveParams(
+  1136→  1136→  params: { key: string; value: string }[],
+  1137→  1137→  ctx: { row: any; params: Record<string, any> },
+  1138→  1138→): Record<string, any> {
+  1139→  1139→  const out: Record<string, any> = {}
+  1140→  1140→  for (const p of params || []) {
+  1141→  1141→    out[p.key] = resolveTemplate(p.value, ctx)
+  1142→  1142→  }
+  1143→  1143→  return out
+  1144→  1144→}
+  1145→  1145→
+  1146→  1146→/** 动作类型分发 */
+  1147→  1147→async function dispatchAction(
+  1148→  1148→  action: { type: string; params?: { key: string; value: string }[] },
+  1149→  1149→  ctx: { row: any; params: Record<string, any> },
+  1150→  1150→) {
+  1151→  1151→  const resolved = resolveParams(action.params || [], ctx)
+  1152→  1152→  switch (action.type) {
+  1153→  1153→    case 'open-detail':
+  1154→  1154→      await openDetail(ctx.row)
+  1155→  1155→      if (resolved.title) detailTitle.value = resolved.title
+  1156→  1156→      if (resolved.width) detailWidth.value = resolved.width
+  1157→  1157→      break
+  1158→  1158→    case 'open-link':
+  1159→  1159→      if (resolved.url) router.push(resolved.url)
+  1160→  1160→      break
+  1161→  1161→    case 'open-create':
+  1162→  1162→      openCreate()
+  1163→  1163→      break
+  1164→  1164→    case 'edit':
+  1165→  1165→      currentRow.value = ctx.row
+  1166→  1166→      openEdit()
+  1167→  1167→      break
+  1168→  1168→    case 'delete': {
+  1169→  1169→      currentRow.value = ctx.row
+  1170→  1170→      await handleDelete()
+  1171→  1171→      break
+  1172→  1172→    }
+  1173→  1173→    case 'refresh':
+  1174→  1174→      searchTableRef.value?.fetchList()
+  1175→  1175→      break
+  1176→  1176→    case 'export':
+  1177→  1177→      exportData()
+  1178→  1178→      break
+  1179→  1179→    case 'message':
+  1180→  1180→      ElMessage({
+  1181→  1181→        message: resolved.text || resolved.message || '提示',
+  1182→  1182→        type: (resolved.type as any) || 'info',
+  1183→  1183→      })
+  1184→  1184→      break
+  1185→  1185→    case 'set-filter':
+  1186→  1186→      for (const [k, v] of Object.entries(resolved)) {
+  1187→  1187→        if (k in query) query[k] = v
+  1188→  1188→      }
+  1189→  1189→      searchTableRef.value?.setQuery({ ...query })
+  1190→  1190→      break
+  1191→  1191→    case 'set-sort': {
+  1192→  1192→      // 设置表格排序：params 包含 field 和 order
+  1193→  1193→      const field = resolved.field || resolved.prop || ''
+  1194→  1194→      const order = resolved.order || 'ascending'
+  1195→  1195→      searchTableRef.value?.sort(field, order)
+  1196→  1196→      break
+  1197→  1197→    }
+  1198→  1198→    case 'set-page': {
+  1199→  1199→      // 设置分页：params 包含 page（1-based），不重置页
+  1200→  1200→      const page = parseInt(resolved.page, 10)
+  1201→  1201→      if (!isNaN(page) && page > 0) {
+  1202→  1202→        searchTableRef.value?.setQuery({ page }, false)
+  1203→  1203→      }
+  1204→  1204→      break
+  1205→  1205→    }
+  1206→  1206→    case 'clear-selection': {
+  1207→  1207→      // 清空行选择
+  1208→  1208→      searchTableRef.value?.clearSelection()
+  1209→  1209→      selectedRows.value = []
+  1210→  1210→      break
+  1211→  1211→    }
+  1212→  1212→    case 'script': {
+  1213→  1213→      const source: string = resolved.source || ''
+  1214→  1214→      if (!source) {
+  1215→  1215→        console.warn('[page] 脚本动作缺少 source 参数')
+  1216→  1216→        break
+  1217→  1217→      }
+  1218→  1218→      if (!isScriptEventEnabled()) {
+  1219→  1219→        console.warn('[page] 脚本事件未启用（设置 VITE_PAGE_SCRIPT_ENABLED=true 开启）')
+  1220→  1220→        break
+  1221→  1221→      }
+  1222→  1222→      await executeScript(source, {
+  1223→  1223→        row: ctx.row,
+  1224→  1224→        params: ctx.params || {},
+  1225→  1225→        selectedRows: currentRow.value ? [currentRow.value] : [],
+  1226→  1226→        ds: {
+  1227→  1227→          query: (filter?: Record<string, any>) => {
+  1228→  1228→            if (filter) for (const [k, v] of Object.entries(filter)) query[k] = v
+  1229→  1229→            return searchTableRef.value?.fetchList() ?? Promise.resolve()
+  1230→  1230→          },
+  1231→  1231→          detail: (id: string) => (boundFormKey.value ? bizDataApi.detail(boundFormKey.value, id) : null),
+  1232→  1232→          create: (data: Record<string, unknown>) =>
+  1233→  1233→            boundFormKey.value ? bizDataApi.create(boundFormKey.value, data) : Promise.reject(new Error('数据源只读')),
+  1234→  1234→          update: (id: string, data: Record<string, unknown>) =>
+  1235→  1235→            boundFormKey.value
+  1236→  1236→              ? bizDataApi.update(boundFormKey.value, id, data, currentRow.value?.version || 1)
+  1237→  1237→              : Promise.reject(new Error('数据源只读')),
+  1238→  1238→          remove: (id: string) =>
+  1239→  1239→            boundFormKey.value ? bizDataApi.remove(boundFormKey.value, id) : Promise.reject(new Error('数据源只读')),
+  1240→  1240→        },
+  1241→  1241→        api: { formKey: boundFormKey.value || '', pageKey: pageKey.value },
+  1242→  1242→        actions: {
+  1243→  1243→          refresh: () => searchTableRef.value?.fetchList() ?? Promise.resolve(),
+  1244→  1244→          openDetail: () => openDetail(currentRow.value),
+  1245→  1245→          openCreate: () => openCreate(),
+  1246→  1246→          openEdit: () => openEdit(),
+  1247→  1247→          remove: (id: string) => (boundFormKey.value ? bizDataApi.remove(boundFormKey.value, id) : Promise.reject(new Error('数据源只读'))),
+  1248→  1248→        },
+  1249→  1249→        $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
+  1250→  1250→      })
+  1251→  1251→      break
+  1252→  1252→    }
+  1253→  1253→    default:
+  1254→  1254→      console.warn('[page] 未知动作类型:', action.type)
+  1255→  1255→  }
+  1256→  1256→}
+  1257→  1257→
+  1258→  1258→/** 事件链上下文：row/params 为通用字段，column/selectedRows/prop/order 为特定触发器携带 */
+  1259→  1259→interface EventContext {
+  1260→  1260→  row?: any
+  1261→  1261→  params?: Record<string, any>
+  1262→  1262→  column?: any
+  1263→  1263→  selectedRows?: any[]
+  1264→  1264→  prop?: string
+  1265→  1265→  order?: string
+  1266→  1266→}
+  1267→  1267→
+  1268→  1268→/** 按触发器 + 挂接组件执行事件链；target 为空 = 通配（匹配所有组件） */
+  1269→  1269→function triggerEvents(trigger: string, target: string, ctx: EventContext) {
+  1270→  1270→  for (const ev of eventsList.value) {
+  1271→  1271→    if (ev.trigger !== trigger) continue
+  1272→  1272→    if (ev.target && ev.target !== target) continue
+  1273→  1273→    for (const action of ev.actions || []) {
+  1274→  1274→      dispatchAction(action, { row: ctx.row, params: ctx.params || {} })
+  1275→  1275→    }
+  1276→  1276→  }
+  1277→  1277→}
+  1278→  1278→
+  1279→  1279→// ========== 行点击 ==========
+  1280→  1280→function handleRowClick(row: any) {
+  1281→  1281→  currentRow.value = row
+  1282→  1282→  triggerEvents('row-click', 'table', { row, params: route.query || {} })
+  1283→  1283→}
+  1284→  1284→
+  1285→  1285→// ========== 单元格点击（新增） ==========
+  1286→  1286→function handleCellClick(row: any, column: any) {
+  1287→  1287→  // 列级 onCellClick 短路整表级 cell-click（点击该列触发列级事件链）
+  1288→  1288→  const col = tableColumns.value.find(
+  1289→  1289→    (c) => c.prop === (column?.property ?? column?.prop),
+  1290→  1290→  )
+  1291→  1291→  if (col?.onCellClick?.actions?.length) {
+  1292→  1292→    for (const action of col.onCellClick.actions) {
+  1293→  1293→      dispatchAction(action, { row, params: route.query || {} })
+  1294→  1294→    }
+  1295→  1295→    return
+  1296→  1296→  }
+  1297→  1297→  triggerEvents('cell-click', 'table', { row, column, params: route.query || {} })
+  1298→  1298→}
+  1299→  1299→
+  1300→  1300→// ========== 行选择变化（新增） ==========
+  1301→  1301→function handleSelectionChange(selection: any[]) {
+  1302→  1302→  selectedRows.value = selection
+  1303→  1303→  triggerEvents('selection-change', 'table', { selectedRows: selection, params: route.query || {} })
+  1304→  1304→}
+  1305→  1305→
+  1306→  1306→// ========== 排序变化（新增） ==========
+  1307→  1307→function handleSortChange({ column, prop, order }: { column: any; prop: string; order: string }) {
+  1308→  1308→  triggerEvents('sort-change', 'table', { column, prop, order, params: route.query || {} })
+  1309→  1309→}
+  1310→  1310→</script>
+  1311→  1311→
+  1312→  1312→<style scoped>
+  1313→  1313→.page-renderer {
+  1314→  1314→  display: flex;
+  1315→  1315→  flex-direction: column;
+  1316→  1316→  gap: 12px;
+  1317→  1317→  padding: 4px;
+  1318→  1318→  height: 100%;
+  1319→  1319→  position: relative;
+  1320→  1320→}
+  1321→  1321→.search-card {
+  1322→  1322→  flex-shrink: 0;
+  1323→  1323→  /* flex 容器间距：gap(12px) + margin-bottom(4px) = 16px，与 SearchTable 直渲染的查询栏间距一致
+  1324→  1324→     （不能写成 16px：会与 .page-renderer 的 flex gap 12px 叠加成 28px） */
+  1325→  1325→  margin-bottom: 4px;
+  1326→  1326→}
+  1327→  1327→.search-card :deep(.el-card__body) {
+  1328→  1328→  padding-bottom: 0;
+  1329→  1329→}
+  1330→  1330→/* SearchTable 撑满剩余空间（表格区域滚动） */
+  1331→  1331→.page-search-table {
+  1332→  1332→  flex: 1;
+  1333→  1333→  min-height: 0;
+  1334→  1334→}
+  1335→  1335→/* 查询工具栏图标按钮（对齐 SearchTable） */
+  1336→  1336→.toolbar-buttons {
+  1337→  1337→  display: flex;
+  1338→  1338→  align-items: center;
+  1339→  1339→  gap: 4px;
+  1340→  1340→  margin-left: auto;
+  1341→  1341→}
+  1342→  1342→.toolbar-buttons .el-button.is-circle {
+  1343→  1343→  padding: 5px;
+  1344→  1344→}
+  1345→  1345→/* 弹窗内容区：配置了弹窗高度时固定高度、超出滚动；未配置自然高度 */
+  1346→  1346→.dialog-body-scroll {
+  1347→  1347→  overflow-y: auto;
+  1348→  1348→}
+  1349→  1349→/* 内嵌表单覆盖层（formMode=inline）：覆盖当前页签内容区，关闭后恢复视图 */
+  1350→  1350→.inline-form-overlay {
+  1351→  1351→  position: absolute;
+  1352→  1352→  inset: 0;
+  1353→  1353→  z-index: 100;
+  1354→  1354→  background: #fff;
+  1355→  1355→  display: flex;
+  1356→  1356→  flex-direction: column;
+  1357→  1357→}
+  1358→  1358→.inline-form-container {
+  1359→  1359→  flex: 1;
+  1360→  1360→  display: flex;
+  1361→  1361→  flex-direction: column;
+  1362→  1362→  padding: 16px 24px;
+  1363→  1363→  overflow: hidden;
+  1364→  1364→}
+  1365→  1365→.inline-form-header {
+  1366→  1366→  display: flex;
+  1367→  1367→  align-items: center;
+  1368→  1368→  justify-content: space-between;
+  1369→  1369→  padding-bottom: 12px;
+  1370→  1370→  border-bottom: 1px solid #e5e7eb;
+  1371→  1371→  margin-bottom: 16px;
+  1372→  1372→  flex-shrink: 0;
+  1373→  1373→}
+  1374→  1374→.inline-form-title {
+  1375→  1375→  font-size: 16px;
+  1376→  1376→  font-weight: 600;
+  1377→  1377→  color: #303133;
+  1378→  1378→}
+  1379→  1379→.inline-form-body {
+  1380→  1380→  flex: 1;
+  1381→  1381→  overflow: auto;
+  1382→  1382→}
+  1383→  1383→.inline-form-footer {
+  1384→  1384→  display: flex;
+  1385→  1385→  justify-content: flex-end;
+  1386→  1386→  gap: 8px;
+  1387→  1387→  padding-top: 12px;
+  1388→  1388→  border-top: 1px solid #e5e7eb;
+  1389→  1389→  margin-top: 16px;
+  1390→  1390→  flex-shrink: 0;
+  1391→  1391→}
+  1392→  1392→</style>
+  1393→  1393→

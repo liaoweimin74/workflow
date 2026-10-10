@@ -1,0 +1,1745 @@
+     1→<template>
+     2→  <div class="property-panel" :class="{ collapsed }" @submit.prevent>
+     3→    <!-- 折叠态：竖条 -->
+     4→    <div v-if="collapsed" class="collapse-bar" title="展开属性面板" @click="collapsed = false">
+     5→      <span class="bar-text">属性</span>
+     6→      <el-icon class="bar-icon"><Setting /></el-icon>
+     7→    </div>
+     8→
+     9→    <!-- 展开态 -->
+    10→    <template v-else>
+    11→      <div class="panel-header">
+    12→        <div class="panel-heading">
+    13→          <el-icon class="heading-icon"><Setting /></el-icon>
+    14→          <span>属性配置</span>
+    15→        </div>
+    16→        <div class="panel-tags">
+    17→          <el-tag v-if="node" size="small" effect="plain" class="node-type-tag">
+    18→            {{ nodeTypeLabel }}
+    19→          </el-tag>
+    20→          <el-icon v-if="node" class="header-action" title="删除该节点" @click="emit('remove', node.id)">
+    21→            <Delete />
+    22→          </el-icon>
+    23→          <el-icon class="collapse-toggle" title="折叠面板" @click="collapsed = true"><Fold /></el-icon>
+    24→        </div>
+    25→      </div>
+    26→
+    27→      <!-- 节点 ID（只读，点击复制） -->
+    28→      <div v-if="node" class="panel-meta">
+    29→        <span class="meta-label">ID</span>
+    30→        <span class="meta-value" :title="node.id">{{ node.id }}</span>
+    31→        <el-icon class="meta-copy" title="复制节点 ID" @click="copyNodeId"><CopyDocument /></el-icon>
+    32→      </div>
+    33→
+    34→      <div class="panel-body">
+    35→        <el-empty v-if="!node" description="选中画布节点编辑属性" :image-size="80" />
+    36→
+    37→        <el-form v-else label-position="top" size="default" class="panel-form">
+    38→          <!-- ===== 公共：名称 ===== -->
+    39→          <el-form-item label="节点名称">
+    40→            <el-input v-model="node.data.name" maxlength="64" placeholder="请输入节点名称" />
+    41→          </el-form-item>
+    42→
+    43→          <!-- ===== HTTP ===== -->
+    44→          <template v-if="node.data.nodeType === 'HTTP'">
+    45→            <el-form-item required>
+    46→              <template #label>
+    47→                <FieldLabel label="请求 URL" tip="目标接口地址，支持 {{ 变量 }} 占位符注入上下文变量" />
+    48→              </template>
+    49→              <VarInput
+    50→                v-model="httpCfg.url"
+    51→                :variables="variables"
+    52→                mode="placeholder"
+    53→                placeholder="https://host/api/path"
+    54→                clearable
+    55→              />
+    56→            </el-form-item>
+    57→            <el-form-item label="请求方法">
+    58→              <el-select v-model="httpCfg.method" style="width: 100%">
+    59→                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+    60→              </el-select>
+    61→            </el-form-item>
+    62→
+    63→            <div class="rows-block">
+    64→              <div class="rows-head">
+    65→                <FieldLabel label="请求头 Headers" tip="自定义 HTTP 请求头键值对，随请求发送" />
+    66→                <el-button size="small" text type="primary" @click="addHeader">添加</el-button>
+    67→              </div>
+    68→              <div v-if="!headerRows.length" class="rows-empty">暂无请求头</div>
+    69→              <div v-for="(row, i) in headerRows" :key="i" class="kv-row">
+    70→                <el-input v-model="row.key" size="small" placeholder="名称" @input="syncHeaders" />
+    71→                <el-input v-model="row.value" size="small" placeholder="值" @input="syncHeaders" />
+    72→                <!-- 请求头值为静态键值对，不接变量选择器 -->
+    73→                <el-button size="small" text type="danger" @click="removeHeader(i)">
+    74→                  <el-icon><Delete /></el-icon>
+    75→                </el-button>
+    76→              </div>
+    77→            </div>
+    78→
+    79→            <div class="rows-block">
+    80→              <div class="rows-head">
+    81→                <FieldLabel label="Query 参数" tip="左侧填当前流变量名，右侧填 URL 查询参数名；值支持 {{ 变量 }} 占位符" />
+    82→                <el-button size="small" text type="primary" @click="addParam('queryParams')">添加</el-button>
+    83→              </div>
+    84→              <div v-if="!httpCfg.queryParams.length" class="rows-empty">暂无参数</div>
+    85→              <div v-for="(row, i) in httpCfg.queryParams" :key="i" class="kv-row">
+    86→                <VarInput
+    87→                  v-model="row.source"
+    88→                  :variables="variables"
+    89→                  mode="bare"
+    90→                  replace
+    91→                  size="small"
+    92→                  placeholder="变量名"
+    93→                />
+    94→                <el-input v-model="row.target" size="small" placeholder="参数名" />
+    95→                <el-button size="small" text type="danger" @click="removeParam('queryParams', i)">
+    96→                  <el-icon><Delete /></el-icon>
+    97→                </el-button>
+    98→              </div>
+    99→            </div>
+   100→
+   101→            <div class="rows-block">
+   102→              <div class="rows-head">
+   103→                <FieldLabel label="Body 参数" tip="左侧填当前流变量名，右侧填请求体字段名" />
+   104→                <el-button size="small" text type="primary" @click="addParam('bodyParams')">添加</el-button>
+   105→              </div>
+   106→              <div v-if="!httpCfg.bodyParams.length" class="rows-empty">暂无参数</div>
+   107→              <div v-for="(row, i) in httpCfg.bodyParams" :key="i" class="kv-row">
+   108→                <VarInput
+   109→                  v-model="row.source"
+   110→                  :variables="variables"
+   111→                  mode="bare"
+   112→                  replace
+   113→                  size="small"
+   114→                  placeholder="变量名"
+   115→                />
+   116→                <el-input v-model="row.target" size="small" placeholder="参数名" />
+   117→                <el-button size="small" text type="danger" @click="removeParam('bodyParams', i)">
+   118→                  <el-icon><Delete /></el-icon>
+   119→                </el-button>
+   120→              </div>
+   121→            </div>
+   122→
+   123→            <div class="num-grid">
+   124→              <el-form-item>
+   125→                <template #label>
+   126→                  <FieldLabel label="连接超时(ms)" tip="建立 TCP 连接的最长等待时间（毫秒），默认 3000" />
+   127→                </template>
+   128→                <el-input-number v-model="httpCfg.connTimeoutMs" :min="0" :step="500" controls-position="right" style="width: 100%" />
+   129→              </el-form-item>
+   130→              <el-form-item>
+   131→                <template #label>
+   132→                  <FieldLabel label="读取超时(ms)" tip="等待响应数据的最长时间（毫秒），默认 5000" />
+   133→                </template>
+   134→                <el-input-number v-model="httpCfg.readTimeoutMs" :min="0" :step="500" controls-position="right" style="width: 100%" />
+   135→              </el-form-item>
+   136→              <el-form-item>
+   137→                <template #label>
+   138→                  <FieldLabel label="重试次数" tip="请求失败后的自动重试次数，0 表示不重试" />
+   139→                </template>
+   140→                <el-input-number v-model="httpCfg.retryCount" :min="0" :max="10" controls-position="right" style="width: 100%" />
+   141→              </el-form-item>
+   142→            </div>
+   143→          </template>
+   144→
+   145→          <!-- ===== BEAN ===== -->
+   146→          <template v-else-if="node.data.nodeType === 'BEAN'">
+   147→            <el-form-item required>
+   148→              <template #label>
+   149→                <FieldLabel label="Bean 名称" tip="Spring 容器注册的 Bean，支持搜索选择；清单加载失败时降级为手动输入" />
+   150→              </template>
+   151→              <!-- Bean 清单加载失败降级为输入框 -->
+   152→              <el-select
+   153→                v-if="!beanLoadFailed"
+   154→                v-model="beanCfg.beanName"
+   155→                filterable
+   156→                allow-create
+   157→                default-first-option
+   158→                placeholder="选择或输入 Bean 名称"
+   159→                style="width: 100%"
+   160→                @change="onBeanChanged"
+   161→              >
+   162→                <el-option v-for="name in beanNames" :key="name" :label="name" :value="name" />
+   163→              </el-select>
+   164→              <el-input v-else v-model="beanCfg.beanName" placeholder="请输入 Bean 名称" />
+   165→            </el-form-item>
+   166→            <el-form-item required>
+   167→              <template #label>
+   168→                <FieldLabel label="方法名" tip="该 Bean 上可调用的方法，随 Bean 名称联动加载" />
+   169→              </template>
+   170→              <el-select
+   171→                v-if="!beanLoadFailed && beanMethods.length"
+   172→                v-model="beanCfg.methodName"
+   173→                filterable
+   174→                allow-create
+   175→                default-first-option
+   176→                placeholder="选择方法"
+   177→                style="width: 100%"
+   178→              >
+   179→                <el-option v-for="m in beanMethods" :key="m.value" :label="m.label" :value="m.value" />
+   180→              </el-select>
+   181→              <el-input v-else v-model="beanCfg.methodName" placeholder="请输入方法名" />
+   182→            </el-form-item>
+   183→
+   184→            <div class="rows-block">
+   185→              <div class="rows-head">
+   186→                <FieldLabel label="方法参数" tip="左侧填当前流变量名，右侧填 Bean 方法形参名，按顺序注入" />
+   187→                <el-button size="small" text type="primary" @click="addParam('params')">添加</el-button>
+   188→              </div>
+   189→              <div v-if="!beanCfg.params.length" class="rows-empty">暂无参数</div>
+   190→              <div v-for="(row, i) in beanCfg.params" :key="i" class="kv-row">
+   191→                <VarInput
+   192→                  v-model="row.source"
+   193→                  :variables="variables"
+   194→                  mode="bare"
+   195→                  replace
+   196→                  size="small"
+   197→                  placeholder="变量名"
+   198→                />
+   199→                <el-input v-model="row.target" size="small" placeholder="参数名" />
+   200→                <el-button size="small" text type="danger" @click="removeParam('params', i)">
+   201→                  <el-icon><Delete /></el-icon>
+   202→                </el-button>
+   203→              </div>
+   204→            </div>
+   205→
+   206→            <el-alert
+   207→              v-if="beanLoadFailed"
+   208→              title="Bean 清单加载失败，已降级为手动输入"
+   209→              type="info"
+   210→              :closable="false"
+   211→              show-icon
+   212→              class="panel-alert"
+   213→            />
+   214→          </template>
+   215→
+   216→          <!-- ===== SCRIPT ===== -->
+   217→          <template v-else-if="node.data.nodeType === 'SCRIPT'">
+   218→            <el-form-item label="脚本语言">
+   219→              <el-input model-value="groovy" readonly />
+   220→            </el-form-item>
+   221→            <el-form-item required>
+   222→              <template #label>
+   223→                <FieldLabel label="脚本内容" tip="Groovy 脚本在服务端沙箱执行，注意安全；末行用 Map 字面量 [key: value, ...] 返回多输出，上下文变量直接用变量名访问" />
+   224→              </template>
+   225→              <VarInput
+   226→                v-model="scriptCfg.source"
+   227→                :variables="variables"
+   228→                mode="bare"
+   229→                textarea
+   230→                :rows="10"
+   231→                chips
+   232→                class="script-source"
+   233→                placeholder="return 'hello ' + vars.name"
+   234→              />
+   235→            </el-form-item>
+   236→          </template>
+   237→
+   238→          <!-- ===== CONDITION ===== -->
+   239→          <template v-else-if="node.data.nodeType === 'CONDITION'">
+   240→            <el-form-item required>
+   241→              <template #label>
+   242→                <FieldLabel label="判断变量" tip="参与比较的上下文变量，支持 {{ var }} 写法" />
+   243→              </template>
+   244→              <VarInput
+   245→                v-model="conditionCfg.variable"
+   246→                :variables="variables"
+   247→                mode="bare"
+   248→                replace
+   249→                placeholder="变量名，如 risk"
+   250→              />
+   251→            </el-form-item>
+   252→            <el-form-item label="运算符">
+   253→              <el-select v-model="conditionCfg.operator" style="width: 100%">
+   254→                <el-option v-for="op in OPERATORS" :key="op.value" :label="op.label" :value="op.value" />
+   255→              </el-select>
+   256→            </el-form-item>
+   257→            <el-form-item v-if="!isEmptyOperator">
+   258→              <template #label>
+   259→                <FieldLabel label="比较值" tip="比较的字面量或 {{ var }}；为空/不为空运算符时无需填写" />
+   260→              </template>
+   261→              <VarInput
+   262→                v-model="conditionCfg.value"
+   263→                :variables="variables"
+   264→                mode="placeholder"
+   265→                placeholder="字面量或 {{var}}"
+   266→              />
+   267→            </el-form-item>
+   268→          </template>
+   269→
+   270→          <!-- ===== BATCH ===== -->
+   271→          <template v-else-if="node.data.nodeType === 'BATCH'">
+   272→            <el-form-item required>
+   273→              <template #label>
+   274→                <FieldLabel label="集合表达式" tip="被遍历的集合：{{ listVar }} 上下文集合变量，或 JSON 数组字面量 [1,2,3]" />
+   275→              </template>
+   276→              <VarInput
+   277→                v-model="batchCfg.collection"
+   278→                :variables="variables"
+   279→                mode="placeholder"
+   280→                placeholder="{{listVar}} 或 [1,2,3]"
+   281→              />
+   282→            </el-form-item>
+   283→            <div class="num-grid">
+   284→              <el-form-item>
+   285→                <template #label>
+   286→                  <FieldLabel label="项变量名" tip="迭代中当前项的变量名（默认 item），动作内直接引用" />
+   287→                </template>
+   288→                <el-input v-model="batchCfg.itemVar" placeholder="item" />
+   289→              </el-form-item>
+   290→              <el-form-item>
+   291→                <template #label>
+   292→                  <FieldLabel label="序号变量名" tip="迭代序号变量名（默认 index，从 0 开始）" />
+   293→                </template>
+   294→                <el-input v-model="batchCfg.indexVar" placeholder="index" />
+   295→              </el-form-item>
+   296→            </div>
+   297→            <el-form-item>
+   298→              <template #label>
+   299→                <FieldLabel label="循环体（画布配置）" tip="在画布中把动作节点拖到批处理节点右侧的循环虚线上自动接入，多项按链序逐项执行；循环体内可直接用项/序号变量；把循环体节点拖离虚线或双击即可移出循环" />
+   300→              </template>
+   301→              <div class="loop-hint" :class="{ 'is-empty': loopBodyCount === 0 }">
+   302→                <span v-if="loopBodyCount > 0">循环体已配置 {{ loopBodyCount }} 步，按链序逐项执行</span>
+   303→                <span v-else>未配置：把动作节点拖到画布中批处理节点右侧的循环虚线上</span>
+   304→              </div>
+   305→            </el-form-item>
+   306→
+   307→            <div class="num-grid">
+   308→              <el-form-item>
+   309→                <template #label>
+   310→                  <FieldLabel label="单次最大迭代数" tip="单次最多迭代条数，超出后停止（硬上限 1000）" />
+   311→                </template>
+   312→                <el-input-number
+   313→                  v-model="batchCfg.maxItems"
+   314→                  :min="1"
+   315→                  :max="1000"
+   316→                  controls-position="right"
+   317→                  style="width: 100%"
+   318→                />
+   319→              </el-form-item>
+   320→              <el-form-item>
+   321→                <template #label>
+   322→                  <FieldLabel label="单项失败策略" tip="开=任一项失败即中断整批；关=记录该项失败后继续执行剩余项" />
+   323→                </template>
+   324→                <el-switch
+   325→                  v-model="batchCfg.stopOnError"
+   326→                  active-text="中断整批"
+   327→                  inactive-text="记录后继续"
+   328→                />
+   329→              </el-form-item>
+   330→            </div>
+   331→          </template>
+   332→
+   333→          <!-- ===== SUBFLOW ===== -->
+   334→          <template v-else-if="node.data.nodeType === 'SUBFLOW'">
+   335→            <el-form-item>
+   336→              <template #label>
+   337→                <FieldLabel label="目标流程" tip="仅可选择已发布的逻辑流；其输出变量（outputVars）作为本节点返回值、由输出参数（results）声明写入；递归/自引用会被引擎拒绝（嵌套上限 5 层）" />
+   338→              </template>
+   339→              <el-select
+   340→                v-model="subflowCfg.flowId"
+   341→                placeholder="选择已发布的逻辑流"
+   342→                style="width: 100%"
+   343→                filterable
+   344→                :loading="flowsLoading"
+   345→              >
+   346→                <el-option
+   347→                  v-for="f in publishedFlows"
+   348→                  :key="f.id"
+   349→                  :label="`${f.name || f.flowKey}（${f.flowKey}）`"
+   350→                  :value="f.id"
+   351→                />
+   352→              </el-select>
+   353→            </el-form-item>
+   354→            <el-form-item>
+   355→              <template #label>
+   356→                <FieldLabel label="继承上下文" tip="开=父流全部变量传入子流；关=仅传递下方映射的变量" />
+   357→              </template>
+   358→              <el-switch
+   359→                v-model="subflowCfg.passAllVars"
+   360→                active-text="全量传入"
+   361→                inactive-text="仅映射变量"
+   362→              />
+   363→            </el-form-item>
+   364→            <el-form-item>
+   365→              <template #label>
+   366→                <FieldLabel label="变量映射" tip="左侧填当前流变量名，右侧填子流入参名；在继承基础上做覆盖/改名" />
+   367→              </template>
+   368→              <div class="mapping-rows">
+   369→                <div v-for="(pair, i) in subflowCfg.varsMapping" :key="i" class="mapping-row">
+   370→                  <VarInput
+   371→                    v-model="pair.source"
+   372→                    :variables="variables"
+   373→                    mode="bare"
+   374→                    replace
+   375→                    placeholder="当前流变量"
+   376→                  />
+   377→                  <span class="mapping-arrow">→</span>
+   378→                  <el-input v-model="pair.target" placeholder="子流变量" />
+   379→                  <el-button size="small" text type="danger" @click="subflowCfg.varsMapping.splice(i, 1)">
+   380→                    <el-icon><Delete /></el-icon>
+   381→                  </el-button>
+   382→                </div>
+   383→                <el-button size="small" text type="primary" @click="subflowCfg.varsMapping.push({ source: '', target: '' })">
+   384→                  添加映射
+   385→                </el-button>
+   386→              </div>
+   387→            </el-form-item>
+   388→          </template>
+   389→
+   390→          <!-- ===== DATA_UPDATE ===== -->
+   391→          <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
+   392→            <el-form-item>
+   393→              <template #label>
+   394→                <FieldLabel label="多表更新" tip="开启后一个节点可配置多张目标表，引擎在单事务内按顺序执行：全成提交，任一表失败整体回滚（全有或全无）；未声明输出时自动汇总 { total, affected, t0|别名.affected, … } 供下游点路径引用；需要逐表独立失败语义请拆成多个数据更新节点" />
+   395→              </template>
+   396→              <div class="du-multi-switch">
+   397→                <el-switch :model-value="duMultiMode" @change="toggleDuMultiMode" />
+   398→                <span class="du-multi-hint">
+   399→                  {{ duMultiMode
+   400→                    ? `已启用 · ${dataUpdateCfg.updates?.length ?? 0} 张表 · 单事务全有或全无`
+   401→                    : '未启用 · 仅更新单张表（存量行为）' }}
+   402→                </span>
+   403→                <el-button v-if="duMultiMode" size="small" text type="primary" @click="addDataUpdateEntry">
+   404→                  添加目标表
+   405→                </el-button>
+   406→              </div>
+   407→            </el-form-item>
+   408→
+   409→            <template v-if="!duMultiMode">
+   410→            <el-form-item required>
+   411→              <template #label>
+   412→                <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
+   413→              </template>
+   414→              <el-select
+   415→                v-model="dataUpdateCfg.table"
+   416→                filterable
+   417→                :loading="duTablesLoading"
+   418→                placeholder="选择平台动态数据表"
+   419→                clearable
+   420→                class="du-table-select"
+   421→              >
+   422→                <el-option v-for="t in duTableMergedOptions" :key="t" :label="t" :value="t" />
+   423→              </el-select>
+   424→            </el-form-item>
+   425→
+   426→            <div class="rows-block">
+   427→              <div class="rows-head">
+   428→                <FieldLabel label="更新字段 SET" tip="SET 直接赋值；ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段" />
+   429→                <el-button size="small" text type="primary" @click="addSetOp">添加</el-button>
+   430→              </div>
+   431→              <div v-if="!dataUpdateCfg.setOps.length" class="rows-empty">暂无更新字段</div>
+   432→              <div v-for="(op, i) in dataUpdateCfg.setOps" :key="i" class="du-row">
+   433→                <el-select
+   434→                  v-model="op.column"
+   435→                  size="small"
+   436→                  filterable
+   437→                  allow-create
+   438→                  default-first-option
+   439→                  :loading="duColumnsLoading"
+   440→                  :disabled="!dataUpdateCfg.table"
+   441→                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
+   442→                  placeholder="列名"
+   443→                  class="du-col"
+   444→                >
+   445→                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
+   446→                    <span class="du-col-opt">
+   447→                      <span>{{ c.key }}</span>
+   448→                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+   449→                    </span>
+   450→                  </el-option>
+   451→                </el-select>
+   452→                <el-select v-model="op.mode" size="small" class="du-mode">
+   453→                  <el-option label="SET" value="SET" />
+   454→                  <el-option label="ADD +" value="ADD" />
+   455→                  <el-option label="SUB −" value="SUB" />
+   456→                </el-select>
+   457→                <VarInput
+   458→                  v-model="op.value"
+   459→                  :variables="variables"
+   460→                  mode="placeholder"
+   461→                  size="small"
+   462→                  class="du-value"
+   463→                  placeholder="值或 {{formData.xxx}}"
+   464→                />
+   465→                <el-button size="small" text type="danger" @click="dataUpdateCfg.setOps.splice(i, 1)">
+   466→                  <el-icon><Delete /></el-icon>
+   467→                </el-button>
+   468→              </div>
+   469→            </div>
+   470→
+   471→            <div class="rows-block">
+   472→              <div class="rows-head">
+   473→                <FieldLabel label="更新条件 WHERE" tip="多条件 AND 连接；条件为空时将影响全表，请谨慎配置" />
+   474→                <el-button size="small" text type="primary" @click="addWhereCond">添加</el-button>
+   475→              </div>
+   476→              <div v-if="!dataUpdateCfg.where.length" class="rows-empty du-warn">未配置条件，执行将更新全表</div>
+   477→              <div v-for="(cond, i) in dataUpdateCfg.where" :key="i" class="du-row">
+   478→                <el-select
+   479→                  v-model="cond.column"
+   480→                  size="small"
+   481→                  filterable
+   482→                  allow-create
+   483→                  default-first-option
+   484→                  :loading="duColumnsLoading"
+   485→                  :disabled="!dataUpdateCfg.table"
+   486→                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
+   487→                  placeholder="列名"
+   488→                  class="du-col"
+   489→                >
+   490→                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
+   491→                    <span class="du-col-opt">
+   492→                      <span>{{ c.key }}</span>
+   493→                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+   494→                    </span>
+   495→                  </el-option>
+   496→                </el-select>
+   497→                <el-select v-model="cond.op" size="small" class="du-mode">
+   498→                  <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
+   499→                </el-select>
+   500→                <VarInput
+   501→                  v-if="!isNullOp(cond.op)"
+   502→                  v-model="cond.value"
+   503→                  :variables="variables"
+   504→                  mode="placeholder"
+   505→                  size="small"
+   506→                  class="du-value"
+   507→                  placeholder="值或 {{formData.xxx}}"
+   508→                />
+   509→                <el-button size="small" text type="danger" @click="dataUpdateCfg.where.splice(i, 1)">
+   510→                  <el-icon><Delete /></el-icon>
+   511→                </el-button>
+   512→              </div>
+   513→            </div>
+   514→            </template>
+   515→
+   516→            <template v-else>
+   517→              <div v-if="!dataUpdateCfg.updates?.length" class="rows-empty">
+   518→                尚未添加目标表，点击上方「添加目标表」开始配置
+   519→              </div>
+   520→              <div v-for="(u, ui) in dataUpdateCfg.updates ?? []" :key="ui" class="du-multi-card">
+   521→                <div class="du-multi-head">
+   522→                  <span class="du-multi-idx">#{{ ui }}</span>
+   523→                  <el-input
+   524→                    v-model="u.alias"
+   525→                    size="small"
+   526→                    class="du-alias"
+   527→                    maxlength="32"
+   528→                    placeholder="输出别名(可选，字母/数字/下划线)"
+   529→                  />
+   530→                  <el-button
+   531→                    size="small"
+   532→                    text
+   533→                    type="danger"
+   534→                    :disabled="(dataUpdateCfg.updates?.length ?? 0) <= 1"
+   535→                    @click="dataUpdateCfg.updates?.splice(ui, 1)"
+   536→                  >
+   537→                    <el-icon><Delete /></el-icon>
+   538→                  </el-button>
+   539→                </div>
+   540→
+   541→                <el-form-item required>
+   542→                  <template #label>
+   543→                    <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
+   544→                  </template>
+   545→                  <el-select
+   546→                    v-model="u.table"
+   547→                    filterable
+   548→                    :loading="duTablesLoading"
+   549→                    placeholder="选择平台动态数据表"
+   550→                    clearable
+   551→                    class="du-table-select"
+   552→                  >
+   553→                    <el-option v-for="t in duEntryTableOptions(u.table)" :key="t" :label="t" :value="t" />
+   554→                  </el-select>
+   555→                </el-form-item>
+   556→
+   557→                <div class="rows-block">
+   558→                  <div class="rows-head">
+   559→                    <FieldLabel label="更新字段 SET" tip="SET 直接赋值；ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段" />
+   560→                    <el-button size="small" text type="primary" @click="u.setOps.push({ column: '', mode: 'SET', value: '' })">添加</el-button>
+   561→                  </div>
+   562→                  <div v-if="!u.setOps.length" class="rows-empty">暂无更新字段</div>
+   563→                  <div v-for="(op, i) in u.setOps" :key="i" class="du-row">
+   564→                    <el-select
+   565→                      v-model="op.column"
+   566→                      size="small"
+   567→                      filterable
+   568→                      allow-create
+   569→                      default-first-option
+   570→                      :loading="duEntryLoading(u.table)"
+   571→                      :disabled="!u.table"
+   572→                      :title="u.table ? undefined : '先选择目标表'"
+   573→                      placeholder="列名"
+   574→                      class="du-col"
+   575→                    >
+   576→                      <el-option v-for="c in duEntryColumns(u)" :key="c.key" :label="c.key" :value="c.key">
+   577→                        <span class="du-col-opt">
+   578→                          <span>{{ c.key }}</span>
+   579→                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+   580→                        </span>
+   581→                      </el-option>
+   582→                    </el-select>
+   583→                    <el-select v-model="op.mode" size="small" class="du-mode">
+   584→                      <el-option label="SET" value="SET" />
+   585→                      <el-option label="ADD +" value="ADD" />
+   586→                      <el-option label="SUB −" value="SUB" />
+   587→                    </el-select>
+   588→                    <VarInput
+   589→                      v-model="op.value"
+   590→                      :variables="variables"
+   591→                      mode="placeholder"
+   592→                      size="small"
+   593→                      class="du-value"
+   594→                      placeholder="值或 {{formData.xxx}}"
+   595→                    />
+   596→                    <el-button size="small" text type="danger" @click="u.setOps.splice(i, 1)">
+   597→                      <el-icon><Delete /></el-icon>
+   598→                    </el-button>
+   599→                  </div>
+   600→                </div>
+   601→
+   602→                <div class="rows-block">
+   603→                  <div class="rows-head">
+   604→                    <FieldLabel label="更新条件 WHERE" tip="多条件 AND 连接；该表条件为空时将影响全表，请谨慎配置" />
+   605→                    <el-button size="small" text type="primary" @click="u.where.push({ column: '', op: 'EQ', value: '' })">添加</el-button>
+   606→                  </div>
+   607→                  <div v-if="!u.where.length" class="rows-empty du-warn">未配置条件，执行将更新该表全表</div>
+   608→                  <div v-for="(cond, i) in u.where" :key="i" class="du-row">
+   609→                    <el-select
+   610→                      v-model="cond.column"
+   611→                      size="small"
+   612→                      filterable
+   613→                      allow-create
+   614→                      default-first-option
+   615→                      :loading="duEntryLoading(u.table)"
+   616→                      :disabled="!u.table"
+   617→                      :title="u.table ? undefined : '先选择目标表'"
+   618→                      placeholder="列名"
+   619→                      class="du-col"
+   620→                    >
+   621→                      <el-option v-for="c in duEntryColumns(u)" :key="c.key" :label="c.key" :value="c.key">
+   622→                        <span class="du-col-opt">
+   623→                          <span>{{ c.key }}</span>
+   624→                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+   625→                        </span>
+   626→                      </el-option>
+   627→                    </el-select>
+   628→                    <el-select v-model="cond.op" size="small" class="du-mode">
+   629→                      <el-option v-for="wop in DATA_UPDATE_OPS" :key="wop.value" :label="wop.label" :value="wop.value" />
+   630→                    </el-select>
+   631→                    <VarInput
+   632→                      v-if="!isNullOp(cond.op)"
+   633→                      v-model="cond.value"
+   634→                      :variables="variables"
+   635→                      mode="placeholder"
+   636→                      size="small"
+   637→                      class="du-value"
+   638→                      placeholder="值或 {{formData.xxx}}"
+   639→                    />
+   640→                    <el-button size="small" text type="danger" @click="u.where.splice(i, 1)">
+   641→                      <el-icon><Delete /></el-icon>
+   642→                    </el-button>
+   643→                  </div>
+   644→                </div>
+   645→              </div>
+   646→
+   647→              <div v-if="dataUpdateCfg.updates?.length" class="sql-preview-hint du-output-hint">
+   648→                未声明输出时引擎自动将整体汇总写入「{{ nodeId }}」：{ total, affected, {{ duKeysPreview }}, … }；各表按顺序在单事务内执行，任一表失败整体回滚（全有或全无）
+   649→              </div>
+   650→            </template>
+   651→          </template>
+   652→
+   653→          <!-- ===== SQL_SCRIPT ===== -->
+   654→          <template v-else-if="node.data.nodeType === 'SQL_SCRIPT'">
+   655→            <el-form-item required>
+   656→              <template #label>
+   657→                <FieldLabel label="SQL 语句" tip="多条 SQL 用 ; 分隔（字符串/注释内的分号不会切分）；语句中用 {{var.path}} 引用上下文变量，执行时编译为 JDBC ? 参数绑定防注入（保留数值类型；'前缀{{var}}后缀' 拼接形态整段绑定字符串）；支持 -- name: 别名 注释为语句命名（输出键用别名，重复会校验拒绝）；仅支持 SELECT/INSERT/UPDATE/DELETE/REPLACE（及 SHOW/DESC/EXPLAIN/WITH 查询），DDL 会隐式提交破坏事务故不支持" />
+   658→              </template>
+   659→              <VarInput
+   660→                v-model="sqlScriptCfg.sql"
+   661→                :variables="variables"
+   662→                mode="placeholder"
+   663→                textarea
+   664→                :rows="10"
+   665→                chips
+   666→                class="sql-source"
+   667→                placeholder="-- name: upsert_user&#10;UPDATE wf_biz_order SET status = {{newStatus}} WHERE id = {{orderId}};&#10;&#10;SELECT id, amount FROM wf_biz_order WHERE id = {{orderId}};"
+   668→              />
+   669→            </el-form-item>
+   670→
+   671→            <div class="rows-block">
+   672→              <div class="rows-head">
+   673→                <FieldLabel label="语句解析预览" tip="按 ; 切分后的执行顺序、类型识别与变量引用（与引擎语义一致）；条目键 = 别名或 s{序号}，即输出汇总里的子键" />
+   674→              </div>
+   675→              <div v-if="sqlPreview.error" class="sql-preview-error">
+   676→                <el-icon><WarningFilled /></el-icon>
+   677→                <span>{{ sqlPreview.error }}</span>
+   678→              </div>
+   679→              <div v-if="!sqlPreview.statements.length && !sqlPreview.error" class="rows-empty">
+   680→                输入 SQL 后按 ; 切分预览
+   681→              </div>
+   682→              <div v-for="st in sqlPreview.statements" :key="st.index" class="sql-stmt-row">
+   683→                <span class="sql-stmt-idx">#{{ st.index }}</span>
+   684→                <span class="sql-stmt-kind" :class="'kind-' + st.kind.toLowerCase()">{{ st.kindLabel }}</span>
+   685→                <span class="sql-stmt-text" :title="st.excerpt">{{ st.excerpt }}</span>
+   686→                <span v-if="st.name" class="sql-stmt-name" :title="`输出键 ${st.name}`">{{ st.name }}</span>
+   687→              </div>
+   688→              <div v-if="sqlPreview.statements.length" class="sql-preview-hint">
+   689→                未声明输出时引擎自动写整体汇总到「{{ nodeId }}」：{ total, succeeded, failed, aborted?, s0.affected, s1.data, … }，下游点路径取子字段（如 {{ nodeId }}.s0.affected）
+   690→              </div>
+   691→            </div>
+   692→
+   693→            <el-form-item>
+   694→              <template #label>
+   695→                <FieldLabel label="失败策略" tip="失败回滚（abort）：单事务执行，任一语句失败整体回滚并停止，汇总标 aborted=true（节点不抛错，下游可按 failed/aborted 变量分支）；逐条继续（continue）：自动提交逐条执行，失败记入该语句条目（sN.error）继续执行后续语句" />
+   696→              </template>
+   697→              <el-select v-model="sqlScriptCfg.onError" class="sql-onerror">
+   698→                <el-option label="失败回滚（单事务）" value="abort" />
+   699→                <el-option label="逐条继续（自动提交）" value="continue" />
+   700→              </el-select>
+   701→            </el-form-item>
+   702→
+   703→            <el-form-item>
+   704→              <template #label>
+   705→                <FieldLabel label="查询行数上限" tip="单条 SELECT 最多返回的行数（1~1000），超出截断并在该条目标记 truncated=true，防大结果集撑爆内存" />
+   706→              </template>
+   707→              <el-input-number v-model="sqlScriptCfg.maxRows" :min="1" :max="1000" size="small" class="sql-maxrows" />
+   708→            </el-form-item>
+   709→          </template>
+   710→
+   711→          <!-- ===== 公共：输出参数 / 异常策略（全执行型节点统一 results 单表；
+   712→               START/END/CONDITION 无；resultVar 已下线） ===== -->
+   713→          <template v-if="hasExecutionMeta">
+   714→            <div class="rows-block">
+   715→              <div class="rows-head">
+   716→                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（多表更新为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
+   717→                <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
+   718→              </div>
+   719→              <div v-if="!resultRows.length" class="rows-empty">
+   720→                未声明输出 · 引擎自动将整体结果写入变量「{{ nodeId }}」，下游可直接引用（点路径取子字段，如 {{ nodeId }}.data.id）；需要重命名或拆包时再添加
+   721→              </div>
+   722→              <div v-for="(r, i) in resultRows" :key="i" class="so-row">
+   723→                <div class="so-line1">
+   724→                  <el-input v-model="r.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
+   725→                  <el-select v-model="r.mode" size="small" class="so-mode">
+   726→                    <el-option label="整体值" value="WHOLE" />
+   727→                    <el-option label="按 key 取" value="KEY" />
+   728→                  </el-select>
+   729→                  <el-select v-model="r.type" size="small" class="so-type">
+   730→                    <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
+   731→                  </el-select>
+   732→                  <el-button size="small" text type="danger" @click="resultRows.splice(i, 1)">
+   733→                    <el-icon><Delete /></el-icon>
+   734→                  </el-button>
+   735→                </div>
+   736→              </div>
+   737→              <el-alert
+   738→                v-if="resultWarnings.length"
+   739→                type="warning"
+   740→                :closable="false"
+   741→                show-icon
+   742→                class="panel-alert"
+   743→                :title="resultWarnings.join('；')"
+   744→              />
+   745→            </div>
+   746→            <el-form-item>
+   747→              <template #label>
+   748→                <FieldLabel label="异常处理" tip="失败中断：节点异常终止整个流程；忽略继续：记录异常并继续执行后续节点" />
+   749→              </template>
+   750→              <el-select v-model="node.data.errorAction" style="width: 100%">
+   751→                <el-option label="失败中断（FAIL_FLOW）" value="FAIL_FLOW" />
+   752→                <el-option label="忽略继续（IGNORE_CONTINUE）" value="IGNORE_CONTINUE" />
+   753→              </el-select>
+   754→            </el-form-item>
+   755→          </template>
+   756→        </el-form>
+   757→      </div>
+   758→    </template>
+   759→  </div>
+   760→</template>
+   761→
+   762→<script setup lang="ts">
+   763→import { computed, onMounted, reactive, ref, watch } from 'vue'
+   764→import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
+   765→import { ElMessage } from 'element-plus'
+   766→import FieldLabel from './FieldLabel.vue'
+   767→import VarInput from './VarInput.vue'
+   768→import { logicFlowApi } from '@/api/logicFlow'
+   769→import type { BackendBeanInfo } from '@/api/logicFlow'
+   770→import { dataSourceApi } from '@/api/data-source'
+   771→import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
+   772→import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+   773→import { parseSqlScriptPreview } from '../utils/sqlScript'
+   774→import type { FlowVarItem } from '../utils/flowVars'
+   775→
+   776→const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+   777→const OPERATORS = [
+   778→  { label: '等于（EQ）', value: 'EQ' },
+   779→  { label: '不等于（NE）', value: 'NE' },
+   780→  { label: '大于（GT）', value: 'GT' },
+   781→  { label: '小于（LT）', value: 'LT' },
+   782→  { label: '大于等于（GTE）', value: 'GTE' },
+   783→  { label: '小于等于（LTE）', value: 'LTE' },
+   784→  { label: '为空（EMPTY）', value: 'EMPTY' },
+   785→  { label: '不为空（NOT_EMPTY）', value: 'NOT_EMPTY' },
+   786→] as const
+   787→
+   788→const props = defineProps<{
+   789→  node?: FlowNode | null
+   790→  collapsed?: boolean
+   791→  loopBodyCount?: number
+   792→  /** 当前节点可用的上下文变量（父组件按画布实时计算，见 flowVars.ts） */
+   793→  variables?: FlowVarItem[]
+   794→}>()
+   795→const emit = defineEmits<{ 'update:collapsed': [value: boolean]; remove: [id: string] }>()
+   796→
+   797→const collapsed = computed({
+   798→  get: () => props.collapsed ?? false,
+   799→  set: (val) => emit('update:collapsed', val),
+   800→})
+   801→
+   802→const loopBodyCount = computed(() => props.loopBodyCount ?? 0)
+   803→
+   804→const node = computed(() => props.node ?? null)
+   805→/** 隐式输出变量名（未声明 results 时引擎写入的变量 = 节点 id） */
+   806→const nodeId = computed(() => node.value?.id ?? '')
+   807→const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nodeType) : ''))
+   808→const hasExecutionMeta = computed(
+   809→  () =>
+   810→    !!node.value &&
+   811→    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
+   812→)
+   813→
+   814→/** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
+   815→function ensureConfig<T>(): T {
+   816→  const n = node.value!
+   817→  if (!n.data.config || typeof n.data.config !== 'object') {
+   818→    n.data.config = defaultConfig(n.data.nodeType)
+   819→  }
+   820→  return n.data.config as T
+   821→}
+   822→
+   823→const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
+   824→const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
+   825→const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
+   826→
+   827→// ===== SQL_SCRIPT =====
+   828→const sqlScriptCfg = computed(() => ensureConfig<SqlScriptNodeConfig>())
+   829→/** 实时拆分预览（与引擎同语义；解析错误不抛出，进 error 字段展示） */
+   830→const sqlPreview = computed(() => parseSqlScriptPreview(String(sqlScriptCfg.value?.sql ?? '')))
+   831→
+   832→/** 统一输出声明（reactive 引用，增删改直接写回 node.data.results；全执行型节点共享） */
+   833→const resultRows = computed<ResultVarDef[]>(() => {
+   834→  const n = node.value!
+   835→  if (!hasExecutionMeta.value) return []
+   836→  if (!Array.isArray(n.data.results)) n.data.results = []
+   837→  return n.data.results
+   838→})
+   839→
+   840→function addResultRow(): void {
+   841→  // 首行默认整体值（单值输出最常见）；已有行默认按 key 取（多输出需输出源为 Map/JSON 对象）
+   842→  resultRows.value.push({
+   843→    name: '',
+   844→    mode: resultRows.value.length ? 'KEY' : 'WHOLE',
+   845→    type: 'string',
+   846→  })
+   847→}
+   848→
+   849→/** 输出参数软校验（发布时后端硬校验同名/mode 规则）：缺名/非法名/重名 */
+   850→const resultWarnings = computed<string[]>(() => {
+   851→  if (!node.value || !hasExecutionMeta.value) return []
+   852→  const warns: string[] = []
+   853→  const seen = new Set<string>()
+   854→  resultRows.value.forEach((r, i) => {
+   855→    const name = String(r.name ?? '').trim()
+   856→    if (!name) {
+   857→      warns.push(`输出参数第 ${i + 1} 行缺少变量名`)
+   858→      return
+   859→    }
+   860→    if (!/^\w+$/.test(name)) warns.push(`「${name}」非法（仅字母/数字/下划线）`)
+   861→    if (seen.has(name)) warns.push(`「${name}」重复`)
+   862→    seen.add(name)
+   863→  })
+   864→  return warns
+   865→})
+   866→const conditionCfg = computed(() => ensureConfig<{ variable: string; operator: string; value?: string }>())
+   867→const batchCfg = computed(() =>
+   868→  ensureConfig<{
+   869→    collection: string
+   870→    itemVar: string
+   871→    indexVar: string
+   872→    body?: unknown[]
+   873→    actionType?: 'HTTP' | 'SCRIPT' | 'BEAN'
+   874→    stopOnError: boolean
+   875→    maxItems: number
+   876→  }>()
+   877→)
+   878→
+   879→const subflowCfg = computed(() =>
+   880→  ensureConfig<{
+   881→    flowId: string
+   882→    passAllVars: boolean
+   883→    varsMapping: { source: string; target: string }[]
+   884→  }>()
+   885→)
+   886→
+   887→// ===== DATA_UPDATE =====
+   888→const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
+   889→  { label: '等于', value: 'EQ' },
+   890→  { label: '不等于', value: 'NE' },
+   891→  { label: '大于', value: 'GT' },
+   892→  { label: '大于等于', value: 'GTE' },
+   893→  { label: '小于', value: 'LT' },
+   894→  { label: '小于等于', value: 'LTE' },
+   895→  { label: '为空', value: 'IS_NULL' },
+   896→  { label: '不为空', value: 'NOT_NULL' },
+   897→]
+   898→
+   899→const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
+   900→
+   901→// ===== DATA_UPDATE 目标表/列下拉（取库真实 schema） =====
+   902→// 目标表展示数据库全部表清单（后端已放开前缀白名单，保留表名合法性+存在性校验）；
+   903→// 列排除 tenant_id（运行时禁改列），其余以 information_schema 真实结构为准
+   904→
+   905→const duTableOptions = ref<string[]>([])
+   906→const duTablesLoading = ref(false)
+   907→const duRawColumns = ref<{ key: string; columnType: string }[]>([])
+   908→const duColumnsLoading = ref(false)
+   909→let duColumnsReqSeq = 0
+   910→
+   911→/** 目标表选项：真实表清单过滤白名单，并入当前已填表名（历史 DSL 的表可能已不在清单） */
+   912→const duTableMergedOptions = computed(() => {
+   913→  const cur = String(dataUpdateCfg.value?.table ?? '').trim()
+   914→  const set = new Set(duTableOptions.value)
+   915→  if (cur) set.add(cur)
+   916→  return [...set].sort()
+   917→})
+   918→
+   919→/** 列选项：当前表真实列（除 tenant_id）+ SET/WHERE 已填列名（含字面量占位历史值） */
+   920→const duColumnMergedOptions = computed(() => {
+   921→  const cur = new Set<string>(duRawColumns.value.map((c) => c.key))
+   922→  for (const op of dataUpdateCfg.value?.setOps ?? []) {
+   923→    const col = String(op.column ?? '').trim()
+   924→    if (col) cur.add(col)
+   925→  }
+   926→  for (const cond of dataUpdateCfg.value?.where ?? []) {
+   927→    const col = String(cond.column ?? '').trim()
+   928→    if (col) cur.add(col)
+   929→  }
+   930→  return [...cur]
+   931→    .filter((key) => key.toLowerCase() !== 'tenant_id')
+   932→    .sort()
+   933→    .map((key) => {
+   934→      const meta = duRawColumns.value.find((c) => c.key === key)
+   935→      return { key, type: meta?.columnType ?? '' }
+   936→    })
+   937→})
+   938→
+   939→async function loadDuTables() {
+   940→  duTablesLoading.value = true
+   941→  try {
+   942→    const res = await dataSourceApi.getDbSchemaTables()
+   943→    duTableOptions.value = res.data ?? []
+   944→  } catch {
+   945→    // http 拦截器已提示；表清单为空时可稍后重开面板
+   946→  } finally {
+   947→    duTablesLoading.value = false
+   948→  }
+   949→}
+   950→
+   951→async function loadDuColumns(table: string) {
+   952→  const seq = ++duColumnsReqSeq
+   953→  if (!table) {
+   954→    duRawColumns.value = []
+   955→    return
+   956→  }
+   957→  duColumnsLoading.value = true
+   958→  try {
+   959→    const res = await dataSourceApi.getDbSchemaColumns(table)
+   960→    if (seq !== duColumnsReqSeq) return // 表快速切换时丢弃过期响应
+   961→    duRawColumns.value = (res.data ?? []).map((c) => ({ key: c.key, columnType: c.columnType }))
+   962→  } catch {
+   963→    if (seq === duColumnsReqSeq) duRawColumns.value = []
+   964→  } finally {
+   965→    if (seq === duColumnsReqSeq) duColumnsLoading.value = false
+   966→  }
+   967→}
+   968→
+   969→watch(
+   970→  () => (node.value ? String(dataUpdateCfg.value?.table ?? '') : ''),
+   971→  (table) => {
+   972→    loadDuColumns(table)
+   973→  },
+   974→  { immediate: true }
+   975→)
+   976→
+   977→function addSetOp() {
+   978→  dataUpdateCfg.value.setOps.push({ column: '', mode: 'SET', value: '' })
+   979→}
+   980→
+   981→function addWhereCond() {
+   982→  dataUpdateCfg.value.where.push({ column: '', op: 'EQ', value: '' })
+   983→}
+   984→
+   985→function isNullOp(op: string): boolean {
+   986→  return op === 'IS_NULL' || op === 'NOT_NULL'
+   987→}
+   988→
+   989→// ===== DATA_UPDATE 多表更新（config.updates，单事务全有或全无） =====
+   990→const duMultiMode = computed(
+   991→  () => Array.isArray(dataUpdateCfg.value?.updates) && (dataUpdateCfg.value?.updates?.length ?? 0) > 0
+   992→)
+   993→
+   994→/** 切换多表/单表：开启时把现有单表配置迁移为第一条多表项；关闭仅当 ≤1 条（避免丢配置） */
+   995→function toggleDuMultiMode(on: string | number | boolean): void {
+   996→  const cfg = dataUpdateCfg.value
+   997→  if (!cfg) return
+   998→  if (on) {
+   999→    if (Array.isArray(cfg.updates) && cfg.updates.length) return
+  1000→    cfg.updates = [{ table: cfg.table ?? '', setOps: cfg.setOps ?? [], where: cfg.where ?? [] }]
+  1001→  } else {
+  1002→    if (!Array.isArray(cfg.updates)) return
+  1003→    if (cfg.updates.length <= 1) {
+  1004→      const only = cfg.updates[0]
+  1005→      cfg.table = only?.table ?? ''
+  1006→      cfg.setOps = only?.setOps ?? []
+  1007→      cfg.where = only?.where ?? []
+  1008→      cfg.updates = []
+  1009→    }
+  1010→  }
+  1011→}
+  1012→
+  1013→function addDataUpdateEntry(): void {
+  1014→  const cfg = dataUpdateCfg.value
+  1015→  if (!cfg) return
+  1016→  if (!Array.isArray(cfg.updates)) cfg.updates = []
+  1017→  cfg.updates.push({ table: '', setOps: [], where: [] })
+  1018→}
+  1019→
+  1020→/** 每表列结构缓存（多表模式按表拉取；键为表名） */
+  1021→const duColumnsByTable = reactive(new Map<string, { key: string; columnType: string }[]>())
+  1022→const duTableLoading = reactive(new Set<string>())
+  1023→
+  1024→function duEntryLoading(table: string): boolean {
+  1025→  return duTableLoading.has(String(table ?? '').trim())
+  1026→}
+  1027→
+  1028→async function ensureDuColumns(table: string): Promise<void> {
+  1029→  const t = String(table ?? '').trim()
+  1030→  if (!t || duColumnsByTable.has(t) || duTableLoading.has(t)) return
+  1031→  duTableLoading.add(t)
+  1032→  try {
+  1033→    const res = await dataSourceApi.getDbSchemaColumns(t)
+  1034→    duColumnsByTable.set(t, (res.data ?? []).map((c) => ({ key: c.key, columnType: c.columnType })))
+  1035→  } catch {
+  1036→    // http 拦截器已提示；置空表仍允许手填列名（allow-create）
+  1037→    duColumnsByTable.set(t, [])
+  1038→  } finally {
+  1039→    duTableLoading.delete(t)
+  1040→  }
+  1041→}
+  1042→
+  1043→watch(
+  1044→  () =>
+  1045→    node.value
+  1046→      ? (dataUpdateCfg.value?.updates ?? [])
+  1047→          .map((u) => String(u?.table ?? '').trim())
+  1048→          .join('\u0001')
+  1049→      : '',
+  1050→  (joined) => {
+  1051→    for (const t of joined.split('\u0001')) {
+  1052→      if (t) void ensureDuColumns(t)
+  1053→    }
+  1054→  },
+  1055→  { immediate: true }
+  1056→)
+  1057→
+  1058→/** 多表条目列选项：该表真实列（除 tenant_id）+ SET/WHERE 已填列名兜底（含字面量占位历史值） */
+  1059→function duEntryColumns(u: DataUpdateTableUpdate): { key: string; type: string }[] {
+  1060→  const real = duColumnsByTable.get(String(u?.table ?? '').trim()) ?? []
+  1061→  const cur = new Set<string>(real.map((c) => c.key))
+  1062→  for (const op of u?.setOps ?? []) {
+  1063→    const col = String(op.column ?? '').trim()
+  1064→    if (col) cur.add(col)
+  1065→  }
+  1066→  for (const cond of u?.where ?? []) {
+  1067→    const col = String(cond.column ?? '').trim()
+  1068→    if (col) cur.add(col)
+  1069→  }
+  1070→  return [...cur]
+  1071→    .filter((key) => key.toLowerCase() !== 'tenant_id')
+  1072→    .sort()
+  1073→    .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
+  1074→}
+  1075→
+  1076→/** 多表条目目标表选项：全表清单 + 当前已填表名兜底（历史 DSL 的表可能已不在清单） */
+  1077→function duEntryTableOptions(cur: string): string[] {
+  1078→  const set = new Set(duTableOptions.value)
+  1079→  const c = String(cur ?? '').trim()
+  1080→  if (c) set.add(c)
+  1081→  return [...set].sort()
+  1082→}
+  1083→
+  1084→/** 汇总输出键预览（别名合法时用别名，否则 t{序号}） */
+  1085→const duKeysPreview = computed(() => {
+  1086→  const updates = dataUpdateCfg.value?.updates ?? []
+  1087→  return updates
+  1088→    .map((u, i) => {
+  1089→      const alias = String(u?.alias ?? '').trim()
+  1090→      return alias && /^\w+$/.test(alias) ? `${alias}.affected` : `t${i}.affected`
+  1091→    })
+  1092→    .join(', ')
+  1093→})
+  1094→
+  1095→// ===== 已发布流清单（SUBFLOW 目标下拉用；拉首页大页后前端过滤） =====
+  1096→const publishedFlows = ref<{ id: string; flowKey: string; name: string }[]>([])
+  1097→const flowsLoading = ref(false)
+  1098→onMounted(async () => {
+  1099→  flowsLoading.value = true
+  1100→  loadDuTables()
+  1101→  try {
+  1102→    const res = await logicFlowApi.list({ page: 1, size: 100 })
+  1103→    const content: any[] = (res.data as any)?.content || []
+  1104→    publishedFlows.value = content
+  1105→      .filter((f) => f.status === 'PUBLISHED')
+  1106→      .map((f) => ({ id: f.id, flowKey: f.flowKey, name: f.name }))
+  1107→  } catch {
+  1108→    // http 拦截器已提示；下拉为空时用户可稍后重开面板
+  1109→  } finally {
+  1110→    flowsLoading.value = false
+  1111→  }
+  1112→})
+  1113→
+  1114→/** 循环体在画布上编辑（拖节点到循环虚线），面板仅展示步数提示 */
+  1115→
+  1116→const isEmptyOperator = computed(
+  1117→  () => conditionCfg.value.operator === 'EMPTY' || conditionCfg.value.operator === 'NOT_EMPTY'
+  1118→)
+  1119→
+  1120→// ===== Headers：Record<string,string> ↔ 键值对动态行 =====
+  1121→interface KvRow {
+  1122→  key: string
+  1123→  value: string
+  1124→}
+  1125→const headerRows = ref<KvRow[]>([])
+  1126→
+  1127→function loadHeaderRows() {
+  1128→  if (!node.value || node.value.data.nodeType !== 'HTTP') {
+  1129→    headerRows.value = []
+  1130→    return
+  1131→  }
+  1132→  const headers = httpCfg.value?.headers || {}
+  1133→  headerRows.value = Object.entries(headers).map(([key, value]) => ({ key, value: String(value ?? '') }))
+  1134→}
+  1135→
+  1136→function syncHeaders() {
+  1137→  const map: Record<string, string> = {}
+  1138→  for (const row of headerRows.value) {
+  1139→    const key = row.key.trim()
+  1140→    if (key) map[key] = row.value
+  1141→  }
+  1142→  httpCfg.value.headers = map
+  1143→}
+  1144→
+  1145→function addHeader() {
+  1146→  headerRows.value.push({ key: '', value: '' })
+  1147→}
+  1148→
+  1149→function removeHeader(index: number) {
+  1150→  headerRows.value.splice(index, 1)
+  1151→  syncHeaders()
+  1152→}
+  1153→
+  1154→// ===== 参数对动态行（queryParams/bodyParams/params：config 内直接增删） =====
+  1155→type ParamListKey = 'queryParams' | 'bodyParams' | 'params'
+  1156→
+  1157→function paramList(key: ParamListKey): { source: string; target: string }[] {
+  1158→  if (key === 'params') return beanCfg.value.params
+  1159→  return httpCfg.value[key]
+  1160→}
+  1161→
+  1162→function addParam(key: ParamListKey) {
+  1163→  paramList(key).push({ source: '', target: '' })
+  1164→}
+  1165→
+  1166→function removeParam(key: ParamListKey, index: number) {
+  1167→  paramList(key).splice(index, 1)
+  1168→}
+  1169→
+  1170→// ===== BEAN 清单：onMounted 拉取，失败降级输入框 =====
+  1171→const beans = ref<BackendBeanInfo[]>([])
+  1172→const beanLoadFailed = ref(false)
+  1173→
+  1174→onMounted(async () => {
+  1175→  try {
+  1176→    const res = await logicFlowApi.listBeans()
+  1177→    beans.value = res.data || []
+  1178→  } catch {
+  1179→    // http 拦截器已提示；降级为输入框
+  1180→    beanLoadFailed.value = true
+  1181→  }
+  1182→})
+  1183→
+  1184→const beanNames = computed(() => [...new Set(beans.value.map((b) => b.beanName))])
+  1185→
+  1186→const beanMethods = computed(() =>
+  1187→  beans.value
+  1188→    .filter((b) => b.beanName === beanCfg.value.beanName)
+  1189→    .map((b) => ({
+  1190→      label: b.displayName ? `${b.methodName}（${b.displayName}）` : b.methodName,
+  1191→      value: b.methodName,
+  1192→    }))
+  1193→)
+  1194→
+  1195→function onBeanChanged() {
+  1196→  // 切换 Bean 后，若方法名不属于该 Bean 则清空，避免悬挂非法组合
+  1197→  const ok = beanMethods.value.some((m) => m.value === beanCfg.value.methodName)
+  1198→  if (!ok) beanCfg.value.methodName = ''
+  1199→}
+  1200→
+  1201→// ===== 选中节点切换：重建 Headers 行（其余字段直接绑 config，无需重建） =====
+  1202→watch(
+  1203→  () => node.value?.id,
+  1204→  () => loadHeaderRows(),
+  1205→  { immediate: true }
+  1206→)
+  1207→
+  1208→async function copyNodeId() {
+  1209→  const id = node.value?.id
+  1210→  if (!id) return
+  1211→  try {
+  1212→    await navigator.clipboard.writeText(id)
+  1213→    ElMessage.success(`已复制节点 ID：${id}`)
+  1214→  } catch {
+  1215→    ElMessage.warning('复制失败，请手动选择复制')
+  1216→  }
+  1217→}
+  1218→</script>
+  1219→
+  1220→<style scoped>
+  1221→/* 悬浮卡片：与左侧调色板对称 */
+  1222→.property-panel {
+  1223→  position: absolute;
+  1224→  top: 12px;
+  1225→  right: 12px;
+  1226→  bottom: 12px;
+  1227→  z-index: 20;
+  1228→  background: var(--el-bg-color);
+  1229→  border: 1px solid var(--el-border-color-lighter);
+  1230→  border-radius: 12px;
+  1231→  box-shadow:
+  1232→    0 6px 24px rgba(31, 36, 55, 0.14),
+  1233→    0 1px 4px rgba(31, 36, 55, 0.08);
+  1234→  display: flex;
+  1235→  flex-direction: column;
+  1236→  overflow: hidden;
+  1237→  transition: width 0.2s ease;
+  1238→}
+  1239→
+  1240→.property-panel:not(.collapsed) {
+  1241→  width: 388px;
+  1242→}
+  1243→
+  1244→.property-panel.collapsed {
+  1245→  width: 32px;
+  1246→}
+  1247→
+  1248→/* ===== 折叠态 ===== */
+  1249→.collapse-bar {
+  1250→  display: flex;
+  1251→  flex-direction: column;
+  1252→  align-items: center;
+  1253→  justify-content: center;
+  1254→  width: 32px;
+  1255→  height: 100%;
+  1256→  cursor: pointer;
+  1257→  gap: 6px;
+  1258→  color: var(--el-text-color-regular);
+  1259→  background: var(--el-bg-color-page);
+  1260→  transition: background 0.2s, color 0.2s;
+  1261→}
+  1262→
+  1263→.collapse-bar:hover {
+  1264→  background: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
+  1265→  color: var(--el-color-primary);
+  1266→}
+  1267→
+  1268→.bar-icon {
+  1269→  font-size: 18px;
+  1270→}
+  1271→
+  1272→.bar-text {
+  1273→  font-size: 12px;
+  1274→  writing-mode: vertical-rl;
+  1275→  letter-spacing: 2px;
+  1276→  color: var(--el-text-color-secondary);
+  1277→}
+  1278→
+  1279→/* ===== 头部 ===== */
+  1280→.panel-header {
+  1281→  display: flex;
+  1282→  align-items: center;
+  1283→  justify-content: space-between;
+  1284→  padding: 12px 14px;
+  1285→  border-bottom: 1px solid var(--el-border-color-light);
+  1286→  flex-shrink: 0;
+  1287→}
+  1288→
+  1289→.panel-heading {
+  1290→  display: flex;
+  1291→  align-items: center;
+  1292→  gap: 8px;
+  1293→  font-size: 14px;
+  1294→  font-weight: 600;
+  1295→  color: var(--el-text-color-primary);
+  1296→}
+  1297→
+  1298→.heading-icon {
+  1299→  color: var(--el-color-primary);
+  1300→  font-size: 16px;
+  1301→}
+  1302→
+  1303→.panel-tags {
+  1304→  display: flex;
+  1305→  align-items: center;
+  1306→  gap: 8px;
+  1307→}
+  1308→
+  1309→.node-type-tag {
+  1310→  font-weight: 600;
+  1311→}
+  1312→
+  1313→.header-action {
+  1314→  cursor: pointer;
+  1315→  color: var(--el-text-color-secondary);
+  1316→  font-size: 15px;
+  1317→  transition: color 0.2s;
+  1318→}
+  1319→
+  1320→.header-action:hover {
+  1321→  color: var(--el-color-danger);
+  1322→}
+  1323→
+  1324→.collapse-toggle {
+  1325→  cursor: pointer;
+  1326→  color: var(--el-text-color-secondary);
+  1327→  font-size: 16px;
+  1328→  transition: color 0.2s;
+  1329→}
+  1330→
+  1331→.collapse-toggle:hover {
+  1332→  color: var(--el-color-primary);
+  1333→}
+  1334→
+  1335→/* ===== 节点 ID 行 ===== */
+  1336→.panel-meta {
+  1337→  display: flex;
+  1338→  align-items: center;
+  1339→  gap: 8px;
+  1340→  padding: 7px 14px;
+  1341→  background: color-mix(in srgb, var(--el-color-primary) 4%, transparent);
+  1342→  border-bottom: 1px solid var(--el-border-color-lighter);
+  1343→  flex-shrink: 0;
+  1344→}
+  1345→
+  1346→.meta-label {
+  1347→  flex-shrink: 0;
+  1348→  font-size: 11px;
+  1349→  font-weight: 600;
+  1350→  letter-spacing: 0.5px;
+  1351→  color: var(--el-text-color-secondary);
+  1352→}
+  1353→
+  1354→.meta-value {
+  1355→  flex: 1;
+  1356→  min-width: 0;
+  1357→  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  1358→  font-size: 12px;
+  1359→  color: var(--el-text-color-regular);
+  1360→  white-space: nowrap;
+  1361→  overflow: hidden;
+  1362→  text-overflow: ellipsis;
+  1363→  user-select: all;
+  1364→}
+  1365→
+  1366→.meta-copy {
+  1367→  flex-shrink: 0;
+  1368→  cursor: pointer;
+  1369→  font-size: 14px;
+  1370→  color: var(--el-text-color-secondary);
+  1371→  transition: color 0.2s;
+  1372→}
+  1373→
+  1374→.meta-copy:hover {
+  1375→  color: var(--el-color-primary);
+  1376→}
+  1377→
+  1378→/* ===== 主体：超高滚动 ===== */
+  1379→.panel-body {
+  1380→  flex: 1;
+  1381→  min-height: 0;
+  1382→  overflow-y: auto;
+  1383→  padding: 14px;
+  1384→  background: var(--el-bg-color-page);
+  1385→}
+  1386→
+  1387→.panel-form {
+  1388→  background: var(--el-bg-color);
+  1389→  border: 1px solid var(--el-border-color-lighter);
+  1390→  border-radius: 10px;
+  1391→  padding: 12px 12px 4px;
+  1392→  box-shadow: 0 1px 3px rgba(31, 36, 55, 0.04);
+  1393→}
+  1394→
+  1395→/* ===== 动态行块 ===== */
+  1396→.rows-block {
+  1397→  border: 1px solid var(--el-border-color-lighter);
+  1398→  border-radius: 8px;
+  1399→  padding: 8px 8px 4px;
+  1400→  margin-bottom: 14px;
+  1401→  background: color-mix(in srgb, var(--el-bg-color-page) 55%, transparent);
+  1402→}
+  1403→
+  1404→.rows-head {
+  1405→  display: flex;
+  1406→  align-items: center;
+  1407→  justify-content: space-between;
+  1408→  font-size: 12px;
+  1409→  font-weight: 600;
+  1410→  color: var(--el-text-color-regular);
+  1411→  margin-bottom: 6px;
+  1412→}
+  1413→
+  1414→.rows-empty {
+  1415→  font-size: 11px;
+  1416→  color: var(--el-text-color-placeholder);
+  1417→  text-align: center;
+  1418→  padding: 4px 0 8px;
+  1419→}
+  1420→
+  1421→.kv-row {
+  1422→  display: flex;
+  1423→  align-items: center;
+  1424→  gap: 6px;
+  1425→  margin-bottom: 6px;
+  1426→}
+  1427→
+  1428→.kv-row .el-input {
+  1429→  flex: 1;
+  1430→  min-width: 0;
+  1431→}
+  1432→
+  1433→.kv-row .el-button {
+  1434→  flex-shrink: 0;
+  1435→  padding: 4px;
+  1436→}
+  1437→
+  1438→/* DATA_UPDATE 行：列名 / 模式 / 值 三段布局 */
+  1439→.du-row {
+  1440→  display: flex;
+  1441→  align-items: center;
+  1442→  gap: 6px;
+  1443→  margin-bottom: 6px;
+  1444→}
+  1445→
+  1446→.du-row .du-col {
+  1447→  flex: 1.1;
+  1448→  min-width: 0;
+  1449→}
+  1450→
+  1451→/* 目标表下拉占满表单项宽度（与原 el-input 对齐） */
+  1452→.du-table-select {
+  1453→  width: 100%;
+  1454→}
+  1455→
+  1456→/* 列下拉选项：列名 + 类型小字两端排布 */
+  1457→.du-col-opt {
+  1458→  display: flex;
+  1459→  align-items: center;
+  1460→  justify-content: space-between;
+  1461→  gap: 8px;
+  1462→  width: 100%;
+  1463→}
+  1464→
+  1465→.du-col-type {
+  1466→  font-size: 11px;
+  1467→  line-height: 1;
+  1468→  color: var(--el-text-color-secondary);
+  1469→}
+  1470→
+  1471→.du-row .du-mode {
+  1472→  width: 88px;
+  1473→  flex-shrink: 0;
+  1474→}
+  1475→
+  1476→.du-row .du-value {
+  1477→  flex: 1.4;
+  1478→  min-width: 0;
+  1479→}
+  1480→
+  1481→.du-row .el-button {
+  1482→  flex-shrink: 0;
+  1483→  padding: 4px;
+  1484→}
+  1485→
+  1486→.du-warn {
+  1487→  color: var(--el-color-warning);
+  1488→}
+  1489→
+  1490→/* DATA_UPDATE 多表更新：模式开关行 */
+  1491→.du-multi-switch {
+  1492→  display: flex;
+  1493→  align-items: center;
+  1494→  gap: 8px;
+  1495→  width: 100%;
+  1496→}
+  1497→
+  1498→.du-multi-hint {
+  1499→  flex: 1;
+  1500→  min-width: 0;
+  1501→  font-size: 12px;
+  1502→  color: var(--el-text-color-secondary);
+  1503→}
+  1504→
+  1505→/* 多表条目卡片：头部（序号+别名+删除） + 该表 SET/WHERE 编辑区 */
+  1506→.du-multi-card {
+  1507→  margin-bottom: 10px;
+  1508→  padding: 10px;
+  1509→  border: 1px solid var(--el-border-color-lighter);
+  1510→  border-radius: 6px;
+  1511→  background: var(--el-fill-color-extra-light);
+  1512→}
+  1513→
+  1514→.du-multi-head {
+  1515→  display: flex;
+  1516→  align-items: center;
+  1517→  gap: 8px;
+  1518→  margin-bottom: 8px;
+  1519→}
+  1520→
+  1521→.du-multi-idx {
+  1522→  min-width: 22px;
+  1523→  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  1524→  font-size: 12px;
+  1525→  color: var(--el-text-color-secondary);
+  1526→}
+  1527→
+  1528→.du-alias {
+  1529→  width: 190px;
+  1530→}
+  1531→
+  1532→.du-output-hint {
+  1533→  margin-top: 8px;
+  1534→}
+  1535→
+  1536→/* 输出参数声明行：单行卡片式（变量名+提取方式+类型+删除） */
+  1537→.so-row {
+  1538→  margin-bottom: 8px;
+  1539→  padding: 6px 8px;
+  1540→  border: 1px solid var(--el-border-color-lighter);
+  1541→  border-radius: 6px;
+  1542→  background: var(--el-fill-color-extra-light);
+  1543→}
+  1544→
+  1545→.so-row .so-line1 {
+  1546→  display: flex;
+  1547→  align-items: center;
+  1548→  gap: 6px;
+  1549→}
+  1550→
+  1551→.so-row .so-name {
+  1552→  flex: 1.2;
+  1553→  min-width: 0;
+  1554→}
+  1555→
+  1556→.so-row .so-mode {
+  1557→  width: 92px;
+  1558→  flex-shrink: 0;
+  1559→}
+  1560→
+  1561→.so-row .so-type {
+  1562→  width: 82px;
+  1563→  flex-shrink: 0;
+  1564→}
+  1565→
+  1566→.so-row .el-button {
+  1567→  flex-shrink: 0;
+  1568→  padding: 4px;
+  1569→}
+  1570→
+  1571→.num-grid :deep(.el-form-item) {
+  1572→  margin-bottom: 14px;
+  1573→}
+  1574→
+  1575→/* BATCH 循环体画布配置提示卡 */
+  1576→.loop-hint {
+  1577→  width: 100%;
+  1578→  padding: 8px 10px;
+  1579→  border-radius: 6px;
+  1580→  font-size: 12px;
+  1581→  line-height: 1.5;
+  1582→  color: color-mix(in srgb, var(--lf-batch) 82%, var(--el-text-color-primary));
+  1583→  background: color-mix(in srgb, var(--lf-batch) 8%, transparent);
+  1584→  border: 1px dashed color-mix(in srgb, var(--lf-batch) 40%, transparent);
+  1585→}
+  1586→
+  1587→.loop-hint.is-empty {
+  1588→  color: var(--el-text-color-secondary);
+  1589→  background: var(--el-fill-color-light);
+  1590→  border-color: var(--el-border-color-lighter);
+  1591→}
+  1592→
+  1593→/* 脚本编辑：等宽字体 */
+  1594→.script-source :deep(textarea) {
+  1595→  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  1596→  font-size: 12px;
+  1597→  line-height: 1.6;
+  1598→}
+  1599→
+  1600→/* ===== SQL_SCRIPT：编辑器 + 语句解析预览 ===== */
+  1601→.sql-source :deep(textarea) {
+  1602→  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  1603→  font-size: 12px;
+  1604→  line-height: 1.7;
+  1605→}
+  1606→
+  1607→.sql-preview-error {
+  1608→  display: flex;
+  1609→  align-items: center;
+  1610→  gap: 6px;
+  1611→  padding: 6px 10px;
+  1612→  border-radius: 6px;
+  1613→  font-size: 12px;
+  1614→  color: var(--el-color-danger);
+  1615→  background: color-mix(in srgb, var(--el-color-danger) 8%, transparent);
+  1616→  border: 1px dashed color-mix(in srgb, var(--el-color-danger) 40%, transparent);
+  1617→}
+  1618→
+  1619→.sql-stmt-row {
+  1620→  display: flex;
+  1621→  align-items: center;
+  1622→  gap: 8px;
+  1623→  padding: 5px 10px;
+  1624→  border-radius: 6px;
+  1625→  background: var(--el-fill-color-light);
+  1626→  border: 1px solid var(--el-border-color-lighter);
+  1627→  font-size: 12px;
+  1628→  overflow: hidden;
+  1629→}
+  1630→
+  1631→.sql-stmt-row + .sql-stmt-row {
+  1632→  margin-top: 4px;
+  1633→}
+  1634→
+  1635→.sql-stmt-idx {
+  1636→  flex-shrink: 0;
+  1637→  font-family: 'SFMono-Regular', Consolas, monospace;
+  1638→  font-size: 11px;
+  1639→  color: var(--el-text-color-secondary);
+  1640→}
+  1641→
+  1642→.sql-stmt-kind {
+  1643→  flex-shrink: 0;
+  1644→  padding: 1px 7px;
+  1645→  border-radius: 9px;
+  1646→  font-size: 11px;
+  1647→  line-height: 16px;
+  1648→  color: #fff;
+  1649→}
+  1650→
+  1651→.sql-stmt-kind.kind-dml {
+  1652→  background: color-mix(in srgb, #0e7490 78%, var(--el-color-primary));
+  1653→}
+  1654→
+  1655→.sql-stmt-kind.kind-insert {
+  1656→  background: var(--el-color-success);
+  1657→}
+  1658→
+  1659→.sql-stmt-kind.kind-query {
+  1660→  background: color-mix(in srgb, var(--lf-batch) 82%, var(--el-text-color-primary));
+  1661→}
+  1662→
+  1663→.sql-stmt-text {
+  1664→  flex: 1;
+  1665→  min-width: 0;
+  1666→  overflow: hidden;
+  1667→  text-overflow: ellipsis;
+  1668→  white-space: nowrap;
+  1669→  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  1670→  color: var(--el-text-color-regular);
+  1671→}
+  1672→
+  1673→.sql-stmt-name {
+  1674→  flex-shrink: 0;
+  1675→  max-width: 30%;
+  1676→  overflow: hidden;
+  1677→  text-overflow: ellipsis;
+  1678→  white-space: nowrap;
+  1679→  padding: 1px 7px;
+  1680→  border-radius: 9px;
+  1681→  font-size: 11px;
+  1682→  line-height: 16px;
+  1683→  color: color-mix(in srgb, var(--lf-data) 85%, var(--el-text-color-primary));
+  1684→  background: color-mix(in srgb, var(--lf-data) 12%, transparent);
+  1685→}
+  1686→
+  1687→.sql-preview-hint {
+  1688→  margin-top: 6px;
+  1689→  padding: 7px 10px;
+  1690→  border-radius: 6px;
+  1691→  font-size: 12px;
+  1692→  line-height: 1.6;
+  1693→  color: color-mix(in srgb, var(--lf-data) 82%, var(--el-text-color-primary));
+  1694→  background: color-mix(in srgb, var(--lf-data) 8%, transparent);
+  1695→  border: 1px dashed color-mix(in srgb, var(--lf-data) 38%, transparent);
+  1696→}
+  1697→
+  1698→.sql-onerror {
+  1699→  width: 100%;
+  1700→}
+  1701→
+  1702→.sql-maxrows {
+  1703→  width: 140px;
+  1704→}
+  1705→
+  1706→.panel-alert {
+  1707→  margin-bottom: 14px;
+  1708→}
+  1709→
+  1710→.panel-form :deep(.el-form-item__label) {
+  1711→  font-size: 12px;
+  1712→  color: var(--el-text-color-regular);
+  1713→  margin-bottom: 4px;
+  1714→}
+  1715→
+  1716→.panel-form :deep(.el-form-item) {
+  1717→  margin-bottom: 14px;
+  1718→}
+  1719→
+  1720→/* SUBFLOW 变量映射动态行 */
+  1721→.mapping-rows {
+  1722→  width: 100%;
+  1723→  display: flex;
+  1724→  flex-direction: column;
+  1725→  gap: 6px;
+  1726→}
+  1727→.mapping-row {
+  1728→  display: flex;
+  1729→  align-items: center;
+  1730→  gap: 6px;
+  1731→}
+  1732→.mapping-row .el-input {
+  1733→  flex: 1;
+  1734→  min-width: 0;
+  1735→}
+  1736→.mapping-arrow {
+  1737→  color: var(--el-text-color-secondary);
+  1738→  flex-shrink: 0;
+  1739→}
+  1740→.mapping-row .el-button {
+  1741→  flex-shrink: 0;
+  1742→  padding: 4px;
+  1743→}
+  1744→</style>
+  1745→

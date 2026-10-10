@@ -1,0 +1,1200 @@
+     1→<template>
+     2→  <!-- 根包裹无定位（static），使 inline 覆盖层 absolute 定位锚向上到页面内容区容器；stretch=true 时撑满父容器高度 -->
+     3→  <div class="page-data-table" :class="{ 'stretch-fill': stretch }">
+     4→  <SearchTable
+     5→    v-if="metaLoaded"
+     6→    ref="tableRef"
+     7→    :search-fields="resolvedSearchFields"
+     8→    :columns="resolvedColumns"
+     9→    :style-rule="props.styleRule"
+    10→    :action-buttons="resolvedActionButtons"
+    11→    :toolbar-buttons="resolvedToolbarButtons"
+    12→    :merge-default-actions="false"
+    13→    :fetch-api="fetchApi"
+    14→    :form-config="formConfig"
+    15→    :show-create-button="!hasCreateButton"
+    16→    :show-search="showSearch"
+    17→    :show-pagination="pagination"
+    18→    :default-page-size="pageSize || 20"
+    19→    :page-sizes="pageSizes || [10, 20, 50]"
+    20→    :table-size="tableSize"
+    21→    :delete-confirm="deleteConfirm"
+    22→    :show-selection="batchEnabled"
+    23→    :show-summary="summaryEnabled"
+    24→    :summary-method="summaryMethod"
+    25→    @row-click="handleRowClick"
+    26→    @cell-click="handleCellClick"
+    27→    @selection-change="handleSelectionChange"
+    28→    @sort-change="handleSortChange"
+    29→  >
+    30→    <!-- 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+    31→    <template #default>
+    32→      <TableBatchBar
+    33→        v-if="batchEnabled && selectedRows.length > 0"
+    34→        :count="selectedRows.length"
+    35→        :deletable="batchDeleteOn"
+    36→        :deleting="batchDeleting"
+    37→        @batch-delete="handleBatchDelete"
+    38→        @clear="clearSelection"
+    39→      />
+    40→    </template>
+    41→  </SearchTable>
+    42→
+    43→  <!-- 详情弹窗（view 按钮/行查看：只读表单） -->
+    44→  <el-dialog v-model="detailVisible" title="详情" :width="detailWidth" :close-on-click-modal="false">
+    45→    <div class="detail-body-scroll" :style="{ height: detailHeight || undefined }">
+    46→      <FormRenderer
+    47→        v-if="detailVisible"
+    48→        :key="detailFormKey"
+    49→        :rule="detailRules"
+    50→        :option="{ labelWidth: '100px' }"
+    51→        :initial-values="detailRow"
+    52→        :data-sources="formDataSources"
+    53→        readonly
+    54→      />
+    55→    </div>
+    56→  </el-dialog>
+    57→
+    58→  <!-- 编辑/新增/查看表单（formMode=drawer）：右侧抽屉（view 只读） -->
+    59→  <el-drawer v-model="localDrawerVisible" :title="localFormTitle" :size="localFormWidth" destroy-on-close>
+    60→    <FormRenderer
+    61→      v-if="localDrawerVisible"
+    62→      ref="localFormRef"
+    63→      :rule="localFormRules"
+    64→      :option="{ labelWidth: '100px' }"
+    65→      :initial-values="localInitialValues"
+    66→      :data-sources="formDataSources"
+    67→      :readonly="localFormMode === 'view'"
+    68→    />
+    69→    <template #footer>
+    70→      <el-button v-if="localFormMode === 'view'" type="primary" @click="localDrawerVisible = false">关闭</el-button>
+    71→      <template v-else>
+    72→        <el-button @click="localDrawerVisible = false">取消</el-button>
+    73→        <el-button type="primary" :loading="localSaving" @click="handleLocalSubmit">保存</el-button>
+    74→      </template>
+    75→    </template>
+    76→  </el-drawer>
+    77→
+    78→  <!-- 编辑/新增/查看表单（formMode=inline）：覆盖整个页面内容区，关闭后恢复（view 只读） -->
+    79→  <div v-if="localInlineVisible" class="local-inline-overlay">
+    80→    <div class="local-inline-container">
+    81→      <div class="local-inline-header">
+    82→        <span class="local-inline-title">{{ localFormTitle }}</span>
+    83→        <el-button text :icon="Close" @click="localInlineVisible = false" />
+    84→      </div>
+    85→      <div class="local-inline-body">
+    86→        <FormRenderer
+    87→          ref="localFormRef"
+    88→          :rule="localFormRules"
+    89→          :option="{ labelWidth: '100px' }"
+    90→          :initial-values="localInitialValues"
+    91→          :data-sources="formDataSources"
+    92→          :readonly="localFormMode === 'view'"
+    93→        />
+    94→      </div>
+    95→      <div class="local-inline-footer">
+    96→        <el-button v-if="localFormMode === 'view'" type="primary" @click="localInlineVisible = false">关闭</el-button>
+    97→        <template v-else>
+    98→          <el-button @click="localInlineVisible = false">取消</el-button>
+    99→          <el-button type="primary" :loading="localSaving" @click="handleLocalSubmit">保存</el-button>
+   100→        </template>
+   101→      </div>
+   102→    </div>
+   103→  </div>
+   104→  </div>
+   105→</template>
+   106→
+   107→<script setup lang="ts">
+   108→import { ref, computed, onMounted, watch, nextTick, inject, h } from 'vue'
+   109→import { useRoute, useRouter } from 'vue-router'
+   110→import { ElMessage, ElMessageBox } from 'element-plus'
+   111→import {
+   112→  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+   113→  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+   114→} from '@element-plus/icons-vue'
+   115→import { dataSourceApi } from '@/api/data-source'
+   116→import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
+   117→import { buildCellRender, getCellValue } from '@/utils/tableColumnRenderer'
+   118→import { extractOptionMap, mapOptionLabel } from '@/utils/optionLabel'
+   119→import SearchTable from '@/components/business/SearchTable.vue'
+   120→import FormRenderer from '@/views/form/components/FormRenderer.vue'
+   121→import { leafDisplayText } from '@/views/form/arrayValueLabel'
+   122→import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
+   123→import type { CardStyle } from '@/components/business/ListCards.types'
+   124→import { activeDsBindings } from '@/utils/formDsBindingsStore'
+   125→import { tableFilterStore } from './tableFilterStore'
+   126→import TableHeaderFilter from './TableHeaderFilter.vue'
+   127→import TableBatchBar from './TableBatchBar.vue'
+   128→import {
+   129→  buildHeaderFilterCondition,
+   130→  buildSummaryMethod,
+   131→  extractDistinctValues,
+   132→  featureEnabled,
+   133→  batchDeleteEnabled,
+   134→  headerFilterKindOf,
+   135→  selectedRowIds,
+   136→  type HeaderFilterValue,
+   137→  type SummaryColumnSpec,
+   138→} from './tableEnhance'
+   139→import { useDataSourceCrud } from '@/composables/useDataSourceCrud'
+   140→
+   141→/** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
+   142→const actionBus = inject<{
+   143→  dispatch: (trigger: string, eventData: any) => boolean
+   144→  register?: (dataSourceId: string, instance: any) => void
+   145→  hasLinkedContainer?: (dataSourceId?: string) => boolean
+   146→  openLinkedContainer?: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => void
+   147→} | undefined>('pageActionBus')
+   148→
+   149→const route = useRoute()
+   150→const router = useRouter()
+   151→
+   152→const props = withDefaults(defineProps<{
+   153→  /** 页面 key（数据源查询接口路径） */
+   154→  pageKey: string
+   155→  /** 页面内数据源绑定 id（schema.dataSources[].id） */
+   156→  dataSourceId?: string
+   157→  /** 全局数据源 refId（由 PageRendererPage.transformComponent 注入） */
+   158→  dsRefId?: string
+   159→  /** 列配置（ViewDesigner 风格：{ key, label, width, align, sortable, formatter, fixed }） */
+   160→  columns?: any[]
+   161→  /** 组件级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */
+   162→  sortableFields?: string[]
+   163→  /** 操作配置（ViewDesigner 风格：{ buttons, permissions, actionColumnWidth }） */
+   164→  viewActions?: { buttons?: any[]; permissions?: string; actionColumnWidth?: number }
+   165→  /** 详情配置（ViewDesigner 风格：{ width, height, type, formMode }；以数据表格配置为准） */
+   166→  viewDetail?: { width?: string; height?: string; type?: string; formMode?: string }
+   167→  /** 事件链配置 */
+   168→  viewEvents?: any[]
+   169→  /** 搜索字段配置 */
+   170→  searchFields?: any[]
+   171→  /** 是否显示搜索栏（默认 false） */
+   172→  showSearch?: boolean
+   173→  /** 是否显示分页（默认 true） */
+   174→  pagination?: boolean
+   175→  /** 默认每页大小（缺省 20） */
+   176→  pageSize?: number
+   177→  /** 可选每页大小（缺省 [10,20,50]） */
+   178→  pageSizes?: number[]
+   179→  /** 行选择模式（SearchTable 不支持，保留兼容） */
+   180→  selectionMode?: 'none' | 'single' | 'multiple'
+   181→  /** 是否占满父容器高度（true 时表格撑满父容器，表格区域内部滚动） */
+   182→  stretch?: boolean
+   183→  /** 设计态标记：PageDesigner.enableCardDesignMode 注入，取数固定取首页且最多 10 条 */
+   184→  designMode?: boolean
+   185→  /** 表头筛选（Task ⑤）：漏斗图标按列筛选，多选→in / 区间→range，走服务端 filter 链；缺省关闭 */
+   186→  headerFilter?: boolean | { enabled?: boolean }
+   187→  /** 批量操作（Task ⑤）：首列多选框 + 批量操作条（批量删除/清空选择）；缺省关闭 */
+   188→  batch?: boolean | { enabled?: boolean; delete?: boolean }
+   189→  styleRule?: CardStyle
+   190→  /** 附加属性（border/stripe 等） */
+   191→  [key: string]: any
+   192→}>(), {
+   193→  // Boolean 类型 prop 未传入时 Vue 默认 false，显式默认 true（分页默认显示）
+   194→  pagination: true,
+   195→})
+   196→const emit = defineEmits<{
+   197→  (e: 'row-click', row: any): void
+   198→  (e: 'loaded', records: any[]): void
+   199→  (e: 'ready', instance: any): void
+   200→  (e: 'selection-change', rows: any[]): void
+   201→}>()
+   202→
+   203→const tableRef = ref<InstanceType<typeof SearchTable> | null>(null)
+   204→/** 表格尺寸（small/default/large）：透传视图 size 配置给 SearchTable，使查询栏/表格与直接渲染一致 */
+   205→const tableSize = computed(() => props.size || 'default')
+   206→/** 最近加载的记录（供动作总线/外部读取） */
+   207→const records = ref<any[]>([])
+   208→
+   209→/** 当前 filter（动作总线 set-filter 注入） */
+   210→const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
+   211→/** 换绑后标记为 true，临时忽略 props.columns 旧配置（改用元数据列渲染）；
+   212→ *  仅「已解析 refId → 另一 refId」的真实换绑置位，首次异步解析不置位——
+   213→ *  否则会永久吞掉用户配置的列顺序/宽度/对齐（拖拽排序保存后不生效的根因） */
+   214→const useMetadataColumns = ref(false)
+   215→
+   216→// ==================== 详情弹窗 ====================
+   217→const detailVisible = ref(false)
+   218→const detailRow = ref<Record<string, any>>({})
+   219→const detailWidth = computed(() => props.viewDetail?.width || '800px')
+   220→/** 详情弹窗内容区高度（viewDetail.height，超出滚动） */
+   221→const detailHeight = computed(() => props.viewDetail?.height || '')
+   222→/** 每次打开递增，强制重建 FormRenderer（读取最新行数据） */
+   223→const detailFormKey = ref(0)
+   224→
+   225→// ==================== 本地编辑/新增/查看表单（formMode=drawer/inline） ====================
+   226→const localDrawerVisible = ref(false)
+   227→const localInlineVisible = ref(false)
+   228→const localFormMode = ref<'create' | 'edit' | 'view'>('create')
+   229→const localFormTitle = ref('')
+   230→const localFormRow = ref<any>(null)
+   231→const localInitialValues = ref<Record<string, any>>({})
+   232→const localFormRef = ref<InstanceType<typeof FormRenderer>>()
+   233→const localSaving = ref(false)
+   234→/** 表单宽度（viewDetail.width 为准，缺省 500px 对齐 SearchTable 弹窗） */
+   235→const localFormWidth = computed(() => props.viewDetail?.width || '500px')
+   236→/** 本地编辑/新增表单规则（FORM 数据源用业务表单 schema，其余回退列映射） */
+   237→const localFormRules = computed(() => formRules.value)
+   238→
+   239→/** 按表单方式打开编辑/新增/查看：popup → SearchTable 弹窗/详情弹窗；drawer → 右侧抽屉；inline → 覆盖层 */
+   240→function openLocalForm(mode: 'create' | 'edit' | 'view', row?: any) {
+   241→  const fm = props.viewDetail?.formMode || 'popup'
+   242→  if (fm === 'popup') {
+   243→    if (mode === 'view') { openDetail(row); return }
+   244→    if (mode === 'create') tableRef.value?.openFormDialog()
+   245→    else tableRef.value?.openEdit(row)
+   246→    return
+   247→  }
+   248→  localFormMode.value = mode
+   249→  localFormTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+   250→  localFormRow.value = row || null
+   251→  // 数据来源：行数据为扁平结构（{...字段, id, version}），直接回填；编辑时再用 getData 补充最新值
+   252→  if (mode === 'view') {
+   253→    localInitialValues.value = row || {}
+   254→  } else if (mode === 'edit') {
+   255→    localInitialValues.value = row || {}
+   256→    if (row?.id && resolvedRefId.value) {
+   257→      dataSourceApi.getData(resolvedRefId.value, row.id).then((r: any) => {
+   258→        const fresh = (r.data as any)?.data
+   259→        if (fresh) localInitialValues.value = { ...localInitialValues.value, ...fresh }
+   260→      })
+   261→    }
+   262→  } else {
+   263→    localInitialValues.value = {}
+   264→  }
+   265→  if (fm === 'drawer') {
+   266→    localDrawerVisible.value = true
+   267→    localInlineVisible.value = false
+   268→  } else {
+   269→    localInlineVisible.value = true
+   270→    localDrawerVisible.value = false
+   271→  }
+   272→}
+   273→
+   274→/** 本地表单提交（drawer/inline 模式：新增/编辑，成功后关闭并刷新列表） */
+   275→async function handleLocalSubmit() {
+   276→  if (localFormMode.value === 'view') return
+   277→  const cfg = formConfig.value
+   278→  if (!cfg) return
+   279→  const formData = localFormRef.value?.getFormData() || {}
+   280→  localSaving.value = true
+   281→  try {
+   282→    if (localFormMode.value === 'create') {
+   283→      await cfg.createApi?.(formData)
+   284→      ElMessage.success('新增成功')
+   285→    } else {
+   286→      const row = localFormRow.value
+   287→      if (!row) return
+   288→      await cfg.updateApi?.(row.id, formData, row)
+   289→      ElMessage.success('更新成功')
+   290→    }
+   291→    localDrawerVisible.value = false
+   292→    localInlineVisible.value = false
+   293→    tableRef.value?.fetchList()
+   294→  } catch {
+   295→    // http 拦截器已弹出错误消息
+   296→  } finally {
+   297→    localSaving.value = false
+   298→  }
+   299→}
+   300→
+   301→// ==================== 图标映射 ====================
+   302→/** 图标名 → 组件（对齐 ActionsConfig.iconOptions，工具栏/操作列按钮图标解析用） */
+   303→const iconMap: Record<string, any> = {
+   304→  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+   305→  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+   306→}
+   307→/** 内置按钮默认图标名（PascalCase，对齐 ActionsConfig.iconOptions value） */
+   308→const BUILTIN_ICONS: Record<string, string> = { create: 'Plus', edit: 'Edit', delete: 'Delete', view: 'View' }
+   309→function defaultIconOf(key?: string): string | undefined {
+   310→  return key ? BUILTIN_ICONS[key] : undefined
+   311→}
+   312→function getIcon(name?: string): any {
+   313→  return name ? iconMap[name] : undefined
+   314→}
+   315→
+   316→// ==================== 搜索字段适配 ====================
+   317→/** 查询栏显示：显式开启 且 至少配置了一个可查询列（避免空查询栏只有按钮） */
+   318→const showSearch = computed(() => props.showSearch === true && resolvedSearchFields.value.length > 0)
+   319→
+   320→/** 查询组件类型映射（按表单 schema rule.type 优先 + columnType 降级；选项数据源来自业务表单 schema） */
+   321→const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
+   322→const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
+   323→const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
+   324→
+   325→/** 按列 key 找业务表单 schema rule（组件类型与选项数据源） */
+   326→function findFormRuleByKey(fieldKey: string): Record<string, any> | undefined {
+   327→  return formSchemaRule.value.find((r) => (r as any).field === fieldKey)
+   328→}
+   329→
+   330→/** 扁平选项 label 列表（select 类查询：label=value；树/级联/穿梭从 props.data/props.options 取） */
+   331→function formOptionLabelItems(rule: any): { label: string; value: string }[] {
+   332→  const list: any[] = rule?.options ?? rule?.props?.options ?? rule?.props?.data ?? []
+   333→  const labels: string[] = []
+   334→  const collect = (items: any[]) => {
+   335→    for (const it of items) {
+   336→      if (it && it.label !== undefined) labels.push(String(it.label))
+   337→      if (Array.isArray(it.children)) collect(it.children)
+   338→    }
+   339→  }
+   340→  collect(list)
+   341→  return labels.map((l) => ({ label: l, value: l }))
+   342→}
+   343→
+   344→/** SearchFieldConfig({key,label,matchType}) → SearchField({prop,label,type})：按字段组件类型构建查询输入组件；匹配方式=模糊(like)时直接用文本输入框 */
+   345→const resolvedSearchFields = computed<SearchField[]>(() =>
+   346→  (props.searchFields || []).map((f: any) => {
+   347→    const key = f.key ?? f.field
+   348→    const meta = metaColumns.value.find((m) => m.key === key)
+   349→    const rule = findFormRuleByKey(key)
+   350→    // 组件类型：优先表单 schema rule.type（含完整配置）；无 schema 时为空，走 columnType 降级
+   351→    const compType = rule?.type || ''
+   352→    const colType = meta?.columnType || ''
+   353→    const base = { label: f.label || f.key || key, prop: key, placeholder: f.label || key }
+   354→    if (f.matchType === 'like') {
+   355→      // 模糊查询：直接用文本输入框（用户输入关键字，后端 LIKE 匹配）
+   356→      return { ...base, type: 'input' as const, style: 'width: 180px' }
+   357→    }
+   358→    if (QUERY_TREE_TYPES.includes(compType)) {
+   359→      return {
+   360→        ...base,
+   361→        type: 'tree-select' as const,
+   362→        treeProps: { data: rule?.props?.data ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+   363→        style: 'width: 200px',
+   364→      }
+   365→    }
+   366→    if (compType === 'cascader') {
+   367→      return {
+   368→        ...base,
+   369→        type: 'cascader' as const,
+   370→        cascaderProps: { options: rule?.props?.options ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+   371→        style: 'width: 200px',
+   372→      }
+   373→    }
+   374→    if (QUERY_SELECT_TYPES.includes(compType)) {
+   375→      return {
+   376→        ...base,
+   377→        type: 'select' as const,
+   378→        options: formOptionLabelItems(rule),
+   379→        style: 'width: 180px',
+   380→      }
+   381→    }
+   382→    if (QUERY_PICKER_TYPES.includes(compType)) {
+   383→      return {
+   384→        ...base,
+   385→        type: 'lookupPicker' as const,
+   386→        lookupProps: { ...(rule?.props || {}) },
+   387→        style: 'width: 200px',
+   388→      }
+   389→    }
+   390→    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date' || colType === 'DATE' || colType === 'DATETIME') {
+   391→      return { ...base, type: 'date-picker' as const }
+   392→    }
+   393→    return { ...base, type: 'input' as const, style: 'width: 180px' }
+   394→  }),
+   395→)
+   396→
+   397→// ==================== 列适配 ====================
+   398→/** metadata 中存在 <key>_text 冗余列（数组值/引用列显示信号，替代 componentType 判断） */
+   399→function hasTextColumn(key: string): boolean {
+   400→  return metaColumns.value.some((m) => m.key === `${key}_text`)
+   401→}
+   402→
+   403→/**
+   404→ * 选项类列（radio/select/checkbox 等）的 value→label 映射（key → Map）。
+   405→ * ⚠️ 数据库存的是选项 value（如 'yes'），表单里显示的是 label（如「是」）——
+   406→ *    列表直接渲染原始值会露出 yes/no 之类代码值，渲染前统一换算。
+   407→ * 依赖 formSchemaRule（异步加载），computed 自动随其就绪重算。
+   408→ */
+   409→const optionLabelMaps = computed<Map<string, Map<string, string>>>(() => {
+   410→  const maps = new Map<string, Map<string, string>>()
+   411→  for (const rule of formSchemaRule.value) {
+   412→    const field = (rule as any)?.field
+   413→    if (!field) continue
+   414→    const map = extractOptionMap(rule)
+   415→    if (map.size > 0) maps.set(String(field), map)
+   416→  }
+   417→  return maps
+   418→})
+   419→
+   420→/** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
+   421→function formatArrayValue(v: unknown): unknown {
+   422→  if (Array.isArray(v)) return v.join(', ')
+   423→  if (typeof v === 'string') {
+   424→    try {
+   425→      const parsed = JSON.parse(v)
+   426→      if (Array.isArray(parsed)) return parsed.join(', ')
+   427→    } catch {
+   428→      // 旧逗号串或普通字符串，原样
+   429→    }
+   430→    return v
+   431→  }
+   432→  return v
+   433→}
+   434→
+   435→/** ColumnViewConfig → SearchTable TableColumn（formatter 字符串映射为函数） */
+   436→const baseColumns = computed<TableColumn[]>(() => {
+   437→  /** 组件级收窄：metadata 可排 ∧ (sortableFields 未声明或包含该列) */
+   438→  const sortableOf = (key: string): boolean => {
+   439→    const metaSortable = !!metaColumns.value.find((m) => m.key === key)?.sortable
+   440→    if (!metaSortable) return false
+   441→    const declared = props.sortableFields
+   442→    return !declared || declared.length === 0 || declared.includes(key)
+   443→  }
+   444→  // 切换数据源后优先使用元数据列，忽略旧的 props.columns
+   445→  if (useMetadataColumns.value || !props.columns || props.columns.length === 0) {
+   446→    return metaColumns.value.map((c) => ({
+   447→      prop: c.key,
+   448→      label: c.label || c.key,
+   449→      minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 120,
+   450→      sortable: sortableOf(c.key),
+   451→      ...(hasTextColumn(c.key)
+   452→        ? {
+   453→            formatter: (row: any, _col: any, cellValue: unknown): string => {
+   454→              // 优先显示冗余显示列 <key>_text（取叶子 label，树形/级联全路径取最后一段）；缺失回退 value join
+   455→              const text = row?.[c.key + '_text']
+   456→              if (text !== undefined && text !== null && text !== '') return leafDisplayText(text)
+   457→              return formatArrayValue(cellValue) as string
+   458→            },
+   459→          }
+   460→        : {}),
+   461→      ...(!hasTextColumn(c.key) && optionLabelMaps.value.has(c.key)
+   462→        ? {
+   463→            // 选项类列（radio/select 等）：value→label 映射显示（is_approved 'yes' → 「是」）
+   464→            formatter: (_row: any, _col: any, cellValue: unknown): string => {
+   465→              const mapped = mapOptionLabel(optionLabelMaps.value.get(c.key)!, cellValue)
+   466→              return mapped === '' ? '—' : mapped
+   467→            },
+   468→          }
+   469→        : {}),
+   470→    }))
+   471→  }
+   472→  // 有用户配置的列时使用用户配置；排序能力由数据源 metadata + 组件 sortableFields 决定
+   473→  // 过滤 hidden 列（自定义列取消展示时置 true，保留定义但不渲染）
+   474→  return (props.columns || [])
+   475→    .filter((c: any) => !c.hidden)
+   476→    .map((c: any) => {
+   477→      const key = c.key ?? c.prop
+   478→      // 数组值组件列（metadata 含 <key>_text 冗余列）：优先显示冗余显示列 <key>_text（叶子 label），缺失回退 value join
+   479→      const isArrayCol = hasTextColumn(key)
+   480→      const base = {
+   481→        prop: key,
+   482→        label: c.label || key,
+   483→        width: c.width,
+   484→        minWidth: c.minWidth || 120,
+   485→        align: c.align as any,
+   486→        fixed: c.fixed as any,
+   487→        cellClassName: c.className,
+   488→        sortable: sortableOf(key),
+   489→      }
+   490→      if (isArrayCol) {
+   491→        return {
+   492→          ...base,
+   493→          render: (row: any) => {
+   494→            const text = row?.[key + '_text']
+   495→            const display = text !== undefined && text !== null && text !== ''
+   496→              ? leafDisplayText(text)
+   497→              : formatArrayValue(getCellValue(row, key))
+   498→            // 覆盖单元格值为显示文本，其余配置（className/styleExpr/style/template）保留
+   499→            return buildCellRender({
+   500→              key,
+   501→              template: c.template,
+   502→              className: c.className,
+   503→              styleExpr: c.styleExpr,
+   504→              style: c.style,
+   505→            })({ ...row, [key]: display })
+   506→          },
+   507→        }
+   508→      }
+   509→      // 选项类列（radio/select 等）：用户未配置内容/格式化器时，value→label 映射显示
+   510→      const optionMap = optionLabelMaps.value.get(key)
+   511→      const hasUserContent = !!(c.contentType || c.contentValue || c.expression || c.template || c.formatter)
+   512→      if (optionMap && optionMap.size > 0 && !hasUserContent) {
+   513→        return {
+   514→          ...base,
+   515→          render: (row: any) =>
+   516→            buildCellRender({
+   517→              key,
+   518→              className: c.className,
+   519→              styleExpr: c.styleExpr,
+   520→              style: c.style,
+   521→            })({ ...row, [key]: mapOptionLabel(optionMap, getCellValue(row, key)) }),
+   522→        }
+   523→      }
+   524→      return {
+   525→        ...base,
+   526→        render: buildCellRender({
+   527→          key,
+   528→          contentType: c.contentType,
+   529→          contentValue: c.contentValue,
+   530→          // 兼容旧数据（expression/template/formatter 字段）
+   531→          expression: c.expression,
+   532→          template: c.template,
+   533→          formatter: c.formatter,
+   534→          className: c.className,
+   535→          styleExpr: c.styleExpr,
+   536→        }),
+   537→      }
+   538→    })
+   539→})
+   540→
+   541→// ==================== 汇总行（Task ⑤） ====================
+   542→/** 汇总列声明（schema columns[].aggregate；未配置时无汇总行 = 现状行为） */
+   543→const summarySpecs = computed<SummaryColumnSpec[]>(() =>
+   544→  (props.columns || [])
+   545→    .filter((c: any) => !c.hidden && c.aggregate)
+   546→    .map((c: any) => ({ key: c.key ?? c.prop, aggregate: c.aggregate })),
+   547→)
+   548→/** 存在聚合配置列 → 表格底部渲染汇总行（按当前页数据统计） */
+   549→const summaryEnabled = computed(() => summarySpecs.value.length > 0)
+   550→const summaryMethod = computed(() => buildSummaryMethod(summarySpecs.value))
+   551→
+   552→// ==================== 表头筛选（Task ⑤） ====================
+   553→/** 列 → 筛选值状态（运行态，不持久化；key=列 key） */
+   554→const headerFilters = ref<Record<string, HeaderFilterValue>>({})
+   555→const headerFilterOn = computed(() => featureEnabled(props.headerFilter))
+   556→
+   557→/** 列筛选元信息（形态按 columnType：文本=多选/数值=区间/日期=区间）；自定义计算列不在服务端白名单，不可筛选 */
+   558→const headerFilterMetas = computed<Map<string, { key: string; label: string; kind: 'text' | 'number' | 'date'; dateType?: 'daterange' | 'datetimerange'; loadOptions?: () => { label: string; value: any }[] }>>(() => {
+   559→  const map = new Map()
+   560→  if (!headerFilterOn.value) return map
+   561→  for (const col of baseColumns.value) {
+   562→    const key = String(col.prop || '')
+   563→    if (!key) continue
+   564→    if ((props.columns || []).some((c: any) => (c.key ?? c.prop) === key && c.custom)) continue
+   565→    const meta = metaColumns.value.find((m) => m.key === key)
+   566→    const kind = headerFilterKindOf(meta?.columnType)
+   567→    if (kind === 'text') {
+   568→      map.set(key, { key, label: col.label || key, kind, loadOptions: () => textOptionsFor(key) })
+   569→    } else if (kind === 'number') {
+   570→      map.set(key, { key, label: col.label || key, kind })
+   571→    } else {
+   572→      map.set(key, {
+   573→        key,
+   574→        label: col.label || key,
+   575→        kind,
+   576→        dateType: (meta?.columnType || '').toUpperCase() === 'DATE' ? 'daterange' : 'datetimerange',
+   577→      })
+   578→    }
+   579→  }
+   580→  return map
+   581→})
+   582→
+   583→/** 文本多选候选：选项类列优先映射 label→value，其余取当前页去重值（每次打开弹层惰性读取） */
+   584→function textOptionsFor(key: string): { label: string; value: any }[] {
+   585→  const optMap = optionLabelMaps.value.get(key)
+   586→  const out: { label: string; value: any }[] = []
+   587→  const seen = new Set<string>()
+   588→  if (optMap) {
+   589→    for (const [v, l] of optMap) {
+   590→      out.push({ label: l, value: v })
+   591→      seen.add(String(v))
+   592→    }
+   593→  }
+   594→  for (const v of extractDistinctValues(records.value, key)) {
+   595→    if (!seen.has(String(v))) {
+   596→      out.push({ label: optMap?.get(String(v)) ?? String(v), value: v })
+   597→      seen.add(String(v))
+   598→    }
+   599→  }
+   600→  return out
+   601→}
+   602→
+   603→/** 表头漏斗挂载：headerFilter 开启时为可筛列注入 headerRender（label + 漏斗图标），关闭时与现状一致 */
+   604→const resolvedColumns = computed<TableColumn[]>(() => {
+   605→  if (!headerFilterOn.value) return baseColumns.value
+   606→  return baseColumns.value.map((col) => {
+   607→    const meta = headerFilterMetas.value.get(String(col.prop || ''))
+   608→    if (!meta) return col
+   609→    return {
+   610→      ...col,
+   611→      headerRender: () =>
+   612→        h(TableHeaderFilter, {
+   613→          columnKey: meta.key,
+   614→          label: meta.label,
+   615→          kind: meta.kind,
+   616→          ...(meta.dateType ? { dateType: meta.dateType } : {}),
+   617→          ...(meta.loadOptions ? { loadOptions: meta.loadOptions } : {}),
+   618→          getValue: () => headerFilters.value[meta.key],
+   619→          onApply: (payload: { key: string; value: HeaderFilterValue | null }) => applyHeaderFilter(payload.key, payload.value),
+   620→        }),
+   621→    }
+   622→  })
+   623→})
+   624→
+   625→/** 应用/清空某列表头筛选：写回状态 → 重置第一页并按新条件取数（走既有服务端 filter 链） */
+   626→function applyHeaderFilter(key: string, value: HeaderFilterValue | null) {
+   627→  const next = { ...headerFilters.value }
+   628→  if (value) next[key] = value
+   629→  else delete next[key]
+   630→  headerFilters.value = next
+   631→  tableRef.value?.setQuery({}, true)
+   632→}
+   633→
+   634→// ==================== 操作按钮适配 ====================
+   635→/** 用户是否配置了 create 按钮（隐藏 SearchTable 内置新增，避免操作栏出现两个"新增"） */
+   636→const hasCreateButton = computed(() =>
+   637→  (props.viewActions?.buttons || []).some((b: any) => b.key === 'create'),
+   638→)
+   639→
+   640→/** 工具栏按钮（placement=toolbar）→ SearchTable ToolbarButton：button=普通按钮+图标+文字，text=文本按钮+图标，icon=圆形图标按钮 */
+   641→const resolvedToolbarButtons = computed<ToolbarButton[]>(() =>
+   642→  (props.viewActions?.buttons || [])
+   643→    .filter((b: any) => b.placement === 'toolbar')
+   644→    .map((btn: any) => ({
+   645→      label: btn.label,
+   646→      type: btn.type || defaultType(btn.key),
+   647→      link: btn.style === 'text',
+   648→      circle: btn.style === 'icon',
+   649→      icon: getIcon(btn.icon || defaultIconOf(btn.key)),
+   650→      onClick: () => handleActionClick(btn, undefined),
+   651→    })),
+   652→)
+   653→
+   654→/** 操作列按钮（placement=column）→ SearchTable ActionButton；始终返回数组（空则无按钮，不回退 formConfig 默认） */
+   655→const resolvedActionButtons = computed<ActionButton[]>(() =>
+   656→  (props.viewActions?.buttons || [])
+   657→    .filter((b: any) => b.placement !== 'toolbar')
+   658→    .map((btn: any) => ({
+   659→      label: btn.label,
+   660→      type: btn.type || defaultType(btn.key),
+   661→      link: btn.style !== 'icon',
+   662→      icon: btn.style === 'icon' ? getIcon(btn.icon || defaultIconOf(btn.key)) : undefined,
+   663→      show: btn.visible ? (row: any) => evalVisible(btn.visible, row) : undefined,
+   664→      onClick: (row: any) => handleActionClick(btn, row),
+   665→    })),
+   666→)
+   667→
+   668→function defaultType(key: string): '' | 'primary' | 'danger' {
+   669→  // 对齐 PageRenderer：create=primary、delete=danger、edit/view=默认（灰色描边/图标）
+   670→  if (key === 'create') return 'primary'
+   671→  if (key === 'delete') return 'danger'
+   672→  return ''
+   673→}
+   674→
+   675→/** visible 表达式求值（$row.xxx → 行值，$param.xxx → 路由参数） */
+   676→function evalVisible(expr: string, row: any): boolean {
+   677→  try {
+   678→    const resolved = expr
+   679→      .replace(/\$row\.([\w]+)/g, (_: string, k: string) => {
+   680→        const v = getNestedValue(row, k)
+   681→        return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+   682→      })
+   683→      .replace(/\$param\.([\w]+)/g, (_: string, k: string) => {
+   684→        const v = (window as any).__routeParams?.[k]
+   685→        return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+   686→      })
+   687→    if (/[a-zA-Z_$]\s*\(/.test(resolved)) return false
+   688→    return !!Function('"use strict"; return (' + resolved + ')')()
+   689→  } catch {
+   690→    return true
+   691→  }
+   692→}
+   693→
+   694→function getNestedValue(obj: any, path: string): any {
+   695→  return path.split('.').reduce((o, k) => o?.[k], obj)
+   696→}
+   697→
+   698→function deleteConfirm(): string {
+   699→  return '确定要删除该记录吗？'
+   700→}
+   701→
+   702→// ==================== fetchApi 适配 ====================
+   703→/** 从模块存储解析全局数据源 refId（优先 props.dsRefId，其次 store 查找，最后回退 dataSourceId） */
+   704→const resolvedRefId = computed(() => {
+   705→  if (props.dsRefId) return props.dsRefId
+   706→  if (props.dataSourceId) {
+   707→    const binding = activeDsBindings.value.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
+   708→    if (binding?.refId) return binding.refId
+   709→  }
+   710→  return ''
+   711→})
+   712→
+   713→// ==================== 首次数据请求单次触发 ====================
+   714→// 挂载时 refId 已就绪：SearchTable 挂载请求即首次请求，不补发；
+   715→// 挂载时未就绪：置待补发标志，绑定就绪（refId 可解析）后补发恰一次
+   716→let _pendingFirstFetch = false
+   717→onMounted(() => { if (!resolvedRefId.value) _pendingFirstFetch = true })
+   718→watch(activeDsBindings, () => {
+   719→  if (_pendingFirstFetch && resolvedRefId.value) {
+   720→    _pendingFirstFetch = false
+   721→    nextTick(() => { tableRef.value?.fetchList() })
+   722→  }
+   723→})
+   724→
+   725→/** 数组值组件主列（JSON）搜索 → 用 <key>_text 列（查询值=显示值 label，后端 LIKE/等值匹配显示列） */
+   726→function resolveSearchColumn(key: string): string {
+   727→  if (hasTextColumn(key)) return `${key}_text`
+   728→  return key
+   729→}
+   730→
+   731→const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
+   732→  const dsId = resolvedRefId.value
+   733→  if (!dsId) return { rows: [], total: 0 }
+   734→
+   735→  // 组装筛选条件：静态筛选（DsBindingConfigDialog 配置）+ 动作总线 set-filter + 搜索栏条件
+   736→  const filterConditions: any[] = []
+   737→  // 1. 静态筛选（组件级配置，始终生效；从 tableFilterStore 按页面内 dataSourceId 读取）
+   738→  let staticFilter: any = props.dataSourceId ? tableFilterStore[props.dataSourceId] : undefined
+   739→  if (staticFilter?.conditions) {
+   740→    for (const c of staticFilter.conditions) {
+   741→      if (c.column) {
+   742→        // DsBindingConfigDialog 输出 fixedValue，兼容 value
+   743→        const val = c.fixedValue ?? c.value ?? ''
+   744→        filterConditions.push({ column: c.column, op: c.op || 'eq', value: val })
+   745→      }
+   746→    }
+   747→  }
+   748→  // 2. 动作总线 set-filter 注入的条件
+   749→  if (currentFilter.value) {
+   750→    for (const [column, value] of Object.entries(currentFilter.value)) {
+   751→      if (value === '' || value === null || value === undefined) continue
+   752→      filterConditions.push({ column, op: 'eq', value })
+   753→    }
+   754→  }
+   755→  // 2.5 表头筛选条件（Task ⑤：漏斗按列筛选；多选→in / 区间→range；与其它条件 AND 合并）
+   756→  for (const [hfKey, hfValue] of Object.entries(headerFilters.value)) {
+   757→    const cond = buildHeaderFilterCondition(hfKey, hfValue)
+   758→    if (cond) filterConditions.push(cond)
+   759→  }
+   760→  // 3. 搜索栏条件（数组值组件主列 → 映射 <key>_text 显示列查询 label；级联路径 label 数组 join('/') 匹配 _text 全路径）
+   761→  for (const field of resolvedSearchFields.value) {
+   762→    const raw = params[field.prop]
+   763→    if (raw === '' || raw === null || raw === undefined) continue
+   764→    const v = Array.isArray(raw) ? raw.join('/') : raw
+   765→    filterConditions.push({ column: resolveSearchColumn(field.prop), op: 'like', value: v })
+   766→  }
+   767→  const query: Record<string, any> = props.designMode
+   768→    // 设计态预览固定取首页且最多 10 条（含"不分页"场景，避免 size:-1 拉全量）
+   769→    ? { page: 1, size: Math.min(params.size || 10, 10) }
+   770→    : props.pagination === false
+   771→      // 不分页：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
+   772→      ? { size: -1 }
+   773→          : { page: Math.max(1, params.page), size: params.size }
+   774→  // 排序状态透传（SearchTable 内部维护，服务器端排序）
+   775→  if (params.sort) query.sort = params.sort
+   776→  if (params.order) query.order = params.order
+   777→  if (filterConditions.length > 0) {
+   778→    query.filter = JSON.stringify({ logic: 'AND', conditions: filterConditions })
+   779→  }
+   780→  const res: any = await dataSourceApi.queryData(dsId, query)
+   781→  const rows = (res?.data?.records || []).map((r: any) => ({ ...(r.data || {}), id: r.id, version: r.version }))
+   782→  records.value = rows
+   783→  emit('loaded', rows)
+   784→  return { rows, total: res?.data?.total || 0 }
+   785→}
+   786→
+   787→// ==================== formConfig（CRUD 弹窗动态生成） ====================
+   788→/** 数据源 CRUD 共享逻辑（metadata/formKey/formConfig 组装），与数据源数据管理页共用 */
+   789→const crud = useDataSourceCrud(resolvedRefId, {
+   790→  dialogWidth: computed(() => props.viewDetail?.width || '500px'),
+   791→  dialogHeight: computed(() => props.viewDetail?.height || undefined),
+   792→})
+   793→const { metaLoaded, metaColumns, formSchemaRule, formDataSources, formRules, formConfig, loadMetadata } = crud
+   794→
+   795→/** 详情弹窗规则（只读表单） */
+   796→const detailRules = computed(() => formRules.value)
+   797→
+   798→// ==================== 按钮点击分发 ====================
+   799→/** 表格-容器联动触发器映射（按钮 key → 页面总线触发器） */
+   800→const LINKAGE_TRIGGERS: Record<string, string> = {
+   801→  edit: 'row-edit',
+   802→  view: 'row-view',
+   803→  create: 'row-create',
+   804→}
+   805→
+   806→function handleActionClick(btn: any, row: any) {
+   807→  // 有绑定事件 → 优先执行事件链（内建/自定义都一样，对齐 PageRenderer）
+   808→  if (btn.events?.length) {
+   809→    for (const ev of btn.events) {
+   810→      for (const action of ev.actions || []) {
+   811→        void dispatchButtonAction(action, row)
+   812→      }
+   813→    }
+   814→    return
+   815→  }
+   816→  // 表格-容器联动触发器：派发到页面动作总线（动作链消费时跳过默认行为，避免双弹窗）
+   817→  const linkageTrigger = LINKAGE_TRIGGERS[btn.key]
+   818→  if (linkageTrigger && actionBus) {
+   819→    const consumed = actionBus.dispatch(
+   820→      linkageTrigger,
+   821→      row ? { node: row, row, source: props.dataSourceId } : { source: props.dataSourceId },
+   822→    )
+   823→    if (consumed) return
+   824→  }
+   825→  // 无事件 → 默认行为
+   826→  // 存在同数据源的数据容器 → 打开容器表单（自动关联，无需动作链）；否则本地默认表单
+   827→  const dsId = props.dataSourceId
+   828→  const linked = actionBus?.hasLinkedContainer?.(dsId)
+   829→  if (btn.key === 'create') {
+   830→    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'create', null)
+   831→    else openLocalForm('create')
+   832→  } else if (btn.key === 'edit') {
+   833→    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'edit', row)
+   834→    else openLocalForm('edit', row)
+   835→  } else if (btn.key === 'delete') {
+   836→    handleDelete(row)
+   837→  } else if (btn.key === 'view') {
+   838→    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'view', row)
+   839→    else openDetail(row)
+   840→  }
+   841→}
+   842→
+   843→// ==================== 按钮事件链动作执行器（对齐 PageRenderer dispatchAction） ====================
+   844→/** 模板变量替换：$row.字段（当前行）/ $param.参数（路由参数） */
+   845→function resolveTemplate(tpl: string, row: any): string {
+   846→  return tpl
+   847→    .replace(/\$row\.([\w]+)/g, (_: string, k: string) => {
+   848→      const v = row?.[k]
+   849→      return v === null || v === undefined ? '' : String(v)
+   850→    })
+   851→    .replace(/\$param\.([\w]+)/g, (_: string, k: string) => (route.query?.[k] == null ? '' : String(route.query[k])))
+   852→}
+   853→
+   854→/** 解析动作参数 [{key,value}] → {key: 模板替换后的值} */
+   855→function resolveParams(params: { key: string; value: string }[], row: any): Record<string, any> {
+   856→  const out: Record<string, any> = {}
+   857→  for (const p of params || []) {
+   858→    out[p.key] = resolveTemplate(p.value, row)
+   859→  }
+   860→  return out
+   861→}
+   862→
+   863→/** 导出当前表格数据（JSON） */
+   864→function exportData() {
+   865→  const rows = records.value
+   866→  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
+   867→  const url = URL.createObjectURL(blob)
+   868→  const a = document.createElement('a')
+   869→  a.href = url
+   870→  a.download = `${props.pageKey || 'page'}-data.json`
+   871→  a.click()
+   872→  URL.revokeObjectURL(url)
+   873→}
+   874→
+   875→/** 执行单个事件链动作（ViewDesigner 风格：type/params） */
+   876→async function dispatchButtonAction(action: { type: string; params?: { key: string; value: string }[] }, row: any) {
+   877→  const resolved = resolveParams(action.params || [], row)
+   878→  switch (action.type) {
+   879→    case 'open-detail':
+   880→      openDetail(row)
+   881→      break
+   882→    case 'open-link':
+   883→      if (resolved.url) router.push(resolved.url)
+   884→      break
+   885→    case 'open-create':
+   886→      openLocalForm('create')
+   887→      break
+   888→    case 'edit':
+   889→      if (row) openLocalForm('edit', row)
+   890→      break
+   891→    case 'delete':
+   892→      if (row) await handleDelete(row)
+   893→      break
+   894→    case 'refresh':
+   895→      tableRef.value?.fetchList()
+   896→      break
+   897→    case 'export':
+   898→      exportData()
+   899→      break
+   900→    case 'message':
+   901→      ElMessage({
+   902→        message: resolved.text || resolved.message || '提示',
+   903→        type: (resolved.type as any) || 'info',
+   904→      })
+   905→      break
+   906→    case 'set-filter':
+   907→      setFilter(resolved)
+   908→      break
+   909→    case 'set-page': {
+   910→      const page = parseInt(resolved.page, 10)
+   911→      if (!isNaN(page) && page > 0) {
+   912→        tableRef.value?.setQuery({ page }, false)
+   913→      }
+   914→      break
+   915→    }
+   916→    case 'set-sort':
+   917→      tableRef.value?.sort(resolved.field || resolved.prop || '', resolved.order || 'ascending')
+   918→      break
+   919→    case 'clear-selection':
+   920→      tableRef.value?.clearSelection()
+   921→      break
+   922→    case 'script': {
+   923→      const source: string = resolved.source || ''
+   924→      if (!source) {
+   925→        console.warn('[page-table] 脚本动作缺少 source 参数')
+   926→        break
+   927→      }
+   928→      if (!isScriptEventEnabled()) {
+   929→        console.warn('[page-table] 脚本事件未启用（设置 VITE_PAGE_SCRIPT_ENABLED=true 开启）')
+   930→        break
+   931→      }
+   932→      await executeScript(source, {
+   933→        row,
+   934→        params: route.query || {},
+   935→        selectedRows: row ? [row] : [],
+   936→        ds: {
+   937→          query: (filter?: Record<string, any>) => {
+   938→            if (filter) setFilter(filter)
+   939→            else refresh()
+   940→          },
+   941→          detail: (id: string) => (resolvedRefId.value ? dataSourceApi.getData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定'))),
+   942→          create: (data: Record<string, unknown>) =>
+   943→            resolvedRefId.value ? dataSourceApi.createData(resolvedRefId.value, data) : Promise.reject(new Error('数据源未绑定')),
+   944→          update: (id: string, data: Record<string, unknown>) =>
+   945→            resolvedRefId.value ? dataSourceApi.updateData(resolvedRefId.value, id, data, row?.version) : Promise.reject(new Error('数据源未绑定')),
+   946→          remove: (id: string) =>
+   947→            resolvedRefId.value ? dataSourceApi.deleteData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定')),
+   948→        },
+   949→        api: { pageKey: props.pageKey || '', dataSourceId: resolvedRefId.value || '' },
+   950→        actions: {
+   951→          refresh: () => refresh(),
+   952→          openDetail: () => openDetail(row),
+   953→          openCreate: () => openLocalForm('create'),
+   954→          openEdit: () => (row ? openLocalForm('edit', row) : undefined),
+   955→          remove: (id: string) =>
+   956→            resolvedRefId.value ? dataSourceApi.deleteData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定')),
+   957→        },
+   958→        $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
+   959→      })
+   960→      break
+   961→    }
+   962→    default:
+   963→      console.warn('[page-table] 未知动作类型:', action.type)
+   964→  }
+   965→}
+   966→
+   967→/** 详情：popup → 弹窗；drawer/inline → 本地表单只读查看（按 formMode 展示） */
+   968→function openDetail(row: any) {
+   969→  if (!row) return
+   970→  const fm = props.viewDetail?.formMode || 'popup'
+   971→  if (fm !== 'popup') {
+   972→    openLocalForm('view', row)
+   973→    return
+   974→  }
+   975→  detailRow.value = row
+   976→  detailFormKey.value++
+   977→  detailVisible.value = true
+   978→}
+   979→
+   980→/** 删除：确认后调用数据源删除 API，并刷新列表 */
+   981→async function handleDelete(row: any) {
+   982→  if (!resolvedRefId.value) return
+   983→  try {
+   984→    await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
+   985→  } catch {
+   986→    return
+   987→  }
+   988→  try {
+   989→    await dataSourceApi.deleteData(resolvedRefId.value, row.id)
+   990→    ElMessage.success('删除成功')
+   991→    tableRef.value?.fetchList()
+   992→  } catch {
+   993→    // 拦截器已弹错误
+   994→  }
+   995→}
+   996→
+   997→// ==================== 批量操作（Task ⑤） ====================
+   998→const batchEnabled = computed(() => featureEnabled(props.batch))
+   999→const batchDeleteOn = computed(() => batchDeleteEnabled(props.batch))
+  1000→const batchDeleting = ref(false)
+  1001→/** 已选行集合（批量动作挂载点：经 defineExpose 暴露，事件链/脚本/外部可读取） */
+  1002→const selectedRows = ref<any[]>([])
+  1003→
+  1004→/** 批量删除：确认后逐行调用单行删除同款 API（dataSourceApi.deleteData），完成后清空选择并刷新 */
+  1005→async function handleBatchDelete() {
+  1006→  const rows = selectedRows.value
+  1007→  if (!rows.length || !resolvedRefId.value) return
+  1008→  try {
+  1009→    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 条记录吗？`, '批量删除', { type: 'warning' })
+  1010→  } catch {
+  1011→    return
+  1012→  }
+  1013→  batchDeleting.value = true
+  1014→  try {
+  1015→    const ids = selectedRowIds(rows)
+  1016→    await Promise.all(ids.map((id: any) => dataSourceApi.deleteData(resolvedRefId.value, id)))
+  1017→    ElMessage.success(`已删除 ${ids.length} 条记录`)
+  1018→    selectedRows.value = []
+  1019→    tableRef.value?.clearSelection()
+  1020→    tableRef.value?.fetchList()
+  1021→  } catch {
+  1022→    // 拦截器已弹错误
+  1023→  } finally {
+  1024→    batchDeleting.value = false
+  1025→  }
+  1026→}
+  1027→
+  1028→/** 清空行选择（批量操作条「清空选择」按钮/外部调用） */
+  1029→function clearSelection() {
+  1030→  tableRef.value?.clearSelection()
+  1031→}
+  1032→
+  1033→// ==================== 表格事件 → 事件链 ====================
+  1034→/** 触发 viewEvents 中匹配触发器的动作（动作由本组件自执行，对齐 PageRenderer triggerEvents） */
+  1035→function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; column?: any; selectedRows?: any[]; prop?: string; order?: string }) {
+  1036→  for (const ev of props.viewEvents || []) {
+  1037→    if (ev.trigger !== trigger) continue
+  1038→    if (ev.target && ev.target !== target) continue
+  1039→    for (const action of ev.actions || []) {
+  1040→      void dispatchButtonAction(action, ctx.row)
+  1041→    }
+  1042→  }
+  1043→}
+  1044→
+  1045→function handleRowClick(row: any, _column?: any, _event?: Event) {
+  1046→  emit('row-click', row)
+  1047→  actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
+  1048→  triggerViewEvents('row-click', 'table', { row })
+  1049→}
+  1050→
+  1051→/** 单元格点击（新增） */
+  1052→function handleCellClick(row: any, column: any) {
+  1053→  // 列级 onCellClick 短路整表级 cell-click（点击该列触发列级事件链）
+  1054→  const col = (props.columns || []).find(
+  1055→    (c: any) => (c.key ?? c.prop) === (column?.property ?? column?.prop),
+  1056→  )
+  1057→  if (col?.onCellClick?.actions?.length) {
+  1058→    for (const action of col.onCellClick.actions) {
+  1059→      void dispatchButtonAction(action, row)
+  1060→    }
+  1061→    return
+  1062→  }
+  1063→  triggerViewEvents('cell-click', 'table', { row, column })
+  1064→}
+  1065→
+  1066→/** 行选择变化：维护 selectedRows（批量操作条/挂载点）+ emit + 触发事件链 */
+  1067→function handleSelectionChange(selection: any[]) {
+  1068→  selectedRows.value = selection || []
+  1069→  emit('selection-change', selectedRows.value)
+  1070→  triggerViewEvents('selection-change', 'table', { selectedRows: selectedRows.value })
+  1071→}
+  1072→
+  1073→/** 排序变化（新增） */
+  1074→function handleSortChange(args: { column: any; prop: string; order: string }) {
+  1075→  triggerViewEvents('sort-change', 'table', { column: args.column, prop: args.prop, order: args.order })
+  1076→}
+  1077→
+  1078→// ==================== 动作总线接口 ====================
+  1079→function refresh() {
+  1080→  tableRef.value?.fetchList()
+  1081→}
+  1082→
+  1083→function setFilter(filter: Record<string, unknown>) {
+  1084→  currentFilter.value = { ...(currentFilter.value || {}), ...filter }
+  1085→  tableRef.value?.fetchList()
+  1086→}
+  1087→
+  1088→function resetFilter() {
+  1089→  currentFilter.value = undefined
+  1090→  tableRef.value?.fetchList()
+  1091→}
+  1092→
+  1093→function openCreate() {
+  1094→  tableRef.value?.openFormDialog()
+  1095→}
+  1096→
+  1097→defineExpose({
+  1098→  refresh,
+  1099→  fetchData: refresh,
+  1100→  records,
+  1101→  setFilter,
+  1102→  resetFilter,
+  1103→  openCreate,
+  1104→  /** 已选行集合（批量动作挂载点；ref 经 expose 自动解包） */
+  1105→  selectedRows,
+  1106→  getSelectedRows: () => selectedRows.value,
+  1107→  clearSelection,
+  1108→  deleteRows: handleBatchDelete,
+  1109→})
+  1110→
+  1111→onMounted(async () => {
+  1112→  await loadMetadata()
+  1113→  emit('ready', { refresh, setFilter, resetFilter, openCreate, records })
+  1114→})
+  1115→
+  1116→// 数据源 refId 解析/变更：重新加载元数据；
+  1117→// 仅「已解析 → 另一 refId」的真实换绑才置 useMetadataColumns（旧列配置失效），
+  1118→// 首次异步解析（'' → id）不置位，保证用户已保存的列顺序/宽度等配置生效
+  1119→// （设计态额外补发取数：配置数据源确定/切换后立即渲染表格；运行态由 _pendingFirstFetch 保证首次请求单次触发，不重复取数）
+  1120→watch(() => resolvedRefId.value, (val, oldVal) => {
+  1121→  if (oldVal && val && oldVal !== val) {
+  1122→    useMetadataColumns.value = true
+  1123→  }
+  1124→  loadMetadata()
+  1125→  if (props.designMode) nextTick(() => { tableRef.value?.fetchList() })
+  1126→})
+  1127→
+  1128→// 列配置更新（配置弹窗确定回写 / 页面保存）→ 恢复按用户配置渲染；
+  1129→// 若配置的列键全部不在当前元数据中，视为换绑后未重新配置的旧配置，维持元数据列
+  1130→watch(() => props.columns, (cols) => {
+  1131→  if (!cols || cols.length === 0) return
+  1132→  const metaKeys = new Set(metaColumns.value.map((c) => c.key))
+  1133→  if (metaColumns.value.length > 0 && !cols.some((c: any) => metaKeys.has(c.key ?? c.prop))) return
+  1134→  useMetadataColumns.value = false
+  1135→})
+  1136→</script>
+  1137→
+  1138→<style scoped>
+  1139→/* 查询工具栏下边距：与视图 PageRenderer 查询栏一致（防 form-create/画布环境覆盖 el-card 间距） */
+  1140→.page-data-table :deep(.search-card) {
+  1141→  margin-bottom: 16px !important;
+  1142→}
+  1143→/* 撑满父容器（stretch）：高度由 PageRendererPage 的 has-stretch 布局链传递（form-create 容器 100%），
+  1144→   此处根容器 flex 列布局，SearchTable 内部表格区域随之铺满并滚动 */
+  1145→.page-data-table.stretch-fill {
+  1146→  height: 100%;
+  1147→  width: 100%;
+  1148→  display: flex;
+  1149→  flex-direction: column;
+  1150→  overflow: hidden;
+  1151→}
+  1152→/* 详情弹窗内容区：配置了弹窗高度时固定高度、超出滚动 */
+  1153→.detail-body-scroll {
+  1154→  overflow-y: auto;
+  1155→}
+  1156→/* 编辑/新增表单内嵌覆盖层（formMode=inline）：覆盖页面内容区（定位锚为页面内容容器），关闭后恢复 */
+  1157→.local-inline-overlay {
+  1158→  position: absolute;
+  1159→  inset: 0;
+  1160→  z-index: 100;
+  1161→  background: #fff;
+  1162→  display: flex;
+  1163→  flex-direction: column;
+  1164→}
+  1165→.local-inline-container {
+  1166→  flex: 1;
+  1167→  display: flex;
+  1168→  flex-direction: column;
+  1169→  padding: 16px 24px;
+  1170→  overflow: hidden;
+  1171→}
+  1172→.local-inline-header {
+  1173→  display: flex;
+  1174→  align-items: center;
+  1175→  justify-content: space-between;
+  1176→  padding-bottom: 12px;
+  1177→  border-bottom: 1px solid #e5e7eb;
+  1178→  margin-bottom: 16px;
+  1179→  flex-shrink: 0;
+  1180→}
+  1181→.local-inline-title {
+  1182→  font-size: 16px;
+  1183→  font-weight: 600;
+  1184→  color: #303133;
+  1185→}
+  1186→.local-inline-body {
+  1187→  flex: 1;
+  1188→  overflow: auto;
+  1189→}
+  1190→.local-inline-footer {
+  1191→  display: flex;
+  1192→  justify-content: flex-end;
+  1193→  gap: 8px;
+  1194→  padding-top: 12px;
+  1195→  border-top: 1px solid #e5e7eb;
+  1196→  margin-top: 16px;
+  1197→  flex-shrink: 0;
+  1198→}
+  1199→</style>
+  1200→

@@ -1,0 +1,1628 @@
+     1→<template>
+     2→  <div class="logic-flow-designer">
+     3→    <!-- ===== 顶部工具条 ===== -->
+     4→    <div class="designer-toolbar">
+     5→      <el-button class="toolbar-btn" :icon="ArrowLeft" @click="handleBack">返回</el-button>
+     6→      <el-divider direction="vertical" />
+     7→
+     8→      <el-tooltip :content="`标识：${flowKey}`" placement="bottom" effect="dark" :show-after="120">
+     9→        <span class="flow-key">{{ flowKey }}</span>
+    10→      </el-tooltip>
+    11→      <el-tag :type="statusTagType" size="small" effect="light">{{ statusLabel }}</el-tag>
+    12→      <el-tag v-if="flowVersion > 0" size="small" type="info" effect="plain">v{{ flowVersion }}</el-tag>
+    13→
+    14→      <el-input
+    15→        v-model="flowName"
+    16→        class="name-input"
+    17→        maxlength="128"
+    18→        placeholder="请输入流程名称"
+    19→      >
+    20→        <template #suffix>
+    21→          <span v-if="dirty" class="dirty-dot" title="有未保存的变更"></span>
+    22→        </template>
+    23→      </el-input>
+    24→
+    25→      <div class="toolbar-spacer" />
+    26→
+    27→      <el-tooltip content="撤销（Ctrl+Z）" placement="bottom">
+    28→        <el-button
+    29→          class="toolbar-btn"
+    30→          :icon="RefreshLeft"
+    31→          :disabled="!canUndo"
+    32→          @click="undo"
+    33→        />
+    34→      </el-tooltip>
+    35→      <el-tooltip content="重做（Ctrl+Shift+Z）" placement="bottom">
+    36→        <el-button
+    37→          class="toolbar-btn"
+    38→          :icon="RefreshRight"
+    39→          :disabled="!canRedo"
+    40→          @click="redo"
+    41→        />
+    42→      </el-tooltip>
+    43→      <el-tooltip content="自动整理布局（自上而下分层 · 节点垂直居中对齐 · 循环体纵向居中排列 · 嵌套批处理从左到右展开）" placement="bottom">
+    44→        <el-button class="toolbar-btn" :icon="Sort" @click="handleAutoLayout">整理布局</el-button>
+    45→      </el-tooltip>
+    46→      <el-tooltip content="声明本流的输入参数（运行测试时按声明渲染表单）" placement="bottom">
+    47→        <el-button class="toolbar-btn" :icon="Tickets" @click="inputVarsDialogVisible = true">
+    48→          输入参数
+    49→          <el-badge v-if="inputVars.length" :value="inputVars.length" class="iv-badge" />
+    50→        </el-button>
+    51→      </el-tooltip>
+    52→      <el-divider direction="vertical" />
+    53→
+    54→      <el-button :icon="Finished" :loading="saving" @click="handleSave()">保存</el-button>
+    55→      <el-button :icon="Promotion" :loading="publishing" @click="handlePublish">发布</el-button>
+    56→      <el-button type="primary" :icon="VideoPlay" :loading="saving" @click="handleRunTest">运行测试</el-button>
+    57→    </div>
+    58→
+    59→    <!-- ===== 三栏主体：左调色板（悬浮）/ 中画布 / 右属性面板（悬浮） ===== -->
+    60→    <div class="designer-body">
+    61→      <node-palette v-model:collapsed="paletteCollapsed" @add="addNodeAtCenter" />
+    62→
+    63→      <div class="canvas-container">
+    64→        <VueFlow
+    65→          v-model:nodes="nodes"
+    66→          v-model:edges="edges"
+    67→          class="logic-flow-canvas"
+    68→          :delete-key-code="['Delete', 'Backspace']"
+    69→          :auto-connect="false"
+    70→          :default-edge-options="defaultEdgeOptions"
+    71→          :snap-to-grid="true"
+    72→          :snap-grid="[10, 10]"
+    73→          :min-zoom="0.2"
+    74→          :max-zoom="2"
+    75→          @connect="onConnect"
+    76→          @node-click="onNodeClick"
+    77→          @node-double-click="onNodeDoubleClick"
+    78→          @pane-click="onPaneClick"
+    79→          @edge-double-click="onEdgeDoubleClick"
+    80→          @node-drag-stop="onNodeDragStop"
+    81→          @nodes-change="onNodesChange"
+    82→          @edges-change="onEdgesChange"
+    83→          @dragover.prevent
+    84→          @drop="handleDrop"
+    85→        >
+    86→          <template #node-logic="nodeProps">
+    87→            <FlowNode
+    88→              :id="nodeProps.id"
+    89→              :data="nodeProps.data"
+    90→              :selected="nodeProps.selected"
+    91→              :status="runStatusMap[nodeProps.id] ?? ''"
+    92→              @delete="removeNode"
+    93→            />
+    94→          </template>
+    95→
+    96→          <!-- BATCH 空循环自环：右侧 U 形自定义边（dsl.createLoopEdge 自环时 type='loop'） -->
+    97→          <template #edge-loop="loopEdgeProps">
+    98→            <LoopEdge v-bind="loopEdgeProps" />
+    99→          </template>
+   100→
+   101→          <Background :gap="18" :size="1.6" />
+   102→          <MiniMap position="bottom-right" pannable zoomable :node-color="miniMapNodeColor" />
+   103→          <Controls position="bottom-left" />
+   104→        </VueFlow>
+   105→
+   106→        <!-- 空画布引导 -->
+   107→        <div v-if="!loading && nodes.length === 0" class="canvas-empty-hint">
+   108→          <el-icon class="empty-icon"><MagicStick /></el-icon>
+   109→          <div class="empty-title">从左侧拖入「开始」节点开始编排</div>
+   110→          <div class="empty-desc">拖拽/点击添加 · 节点拖到连线（含循环虚线）自动接入 · 按住 Shift 拖动解绑 · 双击链上节点移出 · Delete 删除</div>
+   111→        </div>
+   112→      </div>
+   113→
+   114→      <property-panel
+   115→        v-model:collapsed="panelCollapsed"
+   116→        :node="selectedNode"
+   117→        :loop-body-count="selectedLoopBodyCount"
+   118→        :variables="availableVars"
+   119→        @remove="removeNode"
+   120→      />
+   121→    </div>
+   122→
+   123→    <!-- 运行测试（与列表页共用） -->
+   124→    <RunTestDialog
+   125→      v-model="runDialogVisible"
+   126→      :flow-id="flowId"
+   127→      :flow-name="flowName"
+   128→      @traces="onRunTraces"
+   129→    />
+   130→
+   131→    <!-- 输入参数声明编辑 -->
+   132→    <el-dialog
+   133→      v-model="inputVarsDialogVisible"
+   134→      width="720px"
+   135→      :close-on-click-modal="false"
+   136→      append-to-body
+   137→    >
+   138→      <template #header>
+   139→        <FieldLabel
+   140→          label="输入参数声明"
+   141→          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议"
+   142→        />
+   143→      </template>
+   144→      <div v-if="!inputVars.length" class="iv-empty">未声明入参</div>
+   145→      <div v-for="(v, i) in inputVars" :key="i" class="iv-row">
+   146→        <el-input v-model="v.name" placeholder="变量名" style="width: 160px" />
+   147→        <el-select v-model="v.type" style="width: 110px">
+   148→          <el-option label="string" value="string" />
+   149→          <el-option label="number" value="number" />
+   150→          <el-option label="boolean" value="boolean" />
+   151→          <el-option label="json" value="json" />
+   152→        </el-select>
+   153→        <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
+   154→        <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
+   155→        <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
+   156→          <el-icon><Delete /></el-icon>
+   157→        </el-button>
+   158→      </div>
+   159→      <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
+   160→      <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤）。
+   161→           单个分组可折叠下拉：按表单类型分组展示全部触发点（分组标题加粗、可折叠），免先选类型再选事件的两步级联 -->
+   162→      <div class="iv-import">
+   163→        <div class="iv-import-head">
+   164→          <span class="iv-import-title">从触发点导入</span>
+   165→          <span class="iv-import-tip">选择触发点事件一键导入，入参声明与事件参数完全一致后，表单绑定弹窗的下拉才会显示本流</span>
+   166→        </div>
+   167→        <div class="iv-import-row">
+   168→          <TriggerGroupSelect
+   169→            v-model="importTrigger"
+   170→            :groups="importTriggerGroups"
+   171→            width="264px"
+   172→            placeholder="选择触发点事件（按表单类型分组）"
+   173→            filterable
+   174→          />
+   175→          <el-button size="small" type="primary" plain :disabled="!importTrigger" @click="importTriggerParams">
+   176→            导入参数
+   177→          </el-button>
+   178→          <span v-if="importTriggerSpec.length" class="iv-import-count">{{ importTriggerSpec.length }} 项</span>
+   179→        </div>
+   180→      </div>
+   181→      <template #footer>
+   182→        <el-button @click="inputVarsDialogVisible = false">关闭</el-button>
+   183→      </template>
+   184→    </el-dialog>
+   185→  </div>
+   186→</template>
+   187→
+   188→<script setup lang="ts">
+   189→import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+   190→import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+   191→import { ElMessage, ElMessageBox } from 'element-plus'
+   192→import {
+   193→  ArrowLeft,
+   194→  Delete,
+   195→  Finished,
+   196→  MagicStick,
+   197→  Promotion,
+   198→  RefreshLeft,
+   199→  RefreshRight,
+   200→  Sort,
+   201→  Tickets,
+   202→  VideoPlay,
+   203→} from '@element-plus/icons-vue'
+   204→import { VueFlow, useVueFlow, MarkerType } from '@vue-flow/core'
+   205→import type { Connection, EdgeChange, EdgeMouseEvent, NodeChange, NodeMouseEvent } from '@vue-flow/core'
+   206→import { Background } from '@vue-flow/background'
+   207→import { MiniMap } from '@vue-flow/minimap'
+   208→import { Controls } from '@vue-flow/controls'
+   209→import NodePalette from './components/NodePalette.vue'
+   210→import FlowNode from './components/FlowNode.vue'
+   211→import LoopEdge from './components/LoopEdge.vue'
+   212→import PropertyPanel from './components/PropertyPanel.vue'
+   213→import RunTestDialog from './components/RunTestDialog.vue'
+   214→import FieldLabel from './components/FieldLabel.vue'
+   215→import TriggerGroupSelect from '@/components/TriggerGroupSelect.vue'
+   216→import type { TriggerGroupSelectGroup } from '@/components/TriggerGroupSelect.vue'
+   217→import { logicFlowApi } from '@/api/logicFlow'
+   218→import { FORM_LOGIC_TRIGGERS, triggerParamSpec } from '@/api/formLogicBinding'
+   219→import {
+   220→  BATCH_BODY_TYPES,
+   221→  LOOP_HANDLE_END,
+   222→  LOOP_HANDLE_START,
+   223→  createLoopEdge,
+   224→  createNodeId,
+   225→  defaultConfig,
+   226→  defaultNodeName,
+   227→  isDslEqual,
+   228→  isLoopEdge,
+   229→  parseDsl,
+   230→  serializeDsl,
+   231→} from './utils/dsl'
+   232→import type { FlowEdge, FlowNode as FlowNodeModel, InputVarDef, LogicNodeType } from './utils/dsl'
+   233→import { collectAvailableVars, type FormFieldGroupLike } from './utils/flowVars'
+   234→import '@vue-flow/core/dist/style.css'
+   235→import '@vue-flow/core/dist/theme-default.css'
+   236→import '@vue-flow/minimap/dist/style.css'
+   237→import '@vue-flow/controls/dist/style.css'
+   238→import './styles/logicflow-theme.css'
+   239→
+   240→defineOptions({ name: 'LogicFlowDesigner' })
+   241→
+   242→const route = useRoute()
+   243→const router = useRouter()
+   244→
+   245→const flowId = String(route.params.id ?? '')
+   246→
+   247→// ===== vue-flow 控制句柄（useVueFlow 在渲染 <VueFlow> 的组件中调用即接管实例） =====
+   248→// storeEdges/storeNodes：store 实时真值（v-model 数组同步滞后于删除，自愈必须读 store）
+   249→const {
+   250→  screenToFlowCoordinate,
+   251→  addNodes,
+   252→  addEdges,
+   253→  removeNodes,
+   254→  removeEdges,
+   255→  fitView,
+   256→  edges: storeEdges,
+   257→  nodes: storeNodes,
+   258→} = useVueFlow()
+   259→
+   260→/** store 实时真值（FlowEdge 子集形态）：编程式 addEdges/removeEdges 后
+   261→ * v-model 数组滞后不回写（healBatchLoops 同源问题），
+   262→ * 链判定/吸附/拆装一律读 store，禁读 v-model 副本 */
+   263→function allNodes(): FlowNodeModel[] {
+   264→  return (storeNodes.value ?? []) as unknown as FlowNodeModel[]
+   265→}
+   266→
+   267→function allEdges(): FlowEdge[] {
+   268→  return (storeEdges.value ?? []) as unknown as FlowEdge[]
+   269→}
+   270→
+   271→// ===== 画布数据 =====
+   272→const nodes = ref<FlowNodeModel[]>([])
+   273→const edges = ref<FlowEdge[]>([])
+   274→const loading = ref(false)
+   275→
+   276→/** 新连线默认样式：折线 + 箭头（可拖拽端点重连） */
+   277→const defaultEdgeOptions = {
+   278→  type: 'smoothstep',
+   279→  markerEnd: MarkerType.ArrowClosed,
+   280→  updatable: true,
+   281→}
+   282→
+   283→// ===== 入参声明（保存在 DSL 顶层 inputVars） =====
+   284→const inputVars = ref<InputVarDef[]>([])
+   285→const inputVarsDialogVisible = ref(false)
+   286→
+   287→function addInputVar() {
+   288→  inputVars.value.push({ name: '', type: 'string', required: false, desc: undefined })
+   289→}
+   290→
+   291→// ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
+   292→const importTrigger = ref('')
+   293→
+   294→/** 触发点按表单类型分组（业务表单 / 工作流表单），单个下拉直达，免两步级联选择；extra 展示参数数量 */
+   295→const FORM_TYPE_LABELS: Record<string, string> = {
+   296→  BUSINESS: '业务表单',
+   297→  WORKFLOW: '工作流表单',
+   298→}
+   299→const importTriggerGroups = computed<TriggerGroupSelectGroup[]>(() => {
+   300→  const groups: TriggerGroupSelectGroup[] = []
+   301→  for (const t of FORM_LOGIC_TRIGGERS) {
+   302→    let g = groups.find((x) => x.key === t.formType)
+   303→    if (!g) {
+   304→      g = { key: t.formType, label: FORM_TYPE_LABELS[t.formType] ?? t.formType, triggers: [] }
+   305→      groups.push(g)
+   306→    }
+   307→    g.triggers.push({
+   308→      value: t.value,
+   309→      label: t.label,
+   310→      extra: `${triggerParamSpec(t.value)?.length ?? 0} 项参数`,
+   311→    })
+   312→  }
+   313→  return groups
+   314→})
+   315→const importTriggerSpec = computed(() =>
+   316→  importTrigger.value ? triggerParamSpec(importTrigger.value) || [] : [],
+   317→)
+   318→
+   319→async function importTriggerParams() {
+   320→  const spec = triggerParamSpec(importTrigger.value)
+   321→  if (!spec?.length) {
+   322→    ElMessage.warning('该触发点暂无参数规格')
+   323→    return
+   324→  }
+   325→  const label = FORM_LOGIC_TRIGGERS.find((t) => t.value === importTrigger.value)?.label ?? importTrigger.value
+   326→  if (inputVars.value.length) {
+   327→    try {
+   328→      await ElMessageBox.confirm(
+   329→        `导入「${label}」的 ${spec.length} 项参数将覆盖当前已声明的 ${inputVars.value.length} 项入参，确定继续吗？`,
+   330→        '覆盖确认',
+   331→        { type: 'warning' },
+   332→      )
+   333→    } catch {
+   334→      return
+   335→    }
+   336→  }
+   337→  inputVars.value = spec.map((p) => ({ name: p.name, type: p.type, required: p.required, desc: p.desc }))
+   338→  ElMessage.success(`已导入「${label}」参数 ${spec.length} 项`)
+   339→}
+   340→
+   341→// ===== 流程元信息 =====
+   342→const flowKey = ref('')
+   343→const flowName = ref('')
+   344→const flowDescription = ref('')
+   345→const flowStatus = ref<'DRAFT' | 'PUBLISHED'>('DRAFT')
+   346→const flowVersion = ref(0)
+   347→
+   348→// ===== 保存快照与脏检测 =====
+   349→const savedDsl = ref('')
+   350→const savedName = ref('')
+   351→const saving = ref(false)
+   352→const publishing = ref(false)
+   353→
+   354→const dirty = computed(() => {
+   355→  if (flowName.value !== savedName.value) return true
+   356→  if (!savedDsl.value) return false
+   357→  return !isDslEqual(serializeDsl(allNodes(), allEdges(), inputVars.value), savedDsl.value)
+   358→})
+   359→
+   360→// 说明：拖动/增删节点/边时 vue-flow 会把 store 快照回写到 v-model 数组（新引用），
+   361→// dirty computed 依赖 nodes/edges 两个 ref，会随之重新求值。
+   362→
+   363→const statusTagType = computed(() => (flowStatus.value === 'PUBLISHED' ? 'success' : 'info'))
+   364→const statusLabel = computed(() => (flowStatus.value === 'PUBLISHED' ? '已发布' : '草稿'))
+   365→
+   366→// ===== 选中节点 =====
+   367→const selectedNodeId = ref<string | null>(null)
+   368→const selectedNode = computed<FlowNodeModel | null>(
+   369→  () => nodes.value.find((n) => n.id === selectedNodeId.value) ?? null
+   370→)
+   371→
+   372→/** 选中批处理节点的循环体步数（画布实时链长，属性面板提示用） */
+   373→const selectedLoopBodyCount = computed(() => {
+   374→  const id = selectedNodeId.value
+   375→  if (!id) return 0
+   376→  const batch = allNodes().find((n) => n.id === id)
+   377→  if (!batch || batch.data.nodeType !== 'BATCH') return 0
+   378→  const loopEdges = allEdges().filter(isLoopEdge)
+   379→  const start = loopEdges.find((e) => e.source === id && e.sourceHandle === LOOP_HANDLE_START)
+   380→  if (!start) return 0
+   381→  const visited = new Set([id])
+   382→  let cur: string | undefined = start.target
+   383→  let count = 0
+   384→  let guard = 0
+   385→  while (cur && !visited.has(cur) && guard++ < 100) {
+   386→    visited.add(cur)
+   387→    const node = allNodes().find((n) => n.id === cur)
+   388→    if (node && (BATCH_BODY_TYPES as string[]).includes(node.data.nodeType)) count++
+   389→    const next = loopEdges.find((e) => e.source === cur)
+   390→    if (!next) break
+   391→    cur = next.target
+   392→  }
+   393→  return count
+   394→})
+   395→
+   396→/** 选中节点的可用上下文变量（入参 + 循环变量 + 上游 results 产出 + formData），
+   397→ *  供属性面板变量选择器就近显示；依赖 store 真值，画布增删/改配置实时联动 */
+   398→const availableVars = computed(() =>
+   399→  collectAvailableVars(selectedNodeId.value, allNodes(), allEdges(), inputVars.value, formFieldGroups.value)
+   400→)
+   401→
+   402→// ===== 设计期表单字段发现（formData 字段树，供变量选择器树形展开） =====
+   403→const formFieldGroups = ref<FormFieldGroupLike[]>([])
+   404→
+   405→/** 拉取绑定表单字段结构；失败/无绑定静默回退（form 组退化为单条 formData 提示） */
+   406→async function loadFormFields() {
+   407→  if (!flowId) return
+   408→  try {
+   409→    const res = await logicFlowApi.formFields(flowId)
+   410→    formFieldGroups.value = Array.isArray(res.data) ? res.data : []
+   411→  } catch {
+   412→    formFieldGroups.value = []
+   413→  }
+   414→}
+   415→
+   416→// ===== 面板折叠 =====
+   417→const paletteCollapsed = ref(false)
+   418→const panelCollapsed = ref(false)
+   419→
+   420→// ===== 运行测试弹窗 =====
+   421→const runDialogVisible = ref(false)
+   422→
+   423→onMounted(async () => {
+   424→  if (!flowId) {
+   425→    ElMessage.warning('缺少逻辑流 ID')
+   426→    return
+   427→  }
+   428→  loading.value = true
+   429→  try {
+   430→    const res = await logicFlowApi.get(flowId)
+   431→    const detail = res.data
+   432→    flowKey.value = detail.flowKey || ''
+   433→    flowName.value = detail.name || ''
+   434→    flowDescription.value = detail.description || ''
+   435→    flowStatus.value = detail.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
+   436→    flowVersion.value = Number(detail.version) || 0
+   437→
+   438→    if (detail.dsl) {
+   439→      try {
+   440→        const graph = parseDsl(detail.dsl)
+   441→        nodes.value = graph.nodes
+   442→        edges.value = graph.edges
+   443→        inputVars.value = graph.inputVars || []
+   444→      } catch (err) {
+   445→        ElMessage.error(err instanceof Error ? err.message : 'DSL 解析失败')
+   446→      }
+   447→    }
+   448→    savedDsl.value = detail.dsl || serializeDsl(allNodes(), allEdges(), inputVars.value)
+   449→    savedName.value = flowName.value
+   450→    // 设计期表单字段发现（不阻塞主流程渲染）
+   451→    loadFormFields()
+   452→  } catch {
+   453→    // http 拦截器已弹出错误消息
+   454→  } finally {
+   455→    loading.value = false
+   456→    // 初始视野：适配画布但限制最大缩放 100%，避免少节点时被放大导致节点显大
+   457→    setTimeout(() => fitView({ padding: 0.2, maxZoom: 1 }), 120)
+   458→  }
+   459→})
+   460→
+   461→// ===== 节点增删 =====
+   462→
+   463→/** 新增节点（统一入口）：START 全局唯一；BATCH 自动创建闭合循环连线。成功返回节点 */
+   464→function addNode(type: LogicNodeType, position: { x: number; y: number }): FlowNodeModel | null {
+   465→  if (type === 'START' && allNodes().some((n) => n.data.nodeType === 'START')) {
+   466→    ElMessage.warning('一个逻辑流只能有一个开始节点')
+   467→    return null
+   468→  }
+   469→  const node: FlowNodeModel = {
+   470→    id: createNodeId(type, allNodes().map((n) => n.id)),
+   471→    type: 'logic',
+   472→    position,
+   473→    data: {
+   474→      nodeType: type,
+   475→      name: defaultNodeName(type),
+   476→      config: defaultConfig(type),
+   477→      errorAction: type === 'HTTP' || type === 'BEAN' || type === 'SCRIPT' ? 'FAIL_FLOW' : undefined,
+   478→    },
+   479→  }
+   480→  addNodes([node])
+   481→  if (type === 'BATCH') {
+   482→    addEdges([createLoopEdge(node.id, node.id, LOOP_HANDLE_START, LOOP_HANDLE_END)])
+   483→  }
+   484→  selectedNodeId.value = node.id
+   485→  return node
+   486→}
+   487→
+   488→/** 调色板点击：落在视口中心偏移处 */
+   489→function addNodeAtCenter(type: LogicNodeType) {
+   490→  const container = document.querySelector('.logic-flow-designer .canvas-container')
+   491→  const rect = container?.getBoundingClientRect()
+   492→  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2
+   493→  const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2
+   494→  const position = screenToFlowCoordinate({ x: cx, y: cy })
+   495→  position.x += (Math.random() - 0.5) * 60 - 80
+   496→  position.y += (Math.random() - 0.5) * 60 - 20
+   497→  const node = addNode(type, position)
+   498→  if (node) trySnapNode(node)
+   499→}
+   500→
+   501→/** 调色板拖放：落点即节点中心附近 */
+   502→function handleDrop(event: DragEvent) {
+   503→  const raw = event.dataTransfer?.getData('logic-node-type')
+   504→  if (!raw) return
+   505→  const type = raw.toUpperCase() as LogicNodeType
+   506→  const position = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+   507→  position.x -= 80
+   508→  position.y -= 20
+   509→  const node = addNode(type, position)
+   510→  if (node) trySnapNode(node)
+   511→}
+   512→
+   513→function removeNode(id: string) {
+   514→  removeNodes([id])
+   515→  if (selectedNodeId.value === id) selectedNodeId.value = null
+   516→}
+   517→
+   518→// ===== 连线：CONDITION 出边按 sourceHandle 写入 branch；循环连接点禁止手动连线 =====
+   519→function onConnect(connection: Connection) {
+   520→  const { source, target, sourceHandle, targetHandle } = connection
+   521→  if (!source || !target) return
+   522→  if (source === target) {
+   523→    ElMessage.warning('不能连接到自身')
+   524→    return
+   525→  }
+   526→  if (
+   527→    sourceHandle === LOOP_HANDLE_START ||
+   528→    sourceHandle === LOOP_HANDLE_END ||
+   529→    targetHandle === LOOP_HANDLE_START ||
+   530→    targetHandle === LOOP_HANDLE_END
+   531→  ) {
+   532→    ElMessage.warning('循环体请把动作节点拖到循环虚线上自动接入，不支持手动连线')
+   533→    return
+   534→  }
+   535→  const branch = sourceHandle === 'true' || sourceHandle === 'false' ? sourceHandle : undefined
+   536→  addEdges([
+   537→    {
+   538→      source,
+   539→      target,
+   540→      sourceHandle: sourceHandle ?? undefined,
+   541→      targetHandle: targetHandle ?? undefined,
+   542→      data: branch ? { branch } : undefined,
+   543→    },
+   544→  ])
+   545→}
+   546→
+   547→function onNodeClick({ node }: NodeMouseEvent) {
+   548→  selectedNodeId.value = node.id
+   549→}
+   550→
+   551→/** 双击链上节点 = 显式解绑：主流中段缝合直连；循环体节点移出循环（自愈缝合） */
+   552→function onNodeDoubleClick({ node }: NodeMouseEvent) {
+   553→  const n = allNodes().find((x) => x.id === node.id)
+   554→  if (n) detachWithMessage(n)
+   555→}
+   556→
+   557→function onPaneClick() {
+   558→  selectedNodeId.value = null
+   559→}
+   560→
+   561→/** 连线单击：仅选中（vue-flow 原生高亮），双击才删除——避免误删；循环连线不可删 */
+   562→function onEdgeDoubleClick({ edge }: EdgeMouseEvent) {
+   563→  if (isLoopEdge(edge as FlowEdge)) {
+   564→    ElMessage.warning('循环连线不可删除：删除循环体节点即可将其移出循环')
+   565→    return
+   566→  }
+   567→  removeEdges([edge])
+   568→  ElMessage.success('已删除连线（单击连线仅选中）')
+   569→}
+   570→
+   571→// ===== 节点拖到连线自动吸附接入（普通连线 / 批处理循环虚线） =====
+   572→
+   573→/** 吸附判定距离（画布坐标 px）：主流实线 */
+   574→const SNAP_THRESHOLD = 32
+   575→
+   576→/** 循环虚线独立吸附阈值：与 U 形外凸宽度（offset 56）对齐，视觉上「碰到虚线即吸」更跟手 */
+   577→const LOOP_SNAP_THRESHOLD = 56
+   578→
+   579→/** vue-flow 未回填 dimensions 时的节点近似尺寸兜底 */
+   580→const NODE_FALLBACK_SIZE = { w: 160, h: 54 }
+   581→
+   582→function nodeSize(node: FlowNodeModel): { w: number; h: number } {
+   583→  const dims = (node as unknown as { dimensions?: { width?: number; height?: number } })
+   584→    ?.dimensions
+   585→  return {
+   586→    w: Number(dims?.width) || NODE_FALLBACK_SIZE.w,
+   587→    h: Number(dims?.height) || NODE_FALLBACK_SIZE.h,
+   588→  }
+   589→}
+   590→
+   591→function nodeCenter(node: FlowNodeModel): { x: number; y: number } {
+   592→  const size = nodeSize(node)
+   593→  return { x: node.position.x + size.w / 2, y: node.position.y + size.h / 2 }
+   594→}
+   595→
+   596→/** 两节点间正交折线近似（中位水平线），与 smoothstep 走向一致 */
+   597→function approxPointsBetween(
+   598→  source: FlowNodeModel,
+   599→  target: FlowNodeModel
+   600→): { x: number; y: number }[] {
+   601→  const sc = nodeCenter(source)
+   602→  const tc = nodeCenter(target)
+   603→  const midY = (sc.y + tc.y) / 2
+   604→  return [sc, { x: sc.x, y: midY }, { x: tc.x, y: midY }, tc]
+   605→}
+   606→
+   607→/** 自环 U 形近似：节点右侧外凸（与 LoopEdge.vue 渲染 offset 56 同侧同距） */
+   608→function selfLoopApproxPoints(batch: FlowNodeModel): { x: number; y: number }[] {
+   609→  const size = nodeSize(batch)
+   610→  const x = batch.position.x + size.w
+   611→  const y1 = batch.position.y + size.h * 0.3
+   612→  const y2 = batch.position.y + size.h * 0.74
+   613→  const bulge = 56
+   614→  return [
+   615→    { x, y: y1 },
+   616→    { x: x + bulge, y: y1 },
+   617→    { x: x + bulge, y: y2 },
+   618→    { x, y: y2 },
+   619→  ]
+   620→}
+   621→
+   622→/** 边路径近似：源/目标节点中心的正交折线（中位水平线），与 smoothstep 走向一致 */
+   623→function edgeApproxPoints(edge: FlowEdge): { x: number; y: number }[] | null {
+   624→  const source = allNodes().find((n) => n.id === edge.source)
+   625→  const target = allNodes().find((n) => n.id === edge.target)
+   626→  if (!source || !target) return null
+   627→  // 循环直连边（batch→batch 自环）：右侧 U 形近似（loop_start 30% → 外凸 → loop_end 74%）
+   628→  if (isLoopEdge(edge) && edge.source === edge.target) {
+   629→    return selfLoopApproxPoints(source)
+   630→  }
+   631→  return approxPointsBetween(source, target)
+   632→}
+   633→
+   634→function distToSegment(
+   635→  p: { x: number; y: number },
+   636→  a: { x: number; y: number },
+   637→  b: { x: number; y: number }
+   638→): number {
+   639→  const dx = b.x - a.x
+   640→  const dy = b.y - a.y
+   641→  const len2 = dx * dx + dy * dy
+   642→  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
+   643→  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+   644→}
+   645→
+   646→function distToPolyline(p: { x: number; y: number }, pts: { x: number; y: number }[]): number {
+   647→  let min = Infinity
+   648→  for (let i = 1; i < pts.length; i++) {
+   649→    min = Math.min(min, distToSegment(p, pts[i - 1], pts[i]))
+   650→  }
+   651→  return min
+   652→}
+   653→
+   654→/** 节点是否已挂在某条循环体链上（循环体节点同时只能属于一条循环链）。
+   655→ * 按 nodeId 所在端分别判定：batch→链首 段的 sourceHandle 恰为 loop_start、
+   656→ * 链尾→batch 段的 targetHandle 恰为 loop_end（合法链段），故不能要求
+   657→ * 一条边两端同时为普通口 —— 旧写法会把单节点循环链的成员误判为未挂链，
+   658→ * 导致其拖出失效、且可被重复吸附（bug：循环拖出 E2E 暴露） */
+   659→function nodeOnLoopChain(nodeId: string): boolean {
+   660→  return allEdges().some(
+   661→    (e) =>
+   662→      isLoopEdge(e) &&
+   663→      ((e.source === nodeId && e.sourceHandle !== LOOP_HANDLE_START) ||
+   664→        (e.target === nodeId && e.targetHandle !== LOOP_HANDLE_END))
+   665→  )
+   666→}
+   667→
+   668→interface SnapCandidate {
+   669→  edge: FlowEdge
+   670→  isLoop: boolean
+   671→  dist: number
+   672→}
+   673→
+   674→/** 某条循环边所属的批处理（链源头）：链首段/尾段按 handle 直判，中段沿入链上溯 */
+   675→function loopChainOwner(edge: FlowEdge): string | null {
+   676→  const loopEdges = allEdges().filter(isLoopEdge)
+   677→  if (edge.sourceHandle === LOOP_HANDLE_START) return edge.source
+   678→  if (edge.targetHandle === LOOP_HANDLE_END) return edge.target
+   679→  let cur = edge.source
+   680→  for (let i = 0; i < 100; i++) {
+   681→    const up = loopEdges.find((e) => e.target === cur)
+   682→    if (!up) return null
+   683→    if (up.sourceHandle === LOOP_HANDLE_START) return up.source
+   684→    cur = up.source
+   685→  }
+   686→  return null
+   687→}
+   688→
+   689→/** 批处理的循环体后代（含直接与嵌套子孙 batch）：沿 loop 链递归收集，防环用 */
+   690→function batchDescendants(batchId: string, visited = new Set<string>()): string[] {
+   691→  const out: string[] = []
+   692→  if (visited.has(batchId)) return out
+   693→  visited.add(batchId)
+   694→  const loopEdges = allEdges().filter(isLoopEdge)
+   695→  const start = loopEdges.find(
+   696→    (e) => e.source === batchId && e.sourceHandle === LOOP_HANDLE_START
+   697→  )
+   698→  if (!start) return out
+   699→  const seen = new Set<string>([batchId])
+   700→  let cur: string | undefined = start.target
+   701→  let guard = 0
+   702→  while (cur && !seen.has(cur) && guard++ < 100) {
+   703→    seen.add(cur)
+   704→    const node = allNodes().find((n) => n.id === cur)
+   705→    if (node?.data?.nodeType === 'BATCH') {
+   706→      out.push(cur)
+   707→      out.push(...batchDescendants(cur, visited))
+   708→    }
+   709→    const next = loopEdges.find((e) => e.source === cur)
+   710→    if (!next) break
+   711→    cur = next.target
+   712→  }
+   713→  return out
+   714→}
+   715→
+   716→/** 嵌套/类型不可入提示节流（画布坐标拖动中每 4s 至多一次） */
+   717→let loopHintLastAt = 0
+   718→let loopHintText = ''
+   719→
+   720→/** 找被拖节点附近的边（最近且距离达标）；不满足类型/归属约束的边跳过 */
+   721→function findSnapEdge(node: FlowNodeModel): SnapCandidate | null {
+   722→  const nodeType = node.data?.nodeType
+   723→  if (!nodeType || nodeType === 'START') return null
+   724→  const center = nodeCenter(node)
+   725→  let best: SnapCandidate | null = null
+   726→  let loopHintNearby = false
+   727→  loopHintText = ''
+   728→  for (const edge of allEdges()) {
+   729→    if (edge.source === node.id || edge.target === node.id) continue
+   730→    const isLoop = isLoopEdge(edge)
+   731→    if (isLoop) {
+   732→      // 循环体仅收业务执行六型（START/END/CONDITION 不可入；BATCH=嵌套，须防环）
+   733→      if (!(BATCH_BODY_TYPES as string[]).includes(nodeType)) {
+   734→        if (distToPolyline(center, edgeApproxPoints(edge) ?? []) <= LOOP_SNAP_THRESHOLD) {
+   735→          loopHintNearby = true
+   736→          loopHintText = '该节点不可加入循环体（仅 HTTP/Bean/脚本/数据更新/子流程/批处理）'
+   737→        }
+   738→        continue
+   739→      }
+   740→      if (nodeOnLoopChain(node.id)) continue
+   741→      // 嵌套批处理防环：BATCH 不能入自身/自身后代的循环体链（否则运行时无限递归）
+   742→      if (nodeType === 'BATCH') {
+   743→        const owner = loopChainOwner(edge)
+   744→        if (owner && (owner === node.id || batchDescendants(node.id).includes(owner))) {
+   745→          loopHintNearby = true
+   746→          loopHintText = owner === node.id ? '批处理不能嵌套自身' : '批处理不能嵌套形成循环引用'
+   747→          continue
+   748→        }
+   749→      }
+   750→    } else if (nodeOnLoopChain(node.id)) {
+   751→      // 已在循环链上的节点不可再接入主流（序列化时会被剔出顶层导致悬空边）
+   752→      continue
+   753→    }
+   754→    const pts = edgeApproxPoints(edge)
+   755→    if (!pts) continue
+   756→    const dist = distToPolyline(center, pts)
+   757→    const threshold = isLoop ? LOOP_SNAP_THRESHOLD : SNAP_THRESHOLD
+   758→    if (dist <= threshold && (!best || dist < best.dist)) {
+   759→      best = { edge, isLoop, dist }
+   760→    }
+   761→  }
+   762→  if (!best && loopHintNearby) {
+   763→    // 拖到虚线附近但不可入/成环：节流提示（无候选吸附时才弹，避免拖动中刷屏）
+   764→    const now = Date.now()
+   765→    if (now - loopHintLastAt > 4000) {
+   766→      loopHintLastAt = now
+   767→      ElMessage.warning(loopHintText)
+   768→    }
+   769→  }
+   770→  return best
+   771→}
+   772→
+   773→/** 吸附接入：原边拆成两段穿过该节点（循环边拆出的两段仍是循环边）。
+   774→ * 顺序：先加新边再删旧边 —— vue-flow removeEdges 会跳过 deletable:false 的边，
+   775→ * 且删旧边触发的自愈（nextTick）必须在链完整后执行才能正确判 complete。
+   776→ * 已在链上的节点接入新线前先断开旧链（拖换位置/换链一步到位）。 */
+   777→function snapInsertNode(node: FlowNodeModel, candidate: SnapCandidate): void {
+   778→  detachNodeFromChains(node)
+   779→  const edge = candidate.edge
+   780→  const isLoop = candidate.isLoop
+   781→  const data = isLoop ? { loop: true } : edge.data ? { ...edge.data } : undefined
+   782→  const segBase = isLoop
+   783→    ? { type: 'smoothstep', markerEnd: 'arrowclosed', class: 'lf-edge-loop' }
+   784→    : { type: 'smoothstep', markerEnd: 'arrowclosed' }
+   785→  addEdges([
+   786→    {
+   787→      source: edge.source,
+   788→      target: node.id,
+   789→      sourceHandle: edge.sourceHandle,
+   790→      targetHandle: 'in',
+   791→      data,
+   792→      ...segBase,
+   793→    },
+   794→    {
+   795→      source: node.id,
+   796→      target: edge.target,
+   797→      sourceHandle: 'out',
+   798→      targetHandle: edge.targetHandle,
+   799→      data: isLoop ? { loop: true } : undefined,
+   800→      ...segBase,
+   801→    },
+   802→  ])
+   803→  removeEdges([edge])
+   804→  ElMessage.success(isLoop ? '已加入循环体（按链序逐项执行）' : '已自动接入连线')
+   805→}
+   806→
+   807→/** 吸附统一入口：新节点落位 / 画布内拖动结束共用 */
+   808→function trySnapNode(node: FlowNodeModel) {
+   809→  const candidate = findSnapEdge(node)
+   810→  if (candidate) snapInsertNode(node, candidate)
+   811→}
+   812→
+   813→// ===== 节点解绑：按住 Shift 拖动 / 双击链上节点 → 断开并缝合原链 =====
+   814→
+   815→interface ChainEdges {
+   816→  ins: FlowEdge[]
+   817→  outs: FlowEdge[]
+   818→}
+   819→
+   820→/** 节点的非循环连边 */
+   821→function mainEdgesOf(nodeId: string): ChainEdges {
+   822→  const ins: FlowEdge[] = []
+   823→  const outs: FlowEdge[] = []
+   824→  for (const e of allEdges()) {
+   825→    if (isLoopEdge(e)) continue
+   826→    if (e.target === nodeId) ins.push(e)
+   827→    if (e.source === nodeId) outs.push(e)
+   828→  }
+   829→  return { ins, outs }
+   830→}
+   831→
+   832→/** 节点在循环链上的连边（排除 batch 自身的 loop_start/loop_end 自环端） */
+   833→function loopEdgesOf(nodeId: string): ChainEdges {
+   834→  const ins: FlowEdge[] = []
+   835→  const outs: FlowEdge[] = []
+   836→  for (const e of allEdges()) {
+   837→    if (!isLoopEdge(e)) continue
+   838→    if (e.target === nodeId && e.targetHandle !== LOOP_HANDLE_END) ins.push(e)
+   839→    if (e.source === nodeId && e.sourceHandle !== LOOP_HANDLE_START) outs.push(e)
+   840→  }
+   841→  return { ins, outs }
+   842→}
+   843→
+   844→/** 主流链中段判定：恰一进一出（START 无入/END 无出/分支出边>1 天然排除） */
+   845→function isMainChainInternal(nodeId: string): boolean {
+   846→  const { ins, outs } = mainEdgesOf(nodeId)
+   847→  return ins.length === 1 && outs.length === 1
+   848→}
+   849→
+   850→/** 主流缝合直连：删 N 的两断边并补 src→tgt（保留 CONDITION 分支 sourceHandle） */
+   851→function stitchMainChain(node: FlowNodeModel): void {
+   852→  const { ins, outs } = mainEdgesOf(node.id)
+   853→  const inE = ins[0]
+   854→  const outE = outs[0]
+   855→  const branch =
+   856→    inE.sourceHandle === 'true' || inE.sourceHandle === 'false' ? inE.sourceHandle : undefined
+   857→  addEdges([
+   858→    {
+   859→      source: inE.source,
+   860→      target: outE.target,
+   861→      sourceHandle: inE.sourceHandle ?? undefined,
+   862→      targetHandle: outE.targetHandle ?? undefined,
+   863→      data: branch ? { branch } : undefined,
+   864→    },
+   865→  ])
+   866→  removeEdges([inE, outE])
+   867→}
+   868→
+   869→/**
+   870→ * 断开节点与既有链的连接（接入新线前置 / 双击移出共用）：
+   871→ * - 主流中段：缝合前后直连；
+   872→ * - 循环链：删全部循环连边，链自愈（nextTick healBatchLoops）缝合。
+   873→ * 返回是否发生了断开。
+   874→ */
+   875→function detachNodeFromChains(node: FlowNodeModel): boolean {
+   876→  if (isMainChainInternal(node.id)) {
+   877→    stitchMainChain(node)
+   878→    return true
+   879→  }
+   880→  if (nodeOnLoopChain(node.id)) {
+   881→    const { ins, outs } = loopEdgesOf(node.id)
+   882→    if (ins.length || outs.length) {
+   883→      removeEdges([...ins, ...outs])
+   884→      return true
+   885→    }
+   886→  }
+   887→  return false
+   888→}
+   889→
+   890→/** 解绑统一入口（Shift 拖动 / 双击链上节点共用）：解绑成功则弹消息 */
+   891→function detachWithMessage(node: FlowNodeModel): void {
+   892→  // 先判链归属再断开（断开后边已删，isMainChainInternal 恒为 false）
+   893→  const wasMain = isMainChainInternal(node.id)
+   894→  if (detachNodeFromChains(node)) {
+   895→    ElMessage.success(wasMain ? '已从连线解绑，前后节点已重新连接' : '已移出循环体，循环链已重新缝合')
+   896→  }
+   897→}
+   898→
+   899→function onNodeDragStop({ event, node }: { event: { shiftKey?: boolean }; node: FlowNodeModel }) {
+   900→  if (!node?.id) return
+   901→  // 需求②：按住 Shift 移动节点即解绑连线（不按 shift 时不再做距离自动断开，避免误触）
+   902→  if (event?.shiftKey) {
+   903→    detachWithMessage(node)
+   904→    return
+   905→  }
+   906→  const candidate = findSnapEdge(node)
+   907→  if (candidate) {
+   908→    snapInsertNode(node, candidate)
+   909→  }
+   910→}
+   911→
+   912→// ===== 循环链自愈：删除循环体节点/循环边后自动缝合前后链段 =====
+   913→
+   914→function onNodesChange(changes: NodeChange[]) {
+   915→  if (changes.some((c) => c.type === 'remove')) {
+   916→    nextTick(() => healBatchLoops())
+   917→  }
+   918→}
+   919→
+   920→function onEdgesChange(changes: EdgeChange[]) {
+   921→  if (changes.some((c) => c.type === 'remove')) {
+   922→    nextTick(() => healBatchLoops())
+   923→  }
+   924→}
+   925→
+   926→/** 对画布上每个 BATCH 检查循环链完整性并缝合断口（读 store 实时边集，非 v-model 滞后副本） */
+   927→function healBatchLoops() {
+   928→  for (const batch of storeNodes.value) {
+   929→    if (batch.data?.nodeType === 'BATCH') healOneBatch(batch.id)
+   930→  }
+   931→}
+   932→
+   933→function healOneBatch(batchId: string) {
+   934→  // store 边为 vue-flow 内部 Edge 类型，按本设计器 FlowEdge 形状读取（字段子集兼容）
+   935→  const loopEdges = (storeEdges.value as unknown as FlowEdge[]).filter(isLoopEdge)
+   936→  const directExists = loopEdges.some(
+   937→    (e) =>
+   938→      e.source === batchId &&
+   939→      e.sourceHandle === LOOP_HANDLE_START &&
+   940→      e.target === batchId &&
+   941→      e.targetHandle === LOOP_HANDLE_END
+   942→  )
+   943→
+   944→  // 正向：loop_start 出发沿链，until 回到 loop_end（完整）或无出边（断口在 tail 之后）。
+   945→  // 嵌套批处理：后续跳只走链段边（sourceHandle='out'），跳过链上子 BATCH
+   946→  // 自己的自环（sourceHandle=loop_start）——否则子自环被误当链路下一跳，
+   947→  // 走环保护 break 导致误判断链而重复补链（bug：嵌套 E2E 暴露）。
+   948→  let tail = batchId
+   949→  let forwardComplete = false
+   950→  {
+   951→    const visited = new Set([batchId])
+   952→    let cur = loopEdges.find((e) => e.source === batchId && e.sourceHandle === LOOP_HANDLE_START)
+   953→    let guard = 0
+   954→    while (cur && guard++ < 100) {
+   955→      if (cur.target === batchId && cur.targetHandle === LOOP_HANDLE_END) {
+   956→        forwardComplete = true
+   957→        break
+   958→      }
+   959→      if (visited.has(cur.target)) break
+   960→      visited.add(cur.target)
+   961→      tail = cur.target
+   962→      cur = loopEdges.find(
+   963→        (e) => e.source === cur!.target && e.sourceHandle !== LOOP_HANDLE_START
+   964→      )
+   965→    }
+   966→  }
+   967→  if (forwardComplete) return
+   968→
+   969→  // 反向：loop_end 回溯链段头部（后续跳只走链段边 targetHandle='in'，同上跳过子 BATCH 自环）
+   970→  let head = batchId
+   971→  {
+   972→    const visited = new Set([batchId])
+   973→    let cur = loopEdges.find((e) => e.target === batchId && e.targetHandle === LOOP_HANDLE_END)
+   974→    let guard = 0
+   975→    while (cur && guard++ < 100) {
+   976→      if (visited.has(cur.source)) break
+   977→      visited.add(cur.source)
+   978→      head = cur.source
+   979→      cur = loopEdges.find(
+   980→        (e) =>
+   981→          e.target === cur!.source && e.source !== batchId && e.targetHandle !== LOOP_HANDLE_END
+   982→      )
+   983→    }
+   984→  }
+   985→
+   986→  const patch: FlowEdge[] = []
+   987→  if (tail === batchId && head === batchId) {
+   988→    // 链完全为空：确保 loop_start→loop_end 直连存在
+   989→    if (!directExists) {
+   990→      patch.push(createLoopEdge(batchId, batchId, LOOP_HANDLE_START, LOOP_HANDLE_END))
+   991→    }
+   992→  } else if (tail !== batchId && head !== batchId) {
+   993→    if (tail === head) {
+   994→      // 仅剩单个中段节点：两端各接一条
+   995→      patch.push(createLoopEdge(batchId, tail, LOOP_HANDLE_START, 'in'))
+   996→      patch.push(createLoopEdge(tail, batchId, 'out', LOOP_HANDLE_END))
+   997→    } else {
+   998→      patch.push(createLoopEdge(tail, head, 'out', 'in'))
+   999→    }
+  1000→  } else if (tail !== batchId) {
+  1001→    // 正向链存在但 loop_end 断开
+  1002→    patch.push(createLoopEdge(tail, batchId, 'out', LOOP_HANDLE_END))
+  1003→  } else {
+  1004→    // loop_start 无出链但 loop_end 有前驱段
+  1005→    patch.push(createLoopEdge(batchId, head, LOOP_HANDLE_START, 'in'))
+  1006→  }
+  1007→  if (patch.length) addEdges(patch)
+  1008→}
+  1009→
+  1010→/** MiniMap 节点色：按类型映射（SVG fill 不支持 CSS 变量，用固定色值） */
+  1011→const MINIMAP_COLORS: Record<string, string> = {
+  1012→  HTTP: '#22c9d6',
+  1013→  BEAN: '#3a9e5f',
+  1014→  SCRIPT: '#e0821f',
+  1015→  CONDITION: '#e6a23c',
+  1016→  BATCH: '#a855f7',
+  1017→  SUBFLOW: '#14b8a6',
+  1018→  DATA_UPDATE: '#0e7490',
+  1019→  START: '#8d96a3',
+  1020→  END: '#8d96a3',
+  1021→}
+  1022→
+  1023→function miniMapNodeColor(node: { data?: { nodeType?: string } }): string {
+  1024→  return MINIMAP_COLORS[node?.data?.nodeType ?? ''] ?? 'rgba(127, 142, 135, 0.5)'
+  1025→}
+  1026→
+  1027→// ===== 撤销 / 重做（快照 = 序列化 DSL，防抖聚合同批变更） =====
+  1028→const historyStack = ref<string[]>([])
+  1029→const historyIndex = ref(-1)
+  1030→const applyingHistory = ref(false)
+  1031→let historyTimer: ReturnType<typeof setTimeout> | null = null
+  1032→
+  1033→const canUndo = computed(() => historyIndex.value > 0)
+  1034→const canRedo = computed(() => historyIndex.value < historyStack.value.length - 1)
+  1035→
+  1036→watch(
+  1037→  () => serializeDsl(allNodes(), allEdges(), inputVars.value),
+  1038→  (dsl) => {
+  1039→    if (applyingHistory.value) return
+  1040→    if (historyTimer) clearTimeout(historyTimer)
+  1041→    historyTimer = setTimeout(() => pushHistory(dsl), 350)
+  1042→  }
+  1043→)
+  1044→
+  1045→function pushHistory(dsl: string) {
+  1046→  // 丢弃撤销后的前进分支，追加快照（上限 100 防内存膨胀）
+  1047→  historyStack.value = historyStack.value.slice(0, historyIndex.value + 1)
+  1048→  historyStack.value.push(dsl)
+  1049→  if (historyStack.value.length > 100) historyStack.value.shift()
+  1050→  historyIndex.value = historyStack.value.length - 1
+  1051→}
+  1052→
+  1053→function applySnapshot(dsl: string) {
+  1054→  applyingHistory.value = true
+  1055→  try {
+  1056→    const graph = parseDsl(dsl)
+  1057→    nodes.value = graph.nodes
+  1058→    edges.value = graph.edges
+  1059→    selectedNodeId.value = null
+  1060→  } catch {
+  1061→    // 快照损坏不应发生（均为本组件序列化产物），忽略
+  1062→  } finally {
+  1063→    setTimeout(() => {
+  1064→      applyingHistory.value = false
+  1065→    }, 0)
+  1066→  }
+  1067→}
+  1068→
+  1069→function undo() {
+  1070→  if (!canUndo.value) return
+  1071→  historyIndex.value -= 1
+  1072→  applySnapshot(historyStack.value[historyIndex.value])
+  1073→}
+  1074→
+  1075→function redo() {
+  1076→  if (!canRedo.value) return
+  1077→  historyIndex.value += 1
+  1078→  applySnapshot(historyStack.value[historyIndex.value])
+  1079→}
+  1080→
+  1081→function onKeydown(event: KeyboardEvent) {
+  1082→  const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z'
+  1083→  const isRedo =
+  1084→    ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'z') ||
+  1085→    ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y')
+  1086→  if (isUndo) {
+  1087→    event.preventDefault()
+  1088→    undo()
+  1089→  } else if (isRedo) {
+  1090→    event.preventDefault()
+  1091→    redo()
+  1092→  }
+  1093→}
+  1094→
+  1095→onMounted(() => window.addEventListener('keydown', onKeydown))
+  1096→onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+  1097→
+  1098→// ===== 自动整理布局（v4）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
+  1099→// 实际尺寸自适应），同层主流节点共享「层中线」垂直居中对齐。BATCH 循环体链不参与
+  1100→// 主流分层：v4 按链序在宿主 BATCH 右侧纵向排列——循环链成员连线走底部 out → 顶部
+  1101→// in 手柄，纵向排布时链边为竖直直线（v3 横向成行迫使链边走 S 形弯）；列首锚定
+  1102→// loop_start 线（卡高 30%）下方，链走完自末节点回 loop_end（74% 线），闭环呈
+  1103→// 「右出 → 纵向下行 → 右回」顺时针回路；列内节点共享「列中轴」水平居中对齐。
+  1104→// 嵌套 BATCH 的循环列以宿主为锚继续右移下探，嵌套层次从外到内自左向右展开
+  1105→// （子列左缘避开宿主卡、宿主列最宽成员与前序嵌套兄弟子树，纵向并行的列互不
+  1106→// 重叠）；同层横向铺开时为 BATCH 的整棵循环子树让位，循环列不压右侧兄弟卡片。
+  1107→// 修复：循环链边（loop_start→链→loop_end→BATCH）构成图环，旧版把环上节点全部堆到
+  1108→// 兜底层导致「加入批处理节点后整理布局混乱」；层高按居中后的块底缘精确累计。 =====
+  1109→
+  1110→/** loop_start 手柄纵锚（卡高比例，与 FlowNode.vue 右侧手柄 top:30% 对齐） */
+  1111→const LOOP_START_ANCHOR = 0.3
+  1112→/** 循环列与宿主 BATCH 右缘的间距（与自环 U 形外凸 offset 56 视觉对齐） */
+  1113→const BODY_COL_GAP_X = 56
+  1114→/** 循环列内相邻成员的纵向间距（竖直连线段呼吸感，与主流层距同量级） */
+  1115→const BODY_COL_GAP_Y = 56
+  1116→/** 列首成员顶缘位于 loop_start 线（卡高 30%）下方的落差：入边经 smoothstep 20px
+  1117→ * 手柄偏移平滑落入顶部 in 口，避免与 loop_start 线等高产生回折 */
+  1118→const BODY_COL_ANCHOR_DROP = 24
+  1119→/** 嵌套子循环列左缘相对宿主列最宽成员右缘的让位余量（防纵向并行的列间重叠） */
+  1120→const BODY_COL_NEST_MARGIN = 24
+  1121→
+  1122→/** 收集某 BATCH 的循环体链（画布节点 id 序列，保序）：loop_start 出边沿链行走至
+  1123→ * 回环 loop_end，visited 防环。嵌套 BATCH 是链中普通一员（照常收进、布局时递归
+  1124→ * 展开其子列），链经其 'out' 口继续——旧版在嵌套 BATCH 处截断，会使其后的外层
+  1125→ * 链成员（嵌套BATCH→尾节点→loop_end）失去归属、混入主流分层被甩到顶层 */
+  1126→function collectBodyChain(batchId: string): string[] {
+  1127→  const chain: string[] = []
+  1128→  const loopEdges = allEdges().filter(isLoopEdge)
+  1129→  const startEdge = loopEdges.find(
+  1130→    (e) => e.source === batchId && e.sourceHandle === LOOP_HANDLE_START
+  1131→  )
+  1132→  if (!startEdge) return chain
+  1133→  const nodesById = new Map(allNodes().map((n) => [n.id, n]))
+  1134→  const seen = new Set<string>([batchId])
+  1135→  let cur = startEdge.target
+  1136→  let guard = 0
+  1137→  while (cur && !seen.has(cur) && guard++ < 100) {
+  1138→    seen.add(cur)
+  1139→    const node = nodesById.get(cur)
+  1140→    if (!node) break
+  1141→    chain.push(cur)
+  1142→    const next = loopEdges.find(
+  1143→      (e) => e.source === cur && e.sourceHandle !== LOOP_HANDLE_START
+  1144→    )
+  1145→    if (!next) break
+  1146→    cur = next.target
+  1147→  }
+  1148→  return chain
+  1149→}
+  1150→
+  1151→function handleAutoLayout() {
+  1152→  if (!nodes.value.length) return
+  1153→  const leftX = 80
+  1154→  const colGapX = 56
+  1155→  const topY = 60
+  1156→  const layerGapY = 64
+  1157→
+  1158→  const nodesById = new Map(allNodes().map((n) => [n.id, n]))
+  1159→
+  1160→  // 1) 循环体归属：无条件收集每个 BATCH 的 body 链（嵌套 BATCH 亦然——若因遍历
+  1161→  //    顺序被宿主链先行占名而跳过收集，placeChain 递归将找不到其链，其成员会滞留
+  1162→  //    原位不参与布局）；成员从主流分层名单剔除（成员只有 loop 边，主流入度恒 0，
+  1163→  //    混进分层会把它们误当第 0 层起点）
+  1164→  const bodyOwner = new Map<string, string>()
+  1165→  const bodyChains = new Map<string, string[]>()
+  1166→  for (const n of allNodes()) {
+  1167→    if (n.data.nodeType !== 'BATCH') continue
+  1168→    const chain = collectBodyChain(n.id)
+  1169→    if (!chain.length) continue
+  1170→    bodyChains.set(n.id, chain)
+  1171→    chain.forEach((id) => bodyOwner.set(id, n.id))
+  1172→  }
+  1173→
+  1174→  // 2) 主流边（排除循环链边）Kahn 分层：START（或入度 0 者）为第 0 层，拓扑序传播最长路径深度
+  1175→  const mainIds = allNodes().filter((n) => !bodyOwner.has(n.id)).map((n) => n.id)
+  1176→  const idSet = new Set(mainIds)
+  1177→  const depth = new Map<string, number>()
+  1178→  const indegree = new Map<string, number>()
+  1179→  const out = new Map<string, string[]>()
+  1180→  mainIds.forEach((id) => {
+  1181→    indegree.set(id, 0)
+  1182→    out.set(id, [])
+  1183→  })
+  1184→  allEdges().forEach((e) => {
+  1185→    if (isLoopEdge(e)) return
+  1186→    if (idSet.has(e.source) && idSet.has(e.target)) {
+  1187→      out.get(e.source)!.push(e.target)
+  1188→      indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1)
+  1189→    }
+  1190→  })
+  1191→  const queue = mainIds.filter((id) => (indegree.get(id) ?? 0) === 0)
+  1192→  const startId = allNodes().find((n) => n.data.nodeType === 'START')?.id
+  1193→  if (startId && idSet.has(startId) && (indegree.get(startId) ?? 0) > 0) queue.unshift(startId)
+  1194→  queue.forEach((id) => {
+  1195→    if (!depth.has(id)) depth.set(id, 0)
+  1196→  })
+  1197→  let maxDepth = 0
+  1198→  while (queue.length) {
+  1199→    const id = queue.shift()!
+  1200→    const current = depth.get(id) ?? 0
+  1201→    maxDepth = Math.max(maxDepth, current)
+  1202→    for (const next of out.get(id) ?? []) {
+  1203→      if (current + 1 > (depth.get(next) ?? -1)) depth.set(next, current + 1)
+  1204→      const remaining = (indegree.get(next) ?? 1) - 1
+  1205→      indegree.set(next, remaining)
+  1206→      if (remaining === 0) queue.push(next)
+  1207→    }
+  1208→  }
+  1209→  // 主流环上残余节点：接到最深层后面
+  1210→  mainIds.forEach((id) => {
+  1211→    if (!depth.has(id)) depth.set(id, ++maxDepth)
+  1212→  })
+  1213→
+  1214→  // 3) 子树纵向块高：普通节点=自身卡高；BATCH=卡片顶缘到 max(卡底, 循环列最深
+  1215→  //    底缘)——列首锚 = 卡高 30% + 落差 24，成员自上而下逐个累计，嵌套 BATCH 成员
+  1216→  //    的块底缘 = 其卡片顶纵距 + 子块块高。供层内块底缘与层高精确累计用
+  1217→  const blockH = new Map<string, number>()
+  1218→  function blockHeight(id: string, stack: Set<string> = new Set()): number {
+  1219→    if (blockH.has(id)) return blockH.get(id)!
+  1220→    const self = nodeSize(nodesById.get(id)!).h
+  1221→    if (stack.has(id)) return self
+  1222→    stack.add(id)
+  1223→    let h = self
+  1224→    const chain = bodyChains.get(id)
+  1225→    if (chain?.length) {
+  1226→      const colTop = self * LOOP_START_ANCHOR + BODY_COL_ANCHOR_DROP
+  1227→      let offset = 0
+  1228→      let deepest = 0
+  1229→      for (const cid of chain) {
+  1230→        const cn = nodesById.get(cid)
+  1231→        const cardH = cn ? nodeSize(cn).h : 0
+  1232→        deepest = Math.max(
+  1233→          deepest,
+  1234→          offset + (cn?.data.nodeType === 'BATCH' ? blockHeight(cid, stack) : cardH)
+  1235→        )
+  1236→        offset += cardH + BODY_COL_GAP_Y
+  1237→      }
+  1238→      h = Math.max(self, colTop + deepest)
+  1239→    }
+  1240→    stack.delete(id)
+  1241→    blockH.set(id, h)
+  1242→    return h
+  1243→  }
+  1244→  mainIds.forEach((id) => blockHeight(id))
+  1245→
+  1246→  // 3b) 循环子树横向跨度（自列左缘 = 宿主卡右缘+56 起算）：自身列宽 与 各嵌套 BATCH
+  1247→  //     子列（左缘含让位与兄弟列级联）及其子树跨度最右值取大。与 placeChain 的
+  1248→  //     nestLeft 公式严格同构，供同层横向铺开时为循环子树让位，防止循环列压到
+  1249→  //     同层右侧兄弟卡片
+  1250→  const colW = new Map<string, number>()
+  1251→  function colSubtreeW(id: string, stack: Set<string> = new Set()): number {
+  1252→    if (colW.has(id)) return colW.get(id)!
+  1253→    const chain = bodyChains.get(id)
+  1254→    if (!chain?.length) return 0
+  1255→    if (stack.has(id)) return 0
+  1256→    stack.add(id)
+  1257→    const colMaxW = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).w))
+  1258→    let extent = colMaxW
+  1259→    let prevRight = -Infinity
+  1260→    for (const cid of chain) {
+  1261→      const cn = nodesById.get(cid)
+  1262→      if (!cn || cn.data.nodeType !== 'BATCH') continue
+  1263→      const nestLeftRel = Math.max(
+  1264→        (colMaxW + nodeSize(cn).w) / 2 + BODY_COL_GAP_X,
+  1265→        colMaxW + BODY_COL_NEST_MARGIN,
+  1266→        prevRight + BODY_COL_GAP_X
+  1267→      )
+  1268→      prevRight = nestLeftRel + colSubtreeW(cid, stack)
+  1269→      extent = Math.max(extent, prevRight)
+  1270→    }
+  1271→    stack.delete(id)
+  1272→    colW.set(id, extent)
+  1273→    return extent
+  1274→  }
+  1275→  mainIds.forEach((id) => colSubtreeW(id))
+  1276→
+  1277→  // 4) 分层布局：层内主流节点卡片共享「层中线」垂直居中（中线 = 层顶 + 最高卡高/2，
+  1278→  //    高低卡片对齐同一水平视线）；层高按「中线 - 卡高/2 + 块高」最大值累计
+  1279→  //    （BATCH 的循环列块底缘计入，保证下层不被循环列侵入）；同层按累计宽度横向铺开
+  1280→  const byLayer = new Map<number, FlowNodeModel[]>()
+  1281→  mainIds.forEach((id) => {
+  1282→    const layer = depth.get(id) ?? 0
+  1283→    if (!byLayer.has(layer)) byLayer.set(layer, [])
+  1284→    byLayer.get(layer)!.push(nodesById.get(id)!)
+  1285→  })
+  1286→  const layerCenter = new Map<number, number>()
+  1287→  let cursorY = topY
+  1288→  const layers = [...byLayer.entries()].sort(([a], [b]) => a - b)
+  1289→  layers.forEach(([layer, list]) => {
+  1290→    const maxCardH = Math.max(...list.map((n) => nodeSize(n).h))
+  1291→    const center = cursorY + maxCardH / 2
+  1292→    layerCenter.set(layer, center)
+  1293→    let bandBottom = center + maxCardH / 2
+  1294→    list.forEach((n) => {
+  1295→      bandBottom = Math.max(bandBottom, center - nodeSize(n).h / 2 + blockHeight(n.id))
+  1296→    })
+  1297→    cursorY = bandBottom + layerGapY
+  1298→  })
+  1299→  layers.forEach(([layer, list]) => {
+  1300→    const center = layerCenter.get(layer)!
+  1301→    list.sort((a, b) => a.position.x - b.position.x)
+  1302→    let cursorX = leftX
+  1303→    list.forEach((n) => {
+  1304→      const size = nodeSize(n)
+  1305→      n.position = { x: Math.round(cursorX), y: Math.round(center - size.h / 2) }
+  1306→      // 循环子树横向让位：BATCH 的循环列悬于卡右侧，同层后续节点须为其整棵
+  1307→      // 循环子树（含嵌套列级联）让出横向空间，防止列卡重叠
+  1308→      const subtreeW = colSubtreeW(n.id)
+  1309→      cursorX += size.w + (subtreeW > 0 ? BODY_COL_GAP_X + subtreeW + colGapX : colGapX)
+  1310→    })
+  1311→  })
+  1312→
+  1313→  // 5) 循环列落位：列悬于宿主 BATCH 右侧、按链序自上而下（连线自右侧 loop_start
+  1314→  //    手柄出 → 列内竖直直线下行 → 末节点回 loop_end，顺时针闭环）；列内节点共享
+  1315→  //    「列中轴」水平居中（x = 中轴 - 卡宽/2，in/out 手柄居中故链边为竖直直线），
+  1316→  //    列首顶缘锚定 loop_start 线（卡高 30%）下方 BODY_COL_ANCHOR_DROP。嵌套 BATCH
+  1317→  //    的循环列以宿主为锚继续右移下探：子列左缘 ≥ max(宿主卡右缘+56, 宿主列最宽
+  1318→  //    成员右缘+24, 前序嵌套兄弟子树右缘+56)，嵌套层次从外到内自左向右展开且列间
+  1319→  //    互不重叠；minLeftX 由宿主列逐层下传，placed 防交叉嵌套环。
+  1320→  //    注：布局后坐标不再匹配 DSL 默认位公式，将按绝对坐标持久化（拖动位置同路径）
+  1321→  const placed = new Set<string>()
+  1322→  /** 落位某 BATCH 的循环列，返回整棵循环子树的最右缘（含嵌套列级联，供兄弟列让位） */
+  1323→  function placeChain(batchId: string, minLeftX: number): number {
+  1324→    if (placed.has(batchId)) return minLeftX
+  1325→    placed.add(batchId)
+  1326→    const chain = bodyChains.get(batchId)
+  1327→    const batch = nodesById.get(batchId)
+  1328→    if (!chain?.length || !batch) return minLeftX
+  1329→    const bSize = nodeSize(batch)
+  1330→    const colMaxW = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).w))
+  1331→    const axisX = minLeftX + colMaxW / 2
+  1332→    let cursorY = batch.position.y + bSize.h * LOOP_START_ANCHOR + BODY_COL_ANCHOR_DROP
+  1333→    let subtreeRight = axisX + colMaxW / 2
+  1334→    let prevNestRight = -Infinity
+  1335→    chain.forEach((cid) => {
+  1336→      const cn = nodesById.get(cid)
+  1337→      if (!cn) return
+  1338→      const size = nodeSize(cn)
+  1339→      cn.position = {
+  1340→        x: Math.round(axisX - size.w / 2),
+  1341→        y: Math.round(cursorY),
+  1342→      }
+  1343→      cursorY += size.h + BODY_COL_GAP_Y
+  1344→      if (cn.data.nodeType === 'BATCH') {
+  1345→        // 子列左缘 = max(子 BATCH 卡右缘+56, 宿主列最宽成员右缘+24, 前一嵌套
+  1346→        // 兄弟子树右缘+56)：让出宿主卡与宿主列全部成员，且兄弟嵌套列纵向并行
+  1347→        // 时依次向右级联，互不重叠
+  1348→        const nestLeft = Math.max(
+  1349→          cn.position.x + size.w + BODY_COL_GAP_X,
+  1350→          axisX + colMaxW / 2 + BODY_COL_NEST_MARGIN,
+  1351→          prevNestRight + BODY_COL_GAP_X
+  1352→        )
+  1353→        prevNestRight = placeChain(cid, nestLeft)
+  1354→        subtreeRight = Math.max(subtreeRight, prevNestRight)
+  1355→      }
+  1356→    })
+  1357→    return subtreeRight
+  1358→  }
+  1359→  for (const batchId of bodyChains.keys()) {
+  1360→    if (bodyOwner.has(batchId)) continue
+  1361→    const batch = nodesById.get(batchId)
+  1362→    if (!batch) continue
+  1363→    placeChain(batchId, batch.position.x + nodeSize(batch).w + BODY_COL_GAP_X)
+  1364→  }
+  1365→
+  1366→  setTimeout(() => fitView({ padding: 0.15, maxZoom: 1, duration: 300 }), 50)
+  1367→}
+  1368→
+  1369→// ===== 运行状态徽标：轨迹 nodeId → 状态（批处理内层 id 如 b#0 跳过） =====
+  1370→const runStatusMap = ref<Record<string, string>>({})
+  1371→
+  1372→function onRunTraces(traces: { nodeId: string; status: string }[] | undefined) {
+  1373→  const map: Record<string, string> = {}
+  1374→  for (const trace of traces ?? []) {
+  1375→    if (trace.nodeId && !trace.nodeId.includes('#')) map[trace.nodeId] = trace.status
+  1376→  }
+  1377→  runStatusMap.value = map
+  1378→}
+  1379→
+  1380→// ===== 保存 / 发布 / 运行 =====
+  1381→
+  1382→/** 静默保存标记：运行测试前的连带保存不重复弹 toast */
+  1383→let savingQuiet = false
+  1384→
+  1385→async function handleSave(): Promise<boolean> {
+  1386→  saving.value = true
+  1387→  try {
+  1388→    const dsl = serializeDsl(allNodes(), allEdges(), inputVars.value)
+  1389→    await logicFlowApi.update(flowId, {
+  1390→      name: flowName.value.trim() || defaultFlowName(),
+  1391→      description: flowDescription.value,
+  1392→      dsl,
+  1393→    })
+  1394→    savedDsl.value = dsl
+  1395→    savedName.value = flowName.value.trim() || defaultFlowName()
+  1396→    if (!savingQuiet) ElMessage.success('保存成功')
+  1397→    return true
+  1398→  } catch {
+  1399→    return false
+  1400→  } finally {
+  1401→    saving.value = false
+  1402→  }
+  1403→}
+  1404→
+  1405→function defaultFlowName(): string {
+  1406→  return flowKey.value || '未命名逻辑流'
+  1407→}
+  1408→
+  1409→async function handlePublish() {
+  1410→  try {
+  1411→    await ElMessageBox.confirm(
+  1412→      '发布前会先保存当前画布，并校验 DSL（可达性 / 条件分支 / 配置完整性）。确定发布吗？',
+  1413→      '确认发布',
+  1414→      { type: 'warning', confirmButtonText: '保存并发布', cancelButtonText: '取消' }
+  1415→    )
+  1416→  } catch {
+  1417→    return
+  1418→  }
+  1419→  publishing.value = true
+  1420→  try {
+  1421→    if (!(await handleSave())) return
+  1422→    await logicFlowApi.publish(flowId)
+  1423→    // 刷新状态与版本号
+  1424→    const res = await logicFlowApi.get(flowId)
+  1425→    flowStatus.value = res.data.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
+  1426→    flowVersion.value = Number(res.data.version) || flowVersion.value + 1
+  1427→    ElMessage.success(`发布成功（v${flowVersion.value}）`)
+  1428→  } catch {
+  1429→    // 校验失败等错误由 http 拦截器弹出
+  1430→  } finally {
+  1431→    publishing.value = false
+  1432→  }
+  1433→}
+  1434→
+  1435→async function handleRunTest() {
+  1436→  // 契约：run 以「当前已存 DSL」执行 —— 脏画布先静默保存
+  1437→  savingQuiet = dirty.value
+  1438→  try {
+  1439→    if (dirty.value) {
+  1440→      const ok = await handleSave()
+  1441→      if (!ok) return
+  1442→    }
+  1443→  } finally {
+  1444→    savingQuiet = false
+  1445→  }
+  1446→  runDialogVisible.value = true
+  1447→}
+  1448→
+  1449→// ===== 离开守卫：未保存变更确认 =====
+  1450→onBeforeRouteLeave(async (_to, _from) => {
+  1451→  if (!dirty.value) return true
+  1452→  try {
+  1453→    await ElMessageBox.confirm('当前有未保存的变更，离开将丢失。确定离开吗？', '未保存提示', {
+  1454→      type: 'warning',
+  1455→      confirmButtonText: '放弃变更并离开',
+  1456→      cancelButtonText: '留在本页',
+  1457→    })
+  1458→    return true
+  1459→  } catch {
+  1460→    return false
+  1461→  }
+  1462→})
+  1463→
+  1464→function handleBack() {
+  1465→  router.back()
+  1466→}
+  1467→</script>
+  1468→
+  1469→<style scoped>
+  1470→.logic-flow-designer {
+  1471→  display: flex;
+  1472→  flex-direction: column;
+  1473→  height: 100vh;
+  1474→  width: 100vw;
+  1475→  overflow: hidden;
+  1476→  background: var(--el-bg-color-page, #f4f5f3);
+  1477→}
+  1478→
+  1479→/* ===== 工具条 ===== */
+  1480→.designer-toolbar {
+  1481→  display: flex;
+  1482→  align-items: center;
+  1483→  gap: 10px;
+  1484→  padding: 8px 14px;
+  1485→  background: var(--el-bg-color);
+  1486→  border-bottom: 1px solid var(--el-border-color-lighter);
+  1487→  flex-shrink: 0;
+  1488→  z-index: 30;
+  1489→}
+  1490→
+  1491→.toolbar-btn {
+  1492→  flex-shrink: 0;
+  1493→}
+  1494→
+  1495→.flow-key {
+  1496→  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  1497→  font-size: 12px;
+  1498→  color: var(--el-text-color-secondary);
+  1499→  max-width: 180px;
+  1500→  overflow: hidden;
+  1501→  text-overflow: ellipsis;
+  1502→  white-space: nowrap;
+  1503→}
+  1504→
+  1505→.name-input {
+  1506→  width: 240px;
+  1507→}
+  1508→
+  1509→.name-input :deep(.el-input__inner) {
+  1510→  font-weight: 600;
+  1511→}
+  1512→
+  1513→.dirty-dot {
+  1514→  display: inline-block;
+  1515→  width: 8px;
+  1516→  height: 8px;
+  1517→  border-radius: 50%;
+  1518→  background: var(--el-color-danger);
+  1519→}
+  1520→
+  1521→.toolbar-spacer {
+  1522→  flex: 1;
+  1523→}
+  1524→
+  1525→/* ===== 主体 ===== */
+  1526→.designer-body {
+  1527→  position: relative;
+  1528→  display: flex;
+  1529→  flex: 1;
+  1530→  min-height: 0;
+  1531→  overflow: hidden;
+  1532→}
+  1533→
+  1534→.canvas-container {
+  1535→  flex: 1;
+  1536→  position: relative;
+  1537→  overflow: hidden;
+  1538→}
+  1539→
+  1540→/* ===== 空画布引导 ===== */
+  1541→.canvas-empty-hint {
+  1542→  position: absolute;
+  1543→  top: 50%;
+  1544→  left: 50%;
+  1545→  transform: translate(-50%, -50%);
+  1546→  display: flex;
+  1547→  flex-direction: column;
+  1548→  align-items: center;
+  1549→  gap: 8px;
+  1550→  padding: 28px 36px;
+  1551→  border-radius: 14px;
+  1552→  background: color-mix(in srgb, var(--el-bg-color) 88%, transparent);
+  1553→  border: 1px dashed var(--el-border-color);
+  1554→  pointer-events: none;
+  1555→  text-align: center;
+  1556→}
+  1557→
+  1558→.empty-icon {
+  1559→  font-size: 30px;
+  1560→  color: var(--el-color-primary);
+  1561→}
+  1562→
+  1563→.empty-title {
+  1564→  font-size: 15px;
+  1565→  font-weight: 600;
+  1566→  color: var(--el-text-color-primary);
+  1567→}
+  1568→
+  1569→.empty-desc {
+  1570→  font-size: 12px;
+  1571→  color: var(--el-text-color-secondary);
+  1572→}
+  1573→
+  1574→/* ===== 入参声明弹窗 ===== */
+  1575→.iv-badge {
+  1576→  margin-left: 4px;
+  1577→  vertical-align: middle;
+  1578→}
+  1579→.iv-empty {
+  1580→  font-size: 12px;
+  1581→  color: var(--el-text-color-placeholder);
+  1582→  text-align: center;
+  1583→  padding: 10px 0;
+  1584→  border: 1px dashed var(--el-border-color-lighter);
+  1585→  border-radius: 8px;
+  1586→  margin-bottom: 8px;
+  1587→}
+  1588→.iv-row {
+  1589→  display: flex;
+  1590→  align-items: center;
+  1591→  gap: 8px;
+  1592→  margin-bottom: 8px;
+  1593→}
+  1594→/* 从触发点导入区块：与表单逻辑流绑定联动 */
+  1595→.iv-import {
+  1596→  margin-top: 12px;
+  1597→  padding: 10px 12px;
+  1598→  border: 1px dashed var(--el-border-color);
+  1599→  border-radius: 8px;
+  1600→  background: var(--el-fill-color-lighter);
+  1601→}
+  1602→.iv-import-head {
+  1603→  display: flex;
+  1604→  align-items: baseline;
+  1605→  gap: 8px;
+  1606→  margin-bottom: 8px;
+  1607→}
+  1608→.iv-import-title {
+  1609→  font-size: 13px;
+  1610→  font-weight: 600;
+  1611→  color: var(--el-text-color-primary);
+  1612→}
+  1613→.iv-import-tip {
+  1614→  font-size: 12px;
+  1615→  color: var(--el-text-color-secondary);
+  1616→  line-height: 1.5;
+  1617→}
+  1618→.iv-import-row {
+  1619→  display: flex;
+  1620→  align-items: center;
+  1621→  gap: 8px;
+  1622→}
+  1623→.iv-import-count {
+  1624→  font-size: 12px;
+  1625→  color: var(--el-text-color-secondary);
+  1626→}
+  1627→</style>
+  1628→

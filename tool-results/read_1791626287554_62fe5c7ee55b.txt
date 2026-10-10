@@ -1,0 +1,780 @@
+     1→<template>
+     2→  <div class="search-table" :class="[tableClassName, { 'is-small': tableSize === 'small' }]" :style="tableStyle">
+     3→    <!-- 搜索栏 -->
+     4→    <el-card v-if="showSearch" class="search-card" style="margin-bottom: 16px">
+     5→      <el-form :inline="true" :model="query" :size="tableSize" @submit.prevent>
+     6→        <el-form-item v-for="field in searchFields" :key="field.prop" :label="field.label">
+     7→          <el-input
+     8→            v-if="field.type === 'input'"
+     9→            v-model="query[field.prop]"
+    10→            :placeholder="field.placeholder"
+    11→            :style="field.style || 'width: 180px'"
+    12→            clearable
+    13→          />
+    14→          <el-select
+    15→            v-else-if="field.type === 'select'"
+    16→            v-model="query[field.prop]"
+    17→            :placeholder="field.placeholder"
+    18→            clearable
+    19→            :style="field.style || 'width: 180px'"
+    20→          >
+    21→            <el-option
+    22→              v-for="opt in field.options"
+    23→              :key="String(opt.value)"
+    24→              :label="opt.label"
+    25→              :value="opt.value"
+    26→            />
+    27→          </el-select>
+    28→          <el-tree-select
+    29→            v-else-if="field.type === 'tree-select'"
+    30→            v-model="query[field.prop]"
+    31→            v-bind="field.treeProps"
+    32→            :placeholder="field.placeholder"
+    33→            clearable
+    34→            :style="field.style || 'width: 200px'"
+    35→            check-strictly
+    36→            @visible-change="(visible: boolean) => { if (visible && field.onExpand && (!field.treeProps?.data || field.treeProps.data.length === 0)) field.onExpand() }"
+    37→          />
+    38→          <el-cascader
+    39→            v-else-if="field.type === 'cascader'"
+    40→            v-model="query[field.prop]"
+    41→            v-bind="field.cascaderProps"
+    42→            :placeholder="field.placeholder"
+    43→            clearable
+    44→            :style="field.style || 'width: 200px'"
+    45→          />
+    46→          <LookupPicker
+    47→            v-else-if="field.type === 'lookupPicker'"
+    48→            v-model="query[field.prop]"
+    49→            v-bind="field.lookupProps"
+    50→            :placeholder="field.placeholder"
+    51→            :style="field.style || 'width: 200px'"
+    52→          />
+    53→          <el-date-picker
+    54→            v-else-if="field.type === 'date-picker'"
+    55→            v-model="query[field.prop]"
+    56→            :placeholder="field.placeholder"
+    57→          />
+    58→          <el-date-picker
+    59→            v-else-if="field.type === 'date-range'"
+    60→            v-model="query[field.prop]"
+    61→            :type="field.time ? 'datetimerange' : 'daterange'"
+    62→            range-separator="至"
+    63→            :start-placeholder="field.time ? '开始时间' : '开始日期'"
+    64→            :end-placeholder="field.time ? '结束时间' : '结束日期'"
+    65→            :value-format="field.time ? 'YYYY-MM-DD HH:mm:ss' : undefined"
+    66→            :style="field.style || (field.time ? 'width: 380px' : 'width: 340px')"
+    67→          />
+    68→          <template v-else-if="field.type === 'number-range'">
+    69→            <el-input-number
+    70→              v-model="query[field.prop][0]"
+    71→              :placeholder="field.placeholder || '最小值'"
+    72→              :controls="false"
+    73→              :style="field.style || 'width: 180px'"
+    74→            />
+    75→            <span style="margin: 0 8px; color: #909399">至</span>
+    76→            <el-input-number
+    77→              v-model="query[field.prop][1]"
+    78→              placeholder="最大值"
+    79→              :controls="false"
+    80→              :style="field.style || 'width: 180px'"
+    81→            />
+    82→          </template>
+    83→        </el-form-item>
+    84→        <el-form-item>
+    85→          <div class="toolbar-buttons">
+    86→            <el-button type="primary" :icon="Search" circle size="small" @click="handleSearch" />
+    87→            <el-button :icon="Refresh" circle size="small" @click="handleReset" />
+    88→            <el-button v-if="showExport" :icon="Download" :loading="exportLoading" circle size="small" @click="handleExport" />
+    89→          </div>
+    90→        </el-form-item>
+    91→      </el-form>
+    92→    </el-card>
+    93→
+    94→    <!-- 表格卡片 -->
+    95→    <el-card class="table-card">
+    96→      <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px">
+    97→        <slot />
+    98→        <template v-for="btn in toolbarButtons" :key="btn.label">
+    99→          <!-- circle（图标形态）：无 slot 内容，图标完全居中（对齐搜索栏/操作列图标按钮），hover 显示 label -->
+   100→          <el-tooltip v-if="btn.circle" :content="btn.label" placement="top" :show-after="200">
+   101→            <el-button
+   102→              :type="btn.type"
+   103→              :size="btn.size || (tableSize === 'small' ? 'small' : 'default')"
+   104→              circle
+   105→              :icon="btn.icon"
+   106→              @click="btn.onClick"
+   107→            />
+   108→          </el-tooltip>
+   109→          <!-- 非 circle：带文字的普通/文本按钮 -->
+   110→          <el-button
+   111→            v-else
+   112→            :type="btn.type"
+   113→            :size="btn.size || (tableSize === 'small' ? 'small' : 'default')"
+   114→            :link="btn.link"
+   115→            :icon="btn.icon"
+   116→            @click="btn.onClick"
+   117→          >
+   118→            {{ btn.label }}
+   119→          </el-button>
+   120→        </template>
+   121→        <el-button
+   122→          v-if="formConfig && showCreateButton"
+   123→          type="primary"
+   124→          :icon="Plus"
+   125→          :size="tableSize === 'small' ? 'small' : 'default'"
+   126→          v-permission="formConfig.createPermission"
+   127→          @click="handleCreate(undefined)"
+   128→        >
+   129→          新增
+   130→        </el-button>
+   131→      </div>
+   132→
+   133→      <div class="table-wrapper">
+   134→       <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" :row-class-name="rowClassName" :row-style="rowStyle" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
+   135→        <el-table-column v-if="props.showSelection" type="selection" width="42" align="center" fixed="left" />
+   136→        <el-table-column
+   137→          v-for="col in columns"
+   138→          :key="col.prop || col.label"
+   139→          :prop="col.prop"
+   140→          :label="col.label"
+   141→          :width="col.width"
+   142→          :min-width="col.minWidth"
+   143→          :align="col.align"
+   144→          :fixed="col.fixed"
+   145→          :sortable="col.sortable ? 'custom' : undefined"
+   146→          :formatter="col.formatter"
+   147→          :show-overflow-tooltip="col.showOverflowTooltip"
+   148→          :class-name="col.cellClassName"
+   149→        >
+   150→          <template #default="{ row, column, $index }" v-if="col.render">
+   151→            <RenderCell :render="col.render" :row="row" :column="column" :index="$index" />
+   152→          </template>
+   153→          <template #default="{ row, column, $index }" v-else-if="col.slotName && $slots[col.slotName]">
+   154→            <slot :name="col.slotName" :row="row" :column="column" :$index="$index" />
+   155→          </template>
+   156→        </el-table-column>
+   157→
+   158→        <!-- 操作列 -->
+   159→        <el-table-column
+   160→          v-if="resolvedActionButtons.length"
+   161→          label="操作"
+   162→          :width="actionColumnWidth"
+   163→          align="center"
+   164→          fixed="right"
+   165→        >
+   166→          <template #default="{ row }">
+   167→            <div class="action-buttons" style="display: inline-flex; align-items: center; gap: 0; white-space: nowrap">
+   168→              <template v-for="btn in visibleButtons" :key="btn.label">
+   169→                <template v-if="!btn.show || btn.show(row)">
+   170→                <!-- 图标 + confirm -->
+   171→                <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
+   172→                  <template #reference>
+   173→                    <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop />
+   174→                  </template>
+   175→                </el-popconfirm>
+   176→
+   177→                <!-- 图标无 confirm（tooltip 之外再补原生 title：即时悬停提示 + 无障碍） -->
+   178→                <el-tooltip v-else-if="btn.icon" :content="btn.label" placement="top" :show-after="200">
+   179→                  <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
+   180→                </el-tooltip>
+   181→
+   182→                <!-- 文本 + confirm -->
+   183→                <el-popconfirm v-else-if="btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
+   184→                  <template #reference>
+   185→                    <el-button
+   186→                      link
+   187→                      size="small"
+   188→                      :type="btn.type"
+   189→                      v-permission="btn.permission"
+   190→                      @click.stop
+   191→                    >
+   192→                      {{ btn.label }}
+   193→                    </el-button>
+   194→                  </template>
+   195→                </el-popconfirm>
+   196→
+   197→                <!-- 纯文本 -->
+   198→                <el-button
+   199→                  v-else
+   200→                  link
+   201→                  size="small"
+   202→                  :type="btn.type"
+   203→                  v-permission="btn.permission"
+   204→                  @click.stop="btn.onClick(row)"
+   205→                >
+   206→                  {{ btn.label }}
+   207→                </el-button>
+   208→                </template>
+   209→              </template>
+   210→
+   211→              <el-dropdown v-if="dropdownButtons.length" trigger="click">
+   212→                <el-button size="small" link @click.stop>
+   213→                  <el-icon :size="16"><CaretBottom /></el-icon>
+   214→                </el-button>
+   215→                <template #dropdown>
+   216→                  <el-dropdown-menu>
+   217→                    <template v-for="btn in dropdownButtons" :key="btn.label">
+   218→                      <el-dropdown-item v-if="(!btn.show || btn.show(row)) && !btn.confirm" @click="btn.onClick(row)">
+   219→                        <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="resolveIcon(btn, row)" /></el-icon>
+   220→                        {{ btn.label }}
+   221→                      </el-dropdown-item>
+   222→                      <el-dropdown-item v-else-if="(!btn.show || btn.show(row)) && btn.confirm">
+   223→                        <el-popconfirm :title="btn.confirm" @confirm="btn.onClick(row)">
+   224→                          <template #reference>
+   225→                            <span>
+   226→                              <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="resolveIcon(btn, row)" /></el-icon>
+   227→                              {{ btn.label }}
+   228→                            </span>
+   229→                          </template>
+   230→                        </el-popconfirm>
+   231→                      </el-dropdown-item>
+   232→                    </template>
+   233→                  </el-dropdown-menu>
+   234→                </template>
+   235→              </el-dropdown>
+   236→            </div>
+   237→          </template>
+   238→        </el-table-column>
+   239→      </el-table>
+   240→      </div>
+   241→
+   242→      <div v-if="showPagination && total > 0" class="pagination-bar">
+   243→        <el-pagination
+   244→          v-model:current-page="query.page"
+   245→          v-model:page-size="query.size"
+   246→          :total="total"
+   247→          :page-sizes="pageSizes"
+   248→          layout="total, sizes, prev, pager, next, jumper"
+   249→          :small="tableSize === 'small'"
+   250→          @size-change="fetchList()"
+   251→          @current-change="fetchList()"
+   252→        />
+   253→      </div>
+   254→    </el-card>
+   255→
+   256→    <!-- 表单弹窗 -->
+   257→    <el-dialog
+   258→      v-if="formConfig"
+   259→      v-model="dialogVisible"
+   260→      :title="dialogTitle"
+   261→      :width="formConfig.dialogWidth || '500px'"
+   262→      :close-on-click-modal="false"
+   263→      @close="handleDialogClose"
+   264→    >
+   265→      <div class="st-dialog-body" :style="{ height: formConfig.dialogHeight || undefined }">
+   266→        <FormRenderer
+   267→          :key="dialogFormKey"
+   268→          ref="formRendererRef"
+   269→          :rule="formConfig.rule"
+   270→           :option="dialogFormOption"
+   271→          :initial-values="dialogInitialValues"
+   272→          :actions="formConfig.actions"
+   273→          :data-sources="formConfig.dataSources"
+   274→          @open-new-tab="(key, rid) => $emit('open-new-tab', key, rid)"
+   275→        />
+   276→      </div>
+   277→      <template #footer>
+   278→        <el-button @click="dialogVisible = false">取消</el-button>
+   279→        <el-button type="primary" :loading="formLoading" @click="handleDialogSubmit">确定</el-button>
+   280→      </template>
+   281→    </el-dialog>
+   282→  </div>
+   283→</template>
+   284→
+   285→<script setup lang="ts">
+   286→import { ref, reactive, onMounted, computed, defineComponent, h, type PropType } from 'vue'
+   287→import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
+   288→import { ElMessage, ElMessageBox } from 'element-plus'
+   289→import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
+   290→import { resolveStyleRules } from '@/utils/fieldStyle'
+   291→import FormRenderer from '@/views/form/components/FormRenderer.vue'
+   292→import LookupPicker from './LookupPicker.vue'
+   293→import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
+   294→
+   295→/** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */
+   296→const RenderCell = defineComponent({
+   297→  name: 'RenderCell',
+   298→  props: {
+   299→    render: { type: Function as PropType<(row: any, column: TableColumn, index: number) => unknown>, required: true },
+   300→    row: { type: Object as PropType<any>, required: true },
+   301→    column: { type: Object as PropType<TableColumn>, required: true },
+   302→    index: { type: Number, required: true },
+   303→  },
+   304→  setup(props) {
+   305→    return () => {
+   306→      const r = props.render(props.row, props.column, props.index)
+   307→      return typeof r === 'string' || r === null || r === undefined ? h('span', r ?? '') : r
+   308→    }
+   309→  },
+   310→})
+   311→
+   312→/** 解析操作按钮图标：静态组件直接返回，函数形式按行动态解析 */
+   313→function resolveIcon(btn: ActionButton, row: any) {
+   314→  return typeof btn.icon === 'function' ? btn.icon(row) : btn.icon
+   315→}
+   316→
+   317→const props = withDefaults(defineProps<SearchTableProps>(), {
+   318→  defaultPageSize: 10,
+   319→  pageSizes: () => [10, 20, 50],
+   320→  showExport: false,
+   321→  exportLoading: false,
+   322→  maxVisibleButtons: 3,
+   323→  showSearch: true,
+   324→  showCreateButton: true,
+   325→  // Boolean 类型 prop 未传入时 Vue 默认 false，必须显式 default true（否则分页被静默关闭）
+   326→  showPagination: true,
+   327→  mergeDefaultActions: true,
+   328→  tableSize: 'default',
+   329→  toolbarButtons: () => [],
+   330→})
+   331→
+   332→const tableClassName = computed(() => props.styleRule?.base?.className || '')
+   333→const tableStyle = computed(() => ({ ...(props.style || {}), ...(props.styleRule?.base?.css ? parseCss(props.styleRule.base.css) : {}) }))
+   334→function parseCss(css: string): Record<string, string> {
+   335→  return Object.fromEntries(css.split(';').map(item => item.trim()).filter(Boolean).map(item => {
+   336→    const index = item.indexOf(':')
+   337→    return index > 0 ? [item.slice(0, index).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()), item.slice(index + 1).trim()] : ['', '']
+   338→  }).filter(([key, value]) => key && value))
+   339→}
+   340→function rowClassName({ row }: { row: any }) {
+   341→  if (!props.styleRule) return ''
+   342→  return resolveStyleRules(props.styleRule.base, props.styleRule.rules, row).className || ''
+   343→}
+   344→function rowStyle({ row }: { row: any }) {
+   345→  if (!props.styleRule) return {}
+   346→  return resolveStyleRules(props.styleRule.base, props.styleRule.rules, row).style
+   347→}
+   348→
+   349→/** 树形表格属性：透传给 el-table */
+   350→const treeTableAttrs = computed(() => {
+   351→  if (!props.treeProps) return {}
+   352→  return {
+   353→    'row-key': props.treeProps.rowKey,
+   354→    'tree-props': { children: props.treeProps.children },
+   355→    'default-expand-all': props.treeProps.defaultExpandAll ?? true,
+   356→  }
+   357→})
+   358→
+   359→/** 树形模式下隐藏分页；非树形时按 props.showPagination（默认 true） */
+   360→const showPagination = computed(() => (!props.treeProps && props.showPagination !== false))
+   361→
+   362→const emit = defineEmits<{
+   363→  search: [params: QueryParams]
+   364→  reset: []
+   365→  export: [params: QueryParams]
+   366→  'row-click': [row: any, column: any, event: Event]
+   367→  'row-dblclick': [row: any, column: any, event: Event]
+   368→  'cell-click': [row: any, column: any, cell: any, event: Event]
+   369→  'selection-change': [selection: any[]]
+   370→  'sort-change': [args: { column: any; prop: string; order: string }]
+   371→  'open-new-tab': [containerKey: string, recordId: string]
+   372→}>()
+   373→
+   374→const loading = ref(false)
+   375→const list = ref<any[]>([])
+   376→const total = ref(0)
+   377→/** el-table 实例（供外部 sort/clearSelection 控制） */
+   378→const tableRef = ref<any>(null)
+   379→
+   380→const query = reactive<QueryParams>({ page: 1, size: props.defaultPageSize })
+   381→const initialQuery = ref<Record<string, any>>({})
+   382→
+   383→/** 当前排序状态（服务器端排序；与 query 并列由组件内部自管，重置时清空） */
+   384→const sortState = ref<{ prop: string; order: string } | null>(null)
+   385→
+   386→// 表单弹窗状态
+   387→const dialogVisible = ref(false)
+   388→const dialogTitle = ref('')
+   389→const isEdit = ref(false)
+   390→const editId = ref<number | string>(0)
+   391→const editingRow = ref<any>(null)
+   392→const dialogInitialValues = ref<Record<string, any>>({})
+   393→
+   394→/** 根据弹窗表单中最长字段标题计算标签宽度，避免固定宽度造成过大的左侧空白。 */
+   395→const dialogFormOption = computed(() => ({
+   396→  ...(props.formConfig?.option || {}),
+   397→  form: {
+   398→    ...(props.formConfig?.option?.form || {}),
+   399→    labelWidth: `${measureFormLabelWidth(props.formConfig?.rule || [])}px`,
+   400→  },
+   401→}))
+   402→
+   403→const formLoading = ref(false)
+   404→const formRendererRef = ref<InstanceType<typeof FormRenderer> | null>(null)
+   405→/** 每次打开弹窗递增，强制重建 FormRenderer（确保读取最新 initialValues，避免复用实例时表单残留旧数据） */
+   406→const dialogFormKey = ref(0)
+   407→
+   408→// 操作列宽度
+   409→const actionColumnWidth = computed(() => {
+   410→  // 外部显式指定（覆盖自动计算）
+   411→  if (props.actionColumnWidth) return props.actionColumnWidth + 'px'
+   412→
+   413→  const buttons = visibleButtons.value
+   414→  const hasMore = resolvedActionButtons.value.length > props.maxVisibleButtons
+   415→
+   416→  let width = 0
+   417→  for (const btn of buttons) {
+   418→    if (btn.icon) {
+   419→      width += 32 // 圆形图标按钮
+   420→    } else {
+   421→      // 文本按钮：每字符 14px + 左右 padding 8px
+   422→      width += btn.label.length * 14 + 8
+   423→    }
+   424→  }
+   425→  if (hasMore) width += 50 // "更多"下拉
+   426→  width += 24 // el-table .cell 左右 padding
+   427→
+   428→  return Math.ceil(width) + 'px'
+   429→})
+   430→
+   431→const resolvedActionButtons = computed<ActionButton[]>(() => {
+   432→  const defaults = props.formConfig ? getDefaultActions() : []
+   433→  if (props.actionButtons !== undefined) {
+   434→    // mergeDefaultActions=false 时完全使用自定义按钮；默认合并（默认在前，自定义在后）
+   435→    if (props.mergeDefaultActions === false) return props.actionButtons
+   436→    return [...defaults, ...props.actionButtons]
+   437→  }
+   438→  return defaults
+   439→})
+   440→
+   441→function getDefaultActions(): ActionButton[] {
+   442→  const btns: ActionButton[] = []
+   443→  if (props.formConfig?.updateApi) {
+   444→    btns.push({
+   445→      label: '编辑',
+   446→      icon: Edit,
+   447→      permission: props.formConfig.editPermission,
+   448→      onClick: (row) => handleEdit(row),
+   449→    })
+   450→  }
+   451→  if (props.formConfig?.deleteApi) {
+   452→    btns.push({
+   453→      label: '删除',
+   454→      icon: Delete,
+   455→      permission: props.formConfig.deletePermission,
+   456→      onClick: (row) => handleDelete(row),
+   457→    })
+   458→  }
+   459→  return btns
+   460→}
+   461→
+   462→const visibleButtons = computed(() =>
+   463→  resolvedActionButtons.value.slice(0, props.maxVisibleButtons),
+   464→)
+   465→const dropdownButtons = computed(() =>
+   466→  resolvedActionButtons.value.slice(props.maxVisibleButtons),
+   467→)
+   468→
+   469→function initSearchDefaults() {
+   470→  const defaults: Record<string, any> = {}
+   471→  for (const field of props.searchFields || []) {
+   472→    // 范围区间输入：预置 [min,max] 占位数组（避免模板绑定 undefined[0] 报错；提交时后端对 null 跳过）
+   473→    if (field.type === 'number-range' && field.defaultValue === undefined) {
+   474→      defaults[field.prop] = [null, null]
+   475→      continue
+   476→    }
+   477→    if (field.defaultValue !== undefined) {
+   478→      defaults[field.prop] = field.defaultValue
+   479→    }
+   480→  }
+   481→  initialQuery.value = { page: 1, size: props.defaultPageSize, ...defaults }
+   482→  Object.assign(query, initialQuery.value)
+   483→}
+   484→
+   485→onMounted(() => {
+   486→  initSearchDefaults()
+   487→  fetchList()
+   488→})
+   489→
+   490→async function fetchList() {
+   491→  loading.value = true
+   492→  try {
+   493→    const params: Record<string, any> = { ...query }
+   494→    // 合并排序状态（服务器端排序；order 已归一化为 asc/desc）
+   495→    if (sortState.value) {
+   496→      params.sort = sortState.value.prop
+   497→      params.order = sortState.value.order
+   498→    }
+   499→    const res = await props.fetchApi(params)
+   500→    list.value = Array.isArray(res.rows) ? res.rows : []
+   501→    total.value = Number(res.total) || 0
+   502→  } finally {
+   503→    loading.value = false
+   504→  }
+   505→}
+   506→
+   507→/** 排序变化：记录排序状态并重新请求；同时照常转发 sort-change 事件（不破坏事件总线动作） */
+   508→function handleSortChange(args: { column: any; prop: string; order: string }) {
+   509→  sortState.value = args.order
+   510→    ? { prop: args.prop, order: args.order === 'ascending' ? 'asc' : 'desc' }
+   511→    : null
+   512→  emit('sort-change', args)
+   513→  fetchList()
+   514→}
+   515→
+   516→function handleSearch() {
+   517→  query.page = 1
+   518→  fetchList()
+   519→}
+   520→
+   521→function handleReset() {
+   522→  sortState.value = null
+   523→  Object.keys(query).forEach((key) => delete query[key])
+   524→  Object.assign(query, initialQuery.value)
+   525→  fetchList()
+   526→}
+   527→
+   528→function handleExport() {
+   529→  emit('export', { ...query })
+   530→}
+   531→
+   532→// --- CRUD ---
+   533→async function handleCreate(initialValues?: Record<string, any>) {
+   534→  await props.formConfig?.onFormOpen?.()
+   535→  if (props.formConfig?.beforeCreate) {
+   536→    const ok = await props.formConfig.beforeCreate()
+   537→    if (ok === false) return
+   538→  }
+   539→  isEdit.value = false
+   540→  editId.value = 0
+   541→  editingRow.value = null
+   542→  const configInitialValues = props.formConfig?.initialValues || {}
+   543→  dialogInitialValues.value = { ...configInitialValues, ...(initialValues || {}) }
+   544→  dialogTitle.value = props.formConfig?.dialogTitle?.create || '新增'
+   545→  dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
+   546→  dialogVisible.value = true
+   547→}
+   548→
+   549→async function handleEdit(row: any) {
+   550→  await props.formConfig?.onFormOpen?.()
+   551→  if (props.formConfig?.beforeEdit) {
+   552→    const ok = await props.formConfig.beforeEdit(row)
+   553→    if (ok === false) return
+   554→  }
+   555→  isEdit.value = true
+   556→  editId.value = row.id
+   557→  editingRow.value = row
+   558→  dialogTitle.value = props.formConfig?.dialogTitle?.edit || '编辑'
+   559→
+   560→  if (props.formConfig?.getApi) {
+   561→    formLoading.value = true
+   562→    try {
+   563→      const res = await props.formConfig.getApi(row.id)
+   564→      dialogInitialValues.value = { ...res }
+   565→    } finally {
+   566→      formLoading.value = false
+   567→    }
+   568→  } else {
+   569→    dialogInitialValues.value = { ...row }
+   570→  }
+   571→  dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
+   572→  dialogVisible.value = true
+   573→}
+   574→
+   575→async function handleDelete(row: any) {
+   576→  if (props.formConfig?.beforeDelete) {
+   577→    const ok = await props.formConfig.beforeDelete(row)
+   578→    if (ok === false) return
+   579→  }
+   580→  const msg = props.deleteConfirm ? props.deleteConfirm(row) : '确定删除该记录吗？'
+   581→  try {
+   582→    await ElMessageBox.confirm(msg, '删除确认', { type: 'warning' })
+   583→  } catch {
+   584→    return
+   585→  }
+   586→  try {
+   587→    await props.formConfig?.deleteApi?.(row.id, row)
+   588→    ElMessage.success('删除成功')
+   589→    props.formConfig?.afterDelete?.()
+   590→    fetchList()
+   591→  } catch {
+   592→    // http 拦截器统一处理
+   593→  }
+   594→}
+   595→
+   596→async function handleDialogSubmit() {
+   597→  const formData = formRendererRef.value?.getFormData() || {}
+   598→
+   599→  formLoading.value = true
+   600→  try {
+   601→    if (isEdit.value) {
+   602→      await props.formConfig?.updateApi?.(editId.value, formData, editingRow.value)
+   603→      props.formConfig?.afterUpdate?.(formData)
+   604→    } else {
+   605→      await props.formConfig?.createApi?.(formData)
+   606→      props.formConfig?.afterCreate?.(formData)
+   607→    }
+   608→    ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
+   609→    dialogVisible.value = false
+   610→    fetchList()
+   611→  } finally {
+   612→    formLoading.value = false
+   613→  }
+   614→}
+   615→
+   616→function handleDialogClose() {
+   617→  dialogInitialValues.value = {}
+   618→}
+   619→
+   620→// --- 外部控制方法（供父组件通过 ref 调用，如外部自建搜索栏 / 事件动作链） ---
+   621→
+   622→/** 外部注入查询条件并刷新；resetPage=true 时重置到第一页（默认） */
+   623→function setQuery(extra: Record<string, any>, resetPage = true) {
+   624→  Object.assign(query, extra)
+   625→  if (resetPage) query.page = 1
+   626→  fetchList()
+   627→}
+   628→
+   629→/** 设置表格排序（代理 el-table.sort） */
+   630→function sort(field: string, order: string) {
+   631→  tableRef.value?.sort(field, order)
+   632→}
+   633→
+   634→/** 清空行选择（代理 el-table.clearSelection） */
+   635→function clearSelection() {
+   636→  tableRef.value?.clearSelection()
+   637→}
+   638→
+   639→/** 当前表格数据（外部读取用） */
+   640→function getList() {
+   641→  return list.value
+   642→}
+   643→
+   644→  defineExpose({ fetchList, openFormDialog: handleCreate, openEdit: handleEdit, setQuery, sort, clearSelection, getList })
+   645→</script>
+   646→
+   647→<style scoped>
+   648→.search-table {
+   649→  height: 100%;
+   650→  display: flex;
+   651→  flex-direction: column;
+   652→  overflow: hidden;
+   653→}
+   654→
+   655→/* 紧凑模式 */
+   656→.is-small {
+   657→  font-size: 12px;
+   658→}
+   659→.is-small .el-form,
+   660→.is-small .el-table,
+   661→.is-small .el-pagination {
+   662→  font-size: 12px;
+   663→}
+   664→
+   665→/* 搜索栏 */
+   666→.search-card {
+   667→  flex-shrink: 0;
+   668→  /* 与视图 PageRenderer 查询栏一致；!important 防 form-create/画布等外部环境覆盖 */
+   669→  margin-bottom: 16px !important;
+   670→}
+   671→/* 查询栏内表单字段间距：恢复 element-plus 默认（form-create 全局样式会把 el-form-item margin-bottom 覆盖为 0，
+   672→   导致 PAGE 页面（form-create 渲染）里查询栏输入框贴底；视图页面不受影响） */
+   673→.search-card :deep(.el-form-item) {
+   674→  margin-bottom: 18px;
+   675→}
+   676→.search-card :deep(.el-card__body) {
+   677→  padding-bottom: 0;
+   678→}
+   679→
+   680→/* 表格卡片 - 占满剩余空间 */
+   681→.table-card {
+   682→  flex: 1;
+   683→  display: flex;
+   684→  flex-direction: column;
+   685→  overflow: hidden;
+   686→}
+   687→.table-card :deep(.el-card__body) {
+   688→  flex: 1;
+   689→  display: flex;
+   690→  flex-direction: column;
+   691→  overflow: hidden;
+   692→  /* 分页栏贴底：去掉默认 padding-bottom（20px），与分页栏 margin-top: 0 对称 */
+   693→  padding-bottom: 0;
+   694→}
+   695→
+   696→/* 工具栏 - 固定 */
+   697→.toolbar {
+   698→  flex-shrink: 0;
+   699→  margin-bottom: 12px;
+   700→  display: flex;
+   701→  align-items: center;
+   702→  gap: 8px;
+   703→}
+   704→
+   705→/* 查询工具栏图标按钮 */
+   706→.toolbar-buttons {
+   707→  display: flex;
+   708→  align-items: center;
+   709→  gap: 4px;
+   710→  margin-left: auto;
+   711→}
+   712→.toolbar-buttons .el-button.is-circle {
+   713→  padding: 5px;
+   714→}
+   715→
+   716→/* 表格数据区域 - 滚动 */
+   717→.table-wrapper {
+   718→  flex: 1;
+   719→  overflow: hidden;
+   720→}
+   721→.table-wrapper :deep(.el-table) {
+   722→  height: 100% !important;
+   723→}
+   724→.table-wrapper :deep(.el-table__body-wrapper) {
+   725→  overflow-y: auto;
+   726→}
+   727→
+   728→/* 分页栏：高度与表格行高一致（default 40px / small 32px），分页组件垂直居中 */
+   729→.pagination-bar {
+   730→  flex-shrink: 0;
+   731→  margin-top: 0;
+   732→  display: flex;
+   733→  justify-content: flex-end;
+   734→  align-items: center;
+   735→  min-height: 40px;
+   736→  padding: 0 2px;
+   737→  box-sizing: border-box;
+   738→}
+   739→.search-table.is-small .pagination-bar {
+   740→  min-height: 32px;
+   741→}
+   742→
+   743→/* 操作列文字按钮紧凑样式 */
+   744→.action-buttons .el-button {
+   745→  margin-left: 0;
+   746→  padding: 4px 6px;
+   747→}
+   748→.action-buttons .el-button + .el-button {
+   749→  margin-left: 0;
+   750→}
+   751→/* 操作列图标按钮：空心描边，默认无底色（hover 时才有反馈填充） */
+   752→.action-buttons .el-button.is-plain.is-circle {
+   753→  --el-button-bg-color: transparent;
+   754→}
+   755→.action-buttons .el-button.is-plain.is-circle:hover {
+   756→  --el-button-hover-bg-color: var(--el-color-primary-light-8);
+   757→}
+   758→/* 表单弹窗内容区：配置 dialogHeight 时固定高度、超出滚动 */
+   759→.st-dialog-body {
+   760→  overflow-y: auto;
+   761→}
+   762→
+   763→/* 表单弹窗内容区：让 form-create 的根节点与 dialog body 使用同一条水平边界，
+   764→   避免不同表单规则/全局样式造成左右留白不一致。 */
+   765→.st-dialog-body :deep(.form-create) {
+   766→  width: 100%;
+   767→  margin: 0;
+   768→  padding: 0;
+   769→  box-sizing: border-box;
+   770→}
+   771→.st-dialog-body :deep(.el-form) {
+   772→  width: 100%;
+   773→  margin: 0;
+   774→}
+   775→.st-dialog-body :deep(.el-form-item) {
+   776→  margin-left: 0;
+   777→  margin-right: 0;
+   778→}
+   779→</style>
+   780→

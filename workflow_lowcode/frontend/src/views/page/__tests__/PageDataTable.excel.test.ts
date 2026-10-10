@@ -63,9 +63,13 @@ vi.mock('@/components/business/SearchTable.vue', () => {
       }
       onMounted(run)
       expose({ fetchList: run })
-      // 渲染默认插槽（工具栏按钮挂载点）：渲染函数中必须显式调用 slot 函数，<slot> DOM 元素不是出口
+      // 渲染默认插槽（批量操作条挂载点）+ toolbar-right 插槽（Task UI-fix：Excel 导入导出按钮挂载点）
+      // 渲染函数中必须显式调用 slot 函数，<slot> DOM 元素不是出口
       return () =>
-        h('div', { class: 'search-table-stub' }, [h('div', { class: 'stub-toolbar-slot' }, slots.default?.())])
+        h('div', { class: 'search-table-stub' }, [
+          h('div', { class: 'stub-toolbar-slot' }, slots.default?.()),
+          h('div', { class: 'stub-toolbar-right-slot' }, slots['toolbar-right']?.()),
+        ])
     },
   })
   return { default: SearchTableStub }

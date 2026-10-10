@@ -27,8 +27,19 @@
     @selection-change="handleSelectionChange"
     @sort-change="handleSortChange"
   >
-    <!-- 工具栏：Excel 导入导出（Task 5-b，能力位缺省隐藏）+ 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+    <!-- 工具栏：批量操作条（Task ⑤）：选中行后浮出在左侧；Excel 导入导出（Task UI-fix）移至工具栏右侧低频区 -->
     <template #default>
+      <TableBatchBar
+        v-if="batchEnabled && selectedRows.length > 0"
+        :count="selectedRows.length"
+        :deletable="batchDeleteOn"
+        :deleting="batchDeleting"
+        @batch-delete="handleBatchDelete"
+        @clear="clearSelection"
+      />
+    </template>
+    <!-- 工具栏右侧（Task UI-fix）：Excel 导入导出按钮靠右，与左侧新增等高频操作分离 -->
+    <template #toolbar-right>
       <el-button
         v-if="excelExportOn"
         class="excel-export-btn"
@@ -42,14 +53,6 @@
         :icon="Upload"
         @click="excelImportVisible = true"
       >导入 Excel</el-button>
-      <TableBatchBar
-        v-if="batchEnabled && selectedRows.length > 0"
-        :count="selectedRows.length"
-        :deletable="batchDeleteOn"
-        :deleting="batchDeleting"
-        @batch-delete="handleBatchDelete"
-        @clear="clearSelection"
-      />
     </template>
   </SearchTable>
 

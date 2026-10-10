@@ -128,6 +128,10 @@
         >
           新增
         </el-button>
+        <!-- 工具栏右侧插槽（Task UI-fix）：Excel 导入导出等低频操作靠右，与左侧高频操作分离 -->
+        <div v-if="$slots['toolbar-right']" class="toolbar-right-slot">
+          <slot name="toolbar-right" />
+        </div>
       </div>
 
       <div class="table-wrapper">
@@ -726,6 +730,18 @@ function getList() {
 }
 .toolbar-buttons .el-button.is-circle {
   padding: 5px;
+}
+
+/* 表格工具栏右侧插槽（Task UI-fix）：margin-left:auto 推到行尾，Excel 导入导出等低频操作靠右 */
+.toolbar-right-slot {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 右侧插槽内按钮去掉相邻 el-button 默认 margin-left，统一用 gap 控制间距 */
+.toolbar-right-slot .el-button + .el-button {
+  margin-left: 0;
 }
 
 /* 表格数据区域 - 滚动 */

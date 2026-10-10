@@ -49,8 +49,9 @@
                   <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
                 </el-form-item>
               </div>
-              <!-- 表格增强（Task ⑤ 配置入口）：表头筛选/批量操作/批量删除；列级汇总在每列「高级配置」→ 汇总下拉 -->
-              <div v-if="effectiveListMode === 'table'" class="card-quick-row">
+              <!-- 表格增强（Task ⑤ 配置入口）：表头筛选/批量操作/批量删除；列级汇总在每列「高级配置」→ 汇总下拉
+                   布局（Task UI--fix）：3 列网格两行排列（原先 6 项 nowrap 挤一行过于拥挤） -->
+              <div v-if="effectiveListMode === 'table'" class="table-enhance-grid">
                 <el-form-item>
                   <template #label>
                     <span class="label-with-tip">
@@ -691,6 +692,31 @@ function handleConfirm() {
 .card-quick-row .el-form-item__content {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* 表格增强配置区（Task UI-fix）：3 列网格两行排列，替代原 6 项 nowrap 单行拥挤布局
+   第一行：表头筛选 / 批量操作 / 批量删除；第二行：Excel 导出 / Excel 导入 / 汇总行
+   label 样式与 card-quick-row 同源（按内容宽、左对齐、不换行） */
+.table-enhance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 16px;
+  align-items: center;
+}
+.table-enhance-grid .el-form-item {
+  margin-bottom: 0;
+  min-width: 0;
+  --el-form-label-width: max-content;
+}
+.table-enhance-grid :deep(.el-form-item__label) {
+  white-space: nowrap;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+}
+/* 窄弹窗降级：两列布局避免 label 与开关挤压换行错位 */
+@media (max-width: 720px) {
+  .table-enhance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 /* 分组字段下拉：紧凑宽度（随容器可再收缩） */
 .card-quick-row .qi-select {

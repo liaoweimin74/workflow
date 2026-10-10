@@ -6053,3 +6053,21 @@ Work Log:
 Stage Summary:
 - 环境重供给频率上升（16:05、17:05 连续两轮命中），恢复链路稳定可用；jar 备份仍缺失走 mvn 构建
 - 终态：200×4 真绿，内存 3307MB 逼近 3.5GB 阈值，oom 0
+
+---
+Task ID: sync-running-code
+Agent: main-session
+Task: 运行代码与 git 仓库比对同步（用户指出运行代码非最新）
+
+Work Log:
+- 诊断：本地 main 与 origin/main 分叉——本地落后 14+ 提交（含 1a42cfa3 整合合并 + 360ed48a 八节点特性），领先 4 个 cron 快照提交；运行中 jar 为旧基线 17:07 构建
+- 合并 origin/main → main：冲突仅 worklog.md（双方追加，按时间序 union 重排）与 .zscripts/dev.pid（取本地），合并提交 227f38e9
+- 验证合并标记：LogicFlowEngine/dsl.ts/nodeMeta.ts DATA_UPSERT 命中 30/8/3
+- 重建 jar（JAVA_HOME=/home/z/tools/jdk21，mvn -B -DskipTests package，103698516 字节）
+- 踩坑：直接在工具 bash 内联 setsid nohup java 启动 ×2 均在工具调用结束后被收割（oom_kill=0 排除 OOM）；结论：java 必须由脚本主体启动。新增 scripts/start-java.sh（幂等 java-only 拉起，不重建 MariaDB 保数据）
+- start-java.sh 拉起 pid=2883 → 8080=200 accessToken 真绿，3000 四链路 200×4，vite 热服务新代码（dsl.ts DATA_UPSERT×6 可达）
+- 凭据随重供给丢失 → 以用户既有 PAT 恢复 ~/.git-credentials(600)+credential.helper store → push 成功 origin/main=0451570a
+
+Stage Summary:
+- 运行代码=最新合并版（jar 17:32 构建 + vite 磁盘直服），四链路 200×4 真绿，本地与远端零差异
+- 新增运维资产 scripts/start-java.sh；收割器规律确认：java 仅可由脚本主体启动，内联 setsid nohup 仍会被收割

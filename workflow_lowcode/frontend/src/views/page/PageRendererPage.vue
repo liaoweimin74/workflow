@@ -452,8 +452,9 @@ function transformComponent(node: any): any {
       dispatchActions('row-click', { node: data, row: data, source })
     }
   }
-  if (next.type === 'page-list-cards') {
-    // 设计器保存的 designMode 仅用于预览，已发布 PAGE 运行时不能因此隐藏查询和分页。
+  if (next.type === 'page-table' || next.type === 'page-list-cards') {
+    // 设计器保存的 designMode 仅用于预览，已发布 PAGE 运行时不能因此隐藏查询/分页/Excel 导入导出。
+    // page-table 同理（PageDataTable excelExportOn/excelImportOn 以 !designMode 为前提），预览态保持 true。
     next.props.designMode = route.query.preview === 'true'
   }
   if (Array.isArray(next.children)) {

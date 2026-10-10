@@ -86,6 +86,28 @@
                 </el-form-item>
                 <el-form-item>
                   <template #label>
+                    <span class="label-with-tip">
+                      Excel 导出
+                      <el-tooltip content="开启后运行页工具栏出现「导出 Excel」按钮，按当前查询条件/排序/筛选导出 xlsx（设计器预览不显示）" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.excelExport" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      Excel 导入
+                      <el-tooltip content="开启后运行页工具栏出现「导入 Excel」按钮，上传 .xlsx 按列名回填写入，单行失败不影响其他行（设计器预览不显示）" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.excelImport" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
                     <span class="label-with-tip summary-tip">
                       汇总行
                       <el-tooltip content="在下方列清单中点击列的「高级配置」→ 汇总下拉选择聚合方式（求和/平均/最大/最小/计数）" placement="top">
@@ -434,6 +456,10 @@ const tableData = reactive({
   batch: false,
   /** 批量删除（batch 启用时生效，缺省开启） */
   batchDelete: true,
+  /** Excel 导出（Task 5-b，table 模式）：运行页工具栏「导出 Excel」能力位，缺省关闭 */
+  excelExport: false,
+  /** Excel 导入（Task 5-b，table 模式）：运行页工具栏「导入 Excel」能力位，缺省关闭 */
+  excelImport: false,
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -503,6 +529,9 @@ function initTableData() {
   tableData.headerFilter = bp.headerFilter?.enabled === true
   tableData.batch = bp.batch?.enabled === true
   tableData.batchDelete = bp.batch?.delete !== false
+  // Excel 导入导出（Task 5-b）：回填能力位，缺省关闭
+  tableData.excelExport = bp.excelExport?.enabled === true
+  tableData.excelImport = bp.excelImport?.enabled === true
 }
 
 // ==================== 打开/回填 ====================
@@ -588,6 +617,9 @@ function handleConfirm() {
     if (effectiveListMode.value === 'table') {
       result.headerFilter = { enabled: tableData.headerFilter }
       result.batch = { enabled: tableData.batch, delete: tableData.batchDelete }
+      // Excel 导入导出（Task 5-b）：能力位写入 props（PageDataTable excelExportOn/excelImportOn 消费）
+      result.excelExport = { enabled: tableData.excelExport }
+      result.excelImport = { enabled: tableData.excelImport }
     }
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination

@@ -288,7 +288,7 @@ describe('DsBindingConfigDialog — table-mode 表格增强（Task ⑤ 配置入
     wrapper.unmount()
   })
 
-  it('表格增强仅 table 模式输出：card 模式 confirm 不含 headerFilter/batch 键', async () => {
+  it('表格增强仅 table 模式输出：card 模式 confirm 不含 headerFilter/batch/Excel 键', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: { columns: [{ key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true }] },
     })
@@ -309,6 +309,8 @@ describe('DsBindingConfigDialog — table-mode 表格增强（Task ⑤ 配置入
     const result = (wrapper.emitted('confirm') as any[])[0][0]
     expect(result.headerFilter).toBeUndefined()
     expect(result.batch).toBeUndefined()
+    expect(result.excelExport).toBeUndefined()
+    expect(result.excelImport).toBeUndefined()
     // card 专属字段正常输出
     expect(result.groupBy).toBe('')
     wrapper.unmount()
@@ -327,6 +329,43 @@ describe('DsBindingConfigDialog — table-mode 表格增强（Task ⑤ 配置入
     const result = (wrapper.emitted('confirm') as any[])[0][0]
     expect(result.columns[0].aggregate).toBe('sum')
     expect(result.columns[1].aggregate).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+// ----- Excel 导入导出配置入口（Task 5-b）：能力位缺省关闭/回填保存/card 模式排除 -----
+describe('DsBindingConfigDialog — table-mode Excel 导入导出（Task 5-b 配置入口）', () => {
+  it('未声明时缺省关闭：confirm 输出 excelExport={enabled:false} / excelImport={enabled:false}', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1' })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.excelExport).toEqual({ enabled: false })
+    expect(result.excelImport).toEqual({ enabled: false })
+    wrapper.unmount()
+  })
+
+  it('回填并保存 Excel 能力位：excelExport / excelImport enabled 透传', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({
+      dataSourceId: 'ds1',
+      excelExport: { enabled: true },
+      excelImport: { enabled: true },
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.excelExport).toBe(true)
+    expect(vm.tableData.excelImport).toBe(true)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.excelExport).toEqual({ enabled: true })
+    expect(result.excelImport).toEqual({ enabled: true })
     wrapper.unmount()
   })
 })

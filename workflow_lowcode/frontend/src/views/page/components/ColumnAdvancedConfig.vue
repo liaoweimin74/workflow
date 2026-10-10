@@ -84,6 +84,19 @@
               <el-button type="primary" plain size="small" @click="addAction">+ 增加动作</el-button>
             </div>
           </el-form-item>
+
+          <!-- 汇总（Task ⑤，仅表格模式）：置于表单末尾，避免插入中部改变 nth-of-type 栅格规则布局 -->
+          <el-form-item v-if="mode !== 'card'" label="汇总">
+            <el-select
+              :model-value="col?.aggregate"
+              clearable
+              placeholder="无（不汇总）"
+              @change="(v: string) => patch({ aggregate: (v || undefined) as any })"
+            >
+              <el-option v-for="o in aggregateOptions" :key="o.value" :label="o.label" :value="o.value" />
+            </el-select>
+            <span class="aggregate-tip">表格底部汇总行按当前页数据统计；数值列支持求和/平均/最大/最小，全类型可计数。</span>
+          </el-form-item>
         </el-form>
       </el-tab-pane>
 
@@ -166,6 +179,7 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import type { ColumnViewConfig } from '../ViewDesigner.vue'
 import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
+import { aggregateOptionsOf } from './tableEnhance'
 import StyleRuleEditor from './StyleRuleEditor.vue'
 import StyleScriptInput from './StyleScriptInput.vue'
 
@@ -188,6 +202,8 @@ const props = defineProps<{
   column: MergedColumnConfig | null
   /** 模式：table 只显示「基础设置」；card 显示「基础设置」+「卡片配置」双页签 */
   mode?: 'table' | 'card'
+  /** 列类型（数据源 metadata columnType）：数值列开放 sum/avg/max/min，其余仅 count；自定义列缺省仅 count */
+  columnType?: string
 }>()
 
 const emit = defineEmits<{
@@ -197,6 +213,9 @@ const emit = defineEmits<{
 
 /** 当前激活页签（表格时固定基础设置） */
 const activeTab = computed(() => (props.mode === 'card' ? 'card' : 'base'))
+
+/** 汇总聚合选项：数值列全量（sum/avg/max/min/count），其余列仅计数 */
+const aggregateOptions = computed(() => aggregateOptionsOf(props.columnType))
 
 /** 编辑副本（保存时写回，避免直接改 props） */
 const col = ref<MergedColumnConfig | null>(null)
@@ -369,6 +388,13 @@ function handleClosed() {
   margin-left: 4px;
   color: #909399;
   cursor: help;
+}
+.aggregate-tip {
+  display: block;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4;
+  margin-top: 2px;
 }
 .cellclick-editor {
   width: 100%;

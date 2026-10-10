@@ -85,6 +85,14 @@
               </el-radio-group>
             </el-form-item>
           </el-form>
+          <!-- 表头筛选（Task ⑤，仅表格显示方式生效） -->
+          <el-divider content-position="left">表头筛选</el-divider>
+          <el-form label-width="100px" size="default">
+            <el-form-item label="启用筛选">
+              <el-switch :model-value="headerFilterOn" @update:model-value="headerFilterOn = $event as boolean" />
+              <span class="form-tip">每列表头显示漏斗图标：文本列多选值、数值列区间、日期列区间；筛选走服务端查询，重置回第一页。仅表格显示方式生效。</span>
+            </el-form-item>
+          </el-form>
           <!-- 分页配置（视图级） -->
           <el-divider content-position="left">分页</el-divider>
           <el-form label-width="100px" size="default">
@@ -118,6 +126,18 @@
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">
           <ActionsConfig v-model="schema.actions" v-model:detail="schema.detail" />
+          <!-- 批量操作（Task ⑤，仅表格显示方式生效） -->
+          <el-divider content-position="left">批量操作</el-divider>
+          <el-form label-width="100px" size="default">
+            <el-form-item label="启用批量">
+              <el-switch :model-value="batchOn" @update:model-value="batchOn = $event as boolean" />
+              <span class="form-tip">表格首列显示多选框（支持全选）；选中后顶部浮出批量操作条，已选行经 selectedRows 暴露，可挂接批量动作。仅表格显示方式生效。</span>
+            </el-form-item>
+            <el-form-item label="批量删除">
+              <el-switch :model-value="batchDeleteOn" :disabled="!batchOn" @update:model-value="batchDeleteOn = $event as boolean" />
+              <span class="form-tip">批量操作条提供批量删除（逐行调用单行删除同款接口，带确认）与清空选择。</span>
+            </el-form-item>
+          </el-form>
         </el-tab-pane>
         <el-tab-pane label="事件" name="events">
           <EventsConfig v-model="schema.events" />
@@ -229,6 +249,8 @@ export interface ColumnViewConfig {
   style?: import('@/utils/fieldStyle').FieldStyle
   /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
   onCellClick?: { actions: any[] }
+  /** 汇总行聚合（Task ⑤）：sum/avg/count/max/min；数值列开放 sum/avg/max/min，全类型可 count；按当前页数据统计 */
+  aggregate?: 'sum' | 'avg' | 'count' | 'max' | 'min'
   /** 自定义计算列标记（key 非数据源字段；由"添加自定义列"写入，后端编译时跳过引用列校验） */
   custom?: boolean
   /** 自定义列隐藏标记（取消勾选展示时置 true：保留列定义与高级配置，仅不在表格渲染） */
@@ -277,6 +299,10 @@ export interface ViewSchema {
   display?: 'table' | 'card'
   /** 数据源静态筛选（可选；运行时与用户搜索条件 AND 合并） */
   filter?: { logic: 'AND' | 'OR'; conditions: Array<{ column: string; op: string; source: 'fixed'; value: string }> }
+  /** 表头筛选（Task ⑤，可选）：每列漏斗图标按列筛选（文本=多选/数值=区间/日期=区间），走服务端 filter 链；缺省关闭 */
+  headerFilter?: { enabled?: boolean }
+  /** 批量操作（Task ⑤，可选）：首列多选框 + 批量操作条（批量删除/清空选择；selectedRows 暴露为动作挂载点）；缺省关闭 */
+  batch?: { enabled?: boolean; delete?: boolean }
 }
 
 const route = useRoute()
@@ -416,6 +442,31 @@ const filterableColumnKeys = computed(() => new Set(filterableColumns.value.map(
 const sortableCandidates = computed(() =>
   viewColumns.value.filter((c) => c.sortable).map((c) => ({ key: c.key, label: c.label })),
 )
+
+// ========== 表格增强开关（Task ⑤：表头筛选 + 批量操作；未开启时不写入 schema，保持零回归） ==========
+/** 表头筛选开关：开启写入 schema.headerFilter={enabled:true}，关闭移除字段 */
+const headerFilterOn = computed<boolean>({
+  get: () => schema.headerFilter?.enabled === true,
+  set: (v: boolean) => {
+    schema.headerFilter = v ? { enabled: true } : undefined
+  },
+})
+
+/** 批量操作开关：开启写入 schema.batch={enabled:true, delete:...}，关闭移除字段 */
+const batchOn = computed<boolean>({
+  get: () => schema.batch?.enabled === true,
+  set: (v: boolean) => {
+    schema.batch = v ? { enabled: true, delete: schema.batch?.delete ?? true } : undefined
+  },
+})
+
+/** 批量删除开关（随批量操作启用；关闭仅隐藏批量删除按钮，保留多选与清空选择） */
+const batchDeleteOn = computed<boolean>({
+  get: () => schema.batch?.delete !== false,
+  set: (v: boolean) => {
+    if (schema.batch) schema.batch = { ...schema.batch, delete: v }
+  },
+})
 
 /** 数据源筛选可用列候选（所有可展示列，供 FilterConfig 使用） */
 const filterableColumnsForFilter = computed(() =>

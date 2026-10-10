@@ -57,11 +57,26 @@
          :table-size="tableSize"
          :style-rule="tableStyle"
         :max-visible-buttons="20"
+        :show-selection="batchEnabled"
+        :show-summary="summaryEnabled"
+        :summary-method="summaryMethod"
         @row-click="handleRowClick"
         @cell-click="handleCellClick"
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
-      />
+      >
+        <!-- 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+        <template #default>
+          <TableBatchBar
+            v-if="batchEnabled && selectedRows.length > 0"
+            :count="selectedRows.length"
+            :deletable="batchDeleteOn"
+            :deleting="batchDeleting"
+            @batch-delete="handleBatchDelete"
+            @clear="clearSelection"
+          />
+        </template>
+      </SearchTable>
       <ListCards
         v-else-if="ready && displayMode === 'card'"
         ref="cardsRef"
@@ -184,7 +199,7 @@
 // 路由组件 name 与路由 name 一致，供 AdminLayout keep-alive include 匹配缓存
 defineOptions({ name: 'PageRenderer' })
 
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -202,6 +217,18 @@ import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import { buildCellRender, renderCellContent, type CellContentConfig } from '@/utils/tableColumnRenderer'
+import TableHeaderFilter from './components/TableHeaderFilter.vue'
+import TableBatchBar from './components/TableBatchBar.vue'
+import {
+  buildHeaderFilterCondition,
+  buildSummaryMethod,
+  extractDistinctValues,
+  featureEnabled,
+  headerFilterKindOf,
+  selectedRowIds,
+  type HeaderFilterValue,
+  type SummaryColumnSpec,
+} from './components/tableEnhance'
 import type { CardStyle } from '@/components/business/ListCards.types'
 
 const route = useRoute()
@@ -222,6 +249,24 @@ const searchTableRef = ref<InstanceType<typeof SearchTable> | null>(null)
 const cardsRef = ref<InstanceType<typeof ListCards> | null>(null)
 /** 当前选中行（selection-change 事件） */
 const selectedRows = ref<any[]>([])
+
+// ==================== 表格增强（Task ⑤：汇总行 + 表头筛选 + 批量操作） ====================
+/** 最近一次取数的行（汇总行统计 + 表头筛选候选；BizDataVO 形态 {id, data:{...}}） */
+const lastRows = ref<any[]>([])
+/** 汇总列声明（原始 schema columns[].aggregate；编译产物 columns 不含该字段，从顶层原始 columns 读取） */
+const summarySpecs = ref<SummaryColumnSpec[]>([])
+const summaryEnabled = computed(() => summarySpecs.value.length > 0)
+const summaryMethod = computed(() => buildSummaryMethod(summarySpecs.value))
+/** 表头筛选开关（原始 schema headerFilter.enabled） */
+const headerFilterOn = ref(false)
+/** 列 → 筛选值状态（运行态，不持久化） */
+const headerFilters = ref<Record<string, HeaderFilterValue>>({})
+/** 批量操作开关（原始 schema batch） */
+const batchEnabled = ref(false)
+/** 批量删除可见：批量启用 且 数据源可写且绑定表单（走 bizDataApi.remove 删除链路） */
+const batchDeleteOn = computed(() => batchEnabled.value && batchDeleteFlag.value && !isReadonly.value && !!boundFormKey.value)
+const batchDeleteFlag = ref(true)
+const batchDeleting = ref(false)
 
 // ========== 数据源协议（dataSourceId → metadata/类型缓存，双轨渲染依据） ==========
 /** 绑定数据源 metadata（列 + 可写标记）；null=遗留 formKey 页未绑定数据源 */
@@ -427,6 +472,16 @@ function parseSchema(schema: string): boolean {
     }
     const tableRule = rule.find((r) => r.type === 'table')
     tableColumns.value = (tableRule?.props?.columns || []) as CompiledColumn[]
+    // 表格增强（Task ⑤）：从顶层原始 schema 读取（ViewCompiler 编译产物不含这些字段，
+    // mergeCompiled 保留原始字段，预览/发布后均可读；未配置时全部关闭 = 现状行为）
+    const rawColumns: any[] = Array.isArray(parsed.columns) ? parsed.columns : []
+    summarySpecs.value = rawColumns
+      .filter((c: any) => c && !c.hidden && c.aggregate)
+      .map((c: any) => ({ key: c.key, aggregate: c.aggregate }))
+    headerFilterOn.value = featureEnabled(parsed.headerFilter)
+    headerFilters.value = {}
+    batchEnabled.value = featureEnabled(parsed.batch)
+    batchDeleteFlag.value = typeof parsed.batch === 'boolean' ? true : parsed.batch?.delete !== false
     tableStyle.value = tableRule?.props?.style as CardStyle | undefined
     cardStyle.value = tableRule?.props?.cardStyle as CardStyle | undefined
     const actionsRule = rule.find((r) => r.type === '__page_actions')
@@ -456,6 +511,11 @@ function buildFilter(params: Record<string, any>): string | undefined {
     else if (r.matchType === 'range') conditions.push({ column: r.field, op: 'range', value: v })
     else conditions.push({ column: r.field, op: 'eq', value: v })
   }
+  // 表头筛选条件（Task ⑤：漏斗按列筛选；多选→in / 区间→range；与查询条件 AND 合并）
+  for (const [hfKey, hfValue] of Object.entries(headerFilters.value)) {
+    const cond = buildHeaderFilterCondition(hfKey, hfValue)
+    if (cond) conditions.push(cond as { column: string; op: string; value: any })
+  }
   if (!conditions.length) return undefined
   return JSON.stringify({ logic: 'AND', conditions })
 }
@@ -473,6 +533,8 @@ const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; 
   if (filter) p.filter = filter
   const res = await pageApi.queryPageData(pageKey.value, p)
   const data = res.data as any
+  // 最近一次取数的行：汇总行统计 + 表头筛选文本候选读取
+  lastRows.value = data.records || []
   triggerEvents('refresh', 'table', { row: null, params: route.query || {} })
   return { rows: data.records || [], total: data.total || 0 }
 }
@@ -576,9 +638,10 @@ const actionButtonsConfig = computed<{ key: string; label: string; placement: 't
 })
 
 /** 列 → SearchTable TableColumn：render 经公共模块承载 contentType/contentValue/styleExpr/className。
- * 排序能力由数据源 metadata 声明（方案 A：视图零配置），schema 残留 sortable 忽略。 */
-const searchTableColumns = computed<TableColumn[]>(() =>
-  tableColumns.value.map((c) => ({
+ * 排序能力由数据源 metadata 声明（方案 A：视图零配置），schema 残留 sortable 忽略。
+ * 表头筛选开启时为可筛列注入 headerRender（漏斗图标）。 */
+const searchTableColumns = computed<TableColumn[]>(() => {
+  const cols = tableColumns.value.map((c) => ({
     prop: c.prop,
     label: c.label,
     minWidth: c.minWidth,
@@ -600,8 +663,60 @@ const searchTableColumns = computed<TableColumn[]>(() =>
       styleExpr: c.styleExpr,
       style: c.style,
     }),
-  })),
-)
+  }))
+  // 表头筛选（Task ⑤）：headerFilter 开启时为可筛列注入 headerRender；未配置时与现状一致
+  if (!headerFilterOn.value) return cols
+  return cols.map((col) => {
+    const meta = headerFilterMetaOf(col.prop)
+    if (!meta) return col
+    return {
+      ...col,
+      headerRender: () =>
+        h(TableHeaderFilter, {
+          columnKey: meta.key,
+          label: meta.label,
+          kind: meta.kind,
+          ...(meta.dateType ? { dateType: meta.dateType } : {}),
+          ...(meta.loadOptions ? { loadOptions: meta.loadOptions } : {}),
+          getValue: () => headerFilters.value[meta.key],
+          onApply: (payload: { key: string; value: HeaderFilterValue | null }) => applyHeaderFilter(payload.key, payload.value),
+        }),
+    }
+  })
+})
+
+/** 表头筛选列元信息：形态按数据源 metadata columnType（缺省文本多选）；自定义计算列不在服务端白名单，不可筛 */
+function headerFilterMetaOf(prop: string | undefined) {
+  if (!prop) return null
+  const compiled = tableColumns.value.find((c) => c.prop === prop)
+  if (compiled && (compiled as any).custom) return null
+  const meta = dataSourceMeta.value?.columns?.find((m) => m.key === prop)
+  const kind = headerFilterKindOf(meta?.columnType)
+  if (kind === 'text') {
+    return { key: prop, label: compiled?.label || prop, kind, loadOptions: () => headerTextOptionsFor(prop) }
+  }
+  if (kind === 'number') return { key: prop, label: compiled?.label || prop, kind }
+  return {
+    key: prop,
+    label: compiled?.label || prop,
+    kind,
+    dateType: (meta?.columnType || '').toUpperCase() === 'DATE' ? 'daterange' as const : 'datetimerange' as const,
+  }
+}
+
+/** 文本多选候选：当前页数据去重值（每次打开弹层惰性读取） */
+function headerTextOptionsFor(key: string): { label: string; value: any }[] {
+  return extractDistinctValues(lastRows.value, key).map((v) => ({ label: String(v), value: v }))
+}
+
+/** 应用/清空某列表头筛选：写回状态 → 重置第一页并按新条件取数 */
+function applyHeaderFilter(key: string, value: HeaderFilterValue | null) {
+  const next = { ...headerFilters.value }
+  if (value) next[key] = value
+  else delete next[key]
+  headerFilters.value = next
+  searchTableRef.value?.setQuery({}, true)
+}
 
 /** 工具栏按钮（placement=toolbar）→ SearchTable ToolbarButton：button=普通按钮+图标+文字，text=文本按钮+图标，icon=圆形图标按钮 */
 const searchTableToolbarButtons = computed<ToolbarButton[]>(() =>
@@ -959,6 +1074,37 @@ async function handleDelete(row?: any) {
   } catch {
     // http 拦截器已弹出错误消息
   }
+}
+
+// ========== 批量删除 / 清空选择（Task ⑤） ==========
+/** 批量删除：确认后逐行调用单行删除同款 API（bizDataApi.remove），完成后清空选择并刷新 */
+async function handleBatchDelete() {
+  const formKey = boundFormKey.value
+  const rows = selectedRows.value
+  if (!rows.length || !formKey) return
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 条记录吗？`, '批量删除', { type: 'warning' })
+  } catch {
+    return
+  }
+  batchDeleting.value = true
+  try {
+    const ids = selectedRowIds(rows)
+    await Promise.all(ids.map((id: any) => bizDataApi.remove(formKey, id)))
+    ElMessage.success(`已删除 ${ids.length} 条记录`)
+    selectedRows.value = []
+    searchTableRef.value?.clearSelection()
+    searchTableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+/** 清空行选择（批量操作条「清空选择」按钮） */
+function clearSelection() {
+  searchTableRef.value?.clearSelection()
 }
 
 // ========== 导出 ==========

@@ -131,7 +131,7 @@
       </div>
 
       <div class="table-wrapper">
-       <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" :row-class-name="rowClassName" :row-style="rowStyle" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
+       <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" :row-class-name="rowClassName" :row-style="rowStyle" :show-summary="showSummary" :summary-method="summaryMethod" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
         <el-table-column v-if="props.showSelection" type="selection" width="42" align="center" fixed="left" />
         <el-table-column
           v-for="col in columns"
@@ -147,6 +147,9 @@
           :show-overflow-tooltip="col.showOverflowTooltip"
           :class-name="col.cellClassName"
         >
+          <template v-if="col.headerRender" #header>
+            <RenderHeader :render="col.headerRender" :column="col" />
+          </template>
           <template #default="{ row, column, $index }" v-if="col.render">
             <RenderCell :render="col.render" :row="row" :column="column" :index="$index" />
           </template>
@@ -291,6 +294,18 @@ import { resolveStyleRules } from '@/utils/fieldStyle'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import LookupPicker from './LookupPicker.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
+
+/** 承接 TableColumn.headerRender 的小型函数式组件（表头自定义渲染，如漏斗筛选图标） */
+const RenderHeader = defineComponent({
+  name: 'RenderHeader',
+  props: {
+    render: { type: Function as PropType<(column: TableColumn) => unknown>, required: true },
+    column: { type: Object as PropType<TableColumn>, required: true },
+  },
+  setup(props) {
+    return () => props.render(props.column)
+  },
+})
 
 /** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */
 const RenderCell = defineComponent({

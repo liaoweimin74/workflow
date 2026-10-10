@@ -6262,3 +6262,20 @@ Stage Summary:
 - 页面设计器路径三功能配置入口补齐，视图废弃后的能力缺口关闭；schema 契约与 PageDataTable 既有消费完全对齐（{enabled}/{enabled,delete}/aggregate），存量页面不受影响（缺省关闭）
 - 环境注意：本次 E2E 期间发现页面级数据源绑定若未选全局源（refId 空）会静默失败（表格弹窗列候选空+无 metadata 请求）——非本次引入的既有交互问题，建议后续给绑定行加必选校验
 - 测试页面「表格增强E2E」(table-enhance-e2e) 已发布并挂接菜单，可作为三功能演示页保留或后续删除
+
+---
+Task ID: qa-20261010-2320
+Agent: main-session-support（23:05 巡检轮 + 用户答疑）
+Task: 「表格增强E2E」汇总行人员姓名列显示"汇总"文字的成因排查
+
+Work Log:
+- 【巡检 23:05】dump-db OK（workflow=204K v6=40K，已 git 提交）；四链路 200×4 + accessToken 真绿；vite/Java/mariadbd 均单实例；cgroup 2.75GB（<3.5GB），oom_kill=0 —— 全绿无干预
+- 【答疑排查】精读 tableEnhance.ts buildSummaryMethod：汇总行规则=已配置聚合的列显示数值，「汇总」标签固定落在首个未配置聚合的数据列（labelIdx=findIndex(!keys.has(property))）
+- 【证据】23:08 直读 wf_page_def.schema（key=table-enhance-e2e）：仅 code/dept 有 aggregate=count，name（人员姓名）无 → 标签列回退到人员姓名显示"汇总"，行为符合设计、非渲染 bug
+- 【复核】用户 23:13:57 重新保存（updated_at=2026-10-10 15:13:57 UTC）；DB 与运行时 GET /v1/pages/table-enhance-e2e/definition 均已三列 aggregate=count
+- 【用户确认】根因=高级配置弹窗未点「确定」导致未保存；连带核查配置链路读写（DsBindingConfigDialog 回填 ...c 展开 / 保存 L575 透传 / QueryColumnsConfig saveAdvanced→pickAdvanced L498）无丢字段 bug；PAGE 型页面运行时经 page-table 组件 props 直传（PageDataTable summarySpecs 用 c.key??c.prop 双兼容）
+
+Stage Summary:
+- 结论：非代码缺陷，属配置未确认落库；刷新 /page/table-enhance-e2e 后三列均显示计数值、「汇总」文字消失（无未配置列承载标签）
+- UX 改进候选（已向用户提出待确认）：①高级配置弹窗未保存关闭加确认提醒 ②汇总下拉即改即存 ③首列"汇总: 数值"同格标签样式
+- 23:05 巡检轮全绿收口

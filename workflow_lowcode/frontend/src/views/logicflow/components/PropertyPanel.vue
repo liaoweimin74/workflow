@@ -650,6 +650,400 @@
             </template>
           </template>
 
+          <!-- ===== DATA_QUERY ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_QUERY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内），运行期按其动态表查询数据；引擎自动注入租户隔离" />
+              </template>
+              <el-select
+                v-model="dataQueryCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="等值筛选" tip="多条件 AND 连接；列须为该表单业务列，值支持 {{var}} 取上下文" />
+                <el-button size="small" text type="primary" @click="dataQueryCfg.filter.push({ column: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!dataQueryCfg.filter.length" class="rows-empty">无条件：返回该表单全部数据</div>
+              <div v-for="(f, i) in dataQueryCfg.filter" :key="i" class="du-row">
+                <el-input v-model="f.column" size="small" class="du-col" placeholder="列名" />
+                <VarInput
+                  v-model="f.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="dataQueryCfg.filter.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="关键字" tip="可选：对关键字列做模糊匹配" />
+                </template>
+                <el-input v-model="dataQueryCfg.keyword" placeholder="如：张" clearable />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="关键字列" tip="关键字匹配的目标列（须在表单列白名单内）" />
+                </template>
+                <el-input v-model="dataQueryCfg.keywordColumn" placeholder="如：person_name" clearable />
+              </el-form-item>
+            </div>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="行数上限" tip="单次返回行数（1~100，默认 50）；输出 { total, rows }，rows 行含 id 与全部业务列" />
+              </template>
+              <el-input-number v-model="dataQueryCfg.size" :min="1" :max="100" controls-position="right" style="width: 100%" />
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将汇总写入「{{ nodeId }}」：{ total, page, size, rows: [...] }，下游点路径取值（如 {{ nodeId }}.rows[0] 经 KEY 拆包 rows）
+            </div>
+          </template>
+
+          <!-- ===== DATA_INSERT ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_INSERT'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内），运行期向其动态表插入一行；必填校验/JSON 列/日期归一自动处理" />
+              </template>
+              <el-select
+                v-model="dataInsertCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="新增字段" tip="列值对；值支持 {{var}} 取上下文（保留原始类型）或字面量；主键/租户/版本等托管列由平台自动生成" />
+                <el-button size="small" text type="primary" @click="dataInsertCfg.data.push({ column: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!dataInsertCfg.data.length" class="rows-empty">暂无字段</div>
+              <div v-for="(f, i) in dataInsertCfg.data" :key="i" class="du-row">
+                <el-input v-model="f.column" size="small" class="du-col" placeholder="列名" />
+                <VarInput
+                  v-model="f.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="dataInsertCfg.data.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将新行写入「{{ nodeId }}」：{ id, version, data: {...} }，下游取 {{ nodeId }}.id（KEY 拆包）
+            </div>
+          </template>
+
+          <!-- ===== DATA_DELETE ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_DELETE'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内）" />
+              </template>
+              <el-select
+                v-model="dataDeleteCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="删除方式" tip="按 ID：精确删一行（级联子表，行不存在报错）；按条件：批量删除满足条件的行（引擎自动追加租户过滤防跨租户误删，不级联子表）" />
+              </template>
+              <el-radio-group v-model="dataDeleteMode">
+                <el-radio-button value="id">按 ID</el-radio-button>
+                <el-radio-button value="filter">按条件</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="dataDeleteMode === 'id'" required>
+              <template #label>
+                <FieldLabel label="行 ID" tip="要删除的记录 id，支持 {{var}} 取上下文（如上游数据查询产出的行 id）" />
+              </template>
+              <VarInput
+                v-model="dataDeleteCfg.id"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="{{dq_x1.rows}} 中的 id 或字面量"
+              />
+            </el-form-item>
+
+            <template v-else>
+              <div class="rows-block">
+                <div class="rows-head">
+                  <FieldLabel label="删除条件" tip="多条件 AND 连接；至少一个带值条件（防全表删除）；值支持 {{var}}" />
+                  <el-button size="small" text type="primary" @click="dataDeleteCfg.filter?.push({ column: '', op: 'EQ', value: '' })">添加</el-button>
+                </div>
+                <div v-if="!dataDeleteCfg.filter?.length" class="rows-empty du-warn">未配置条件（按 ID 删除请切换删除方式）</div>
+                <div v-for="(c, i) in dataDeleteCfg.filter ?? []" :key="i" class="du-row">
+                  <el-input v-model="c.column" size="small" class="du-col" placeholder="列名" />
+                  <el-select v-model="c.op" size="small" class="du-mode">
+                    <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
+                  </el-select>
+                  <VarInput
+                    v-if="!isNullOp(c.op)"
+                    v-model="c.value"
+                    :variables="variables"
+                    mode="placeholder"
+                    size="small"
+                    class="du-value"
+                    placeholder="值或 {{var}}"
+                  />
+                  <el-button size="small" text type="danger" @click="dataDeleteCfg.filter?.splice(i, 1)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <el-alert type="warning" :closable="false" show-icon class="panel-alert"
+                title="条件删除引擎自动追加 tenant_id = 当前租户（跨租户误删防护）；仅删主表行，不级联子表" />
+            </template>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ deleted: 行数, mode: 'id' | 'filter' }
+            </div>
+          </template>
+
+          <!-- ===== NOTIFY ===== -->
+          <template v-else-if="node.data.nodeType === 'NOTIFY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="模板代码" tip="租户内消息模板代码（须存在，缺失发送失败走异常策略）；模板必填变量缺失会被拒绝" />
+              </template>
+              <el-input v-model="notifyCfg.templateCode" placeholder="如 ORDER_PAID_NOTICE" />
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="接收人 ID" tip="接收用户 ID（数字），支持 {{var}} 取上下文；上限 20 人" />
+                <el-button size="small" text type="primary" @click="notifyCfg.recipientIds.push('')">添加</el-button>
+              </div>
+              <div v-if="!notifyCfg.recipientIds.length" class="rows-empty">暂无接收人</div>
+              <div v-for="(_, i) in notifyCfg.recipientIds" :key="i" class="kv-row">
+                <VarInput
+                  :model-value="notifyCfg.recipientIds[i]"
+                  @update:model-value="notifyCfg.recipientIds[i] = $event"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  placeholder="2 或 {{ownerId}}"
+                />
+                <el-button size="small" text type="danger" @click="notifyCfg.recipientIds.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="模板变量" tip="渲染模板标题/内容的变量对；name 须为字母/数字/下划线，值支持 {{var}}" />
+                <el-button size="small" text type="primary" @click="notifyCfg.variables.push({ name: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!notifyCfg.variables.length" class="rows-empty">暂无变量</div>
+              <div v-for="(v, i) in notifyCfg.variables" :key="i" class="kv-row">
+                <el-input v-model="v.name" size="small" placeholder="变量名" />
+                <VarInput
+                  v-model="v.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="notifyCfg.variables.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="消息类型" tip="PRIVATE 用户私信（默认）/ PUBLIC 公共广播 / SYSTEM 系统公告" />
+                </template>
+                <el-select v-model="notifyCfg.messageType" style="width: 100%">
+                  <el-option label="PRIVATE（私信）" value="PRIVATE" />
+                  <el-option label="PUBLIC（广播）" value="PUBLIC" />
+                  <el-option label="SYSTEM（系统公告）" value="SYSTEM" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="投递渠道" tip="IN_APP 站内信（默认）/ SMS 短信（模板须有对应渠道配置）" />
+                </template>
+                <el-select v-model="notifyCfg.channels" multiple style="width: 100%">
+                  <el-option label="站内信（IN_APP）" value="IN_APP" />
+                  <el-option label="短信（SMS）" value="SMS" />
+                </el-select>
+              </el-form-item>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ sent: true, templateCode, recipients, channels }
+            </div>
+          </template>
+
+          <!-- ===== DELAY ===== -->
+          <template v-else-if="node.data.nodeType === 'DELAY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="等待时长(ms)" tip="同步等待毫秒数（1~60000）：逻辑流在请求线程内执行，超过 1 分钟的延时请改用外部调度方案" />
+              </template>
+              <el-input-number v-model="delayCfg.durationMs" :min="1" :max="60000" :step="500" controls-position="right" style="width: 100%" />
+              <span class="delay-hint">{{ delayHint }}</span>
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ waitedMs: 实际等待毫秒 }
+            </div>
+          </template>
+
+          <!-- ===== TRANSFORM ===== -->
+          <template v-else-if="node.data.nodeType === 'TRANSFORM'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="JSON 模板" tip="合法 JSON（对象/数组）：值位占位符（如 &quot;k&quot;: {{var.path}}）注入变量原始值（对象/数组/数值类型保留；Long 型按平台约定注入为字符串防 JS 精度丢失）；字符串内占位符（如 &quot;共 {{total}} 条&quot;）做文本插值；变量缺失时值位注入 null、插值为空串" />
+              </template>
+              <VarInput
+                v-model="transformCfg.template"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="8"
+                chips
+                class="sql-source"
+                placeholder='{"name": {{formData.person_name}}, "summary": "共 {{total}} 条"}'
+              />
+            </el-form-item>
+            <el-alert
+              v-if="transformPreviewError"
+              type="error"
+              :closable="false"
+              show-icon
+              class="panel-alert"
+              :title="transformPreviewError"
+            />
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将编译后的对象写入「{{ nodeId }}」，下游点路径取子字段
+            </div>
+          </template>
+
+          <!-- ===== AGGREGATE ===== -->
+          <template v-else-if="node.data.nodeType === 'AGGREGATE'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="集合表达式" tip="被聚合的集合变量（元素须为对象），如上游数据查询产出的 {{dq_x1.rows}}" />
+              </template>
+              <VarInput
+                v-model="aggregateCfg.collection"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="{{rows}}"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="聚合算子" tip="可多选：SUM/AVG/MIN/MAX 对字段做数值聚合；COUNT 计数恒输出；纯 COUNT 时字段可省" />
+              </template>
+              <el-checkbox-group v-model="aggregateCfg.ops">
+                <el-checkbox value="SUM">SUM</el-checkbox>
+                <el-checkbox value="AVG">AVG</el-checkbox>
+                <el-checkbox value="COUNT">COUNT</el-checkbox>
+                <el-checkbox value="MIN">MIN</el-checkbox>
+                <el-checkbox value="MAX">MAX</el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="聚合字段" tip="取每个元素对象上的该字段值做数值聚合（非数字会报错）；纯 COUNT 时可留空" />
+                </template>
+                <el-input v-model="aggregateCfg.field" placeholder="如 amount" clearable />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="分组字段（可选）" tip="按该字段值分组后逐组聚合；输出 [{ group, count, sum, … }]；留空输出单层汇总" />
+                </template>
+                <el-input v-model="aggregateCfg.groupBy" placeholder="如 person_name" clearable />
+              </el-form-item>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将汇总写入「{{ nodeId }}」：{ count, sum, avg, … } 或分组列表
+            </div>
+          </template>
+
+          <!-- ===== LLM ===== -->
+          <template v-else-if="node.data.nodeType === 'LLM'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="提示词（Prompt）" tip="用户提示词，支持 {{var}} 取上下文；模型由平台内置网关提供，无需管理 API Key" />
+              </template>
+              <VarInput
+                v-model="llmCfg.prompt"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="6"
+                chips
+                class="sql-source"
+                placeholder="请把以下事由归类为 事假/病假/年假/其他，只输出类别词：{{formData.reason}}"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="系统提示词（可选）" tip="设定模型角色/输出约束，同样支持 {{var}}" />
+              </template>
+              <VarInput
+                v-model="llmCfg.system"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="3"
+                chips
+                class="sql-source"
+                placeholder="你是严谨的分类助手，只输出一个词。"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="温度（可选）" tip="0~2：越小越确定（分类/抽取建议 ≤0.3），越大越发散；留空用平台默认" />
+              </template>
+              <el-input-number v-model="llmCfg.temperature" :min="0" :max="2" :step="0.1" controls-position="right" style="width: 100%" />
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ content: 模型文本 }；模型网关异常走失败分支/异常策略
+            </div>
+          </template>
+
           <!-- ===== SQL_SCRIPT ===== -->
           <template v-else-if="node.data.nodeType === 'SQL_SCRIPT'">
             <el-form-item required>
@@ -745,7 +1139,7 @@
             </div>
             <el-form-item>
               <template #label>
-                <FieldLabel label="异常处理" tip="失败中断：节点异常终止整个流程；忽略继续：记录异常并继续执行后续节点" />
+                <FieldLabel label="异常处理" tip="节点失败时优先走失败分支：从节点底部红色「败」出点连线即可定向到补偿/降级节点（输出不写入，替代全局两档策略）；未连失败分支时按本策略：失败中断 = 节点异常终止整个流程；忽略继续 = 记录异常并继续执行后续节点" />
               </template>
               <el-select v-model="node.data.errorAction" style="width: 100%">
                 <el-option label="失败中断（FAIL_FLOW）" value="FAIL_FLOW" />
@@ -768,8 +1162,9 @@ import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
+import { formApi } from '@/api/form'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type DataQueryNodeConfig, type DataInsertNodeConfig, type DataDeleteNodeConfig, type NotifyNodeConfig, type DelayNodeConfig, type TransformNodeConfig, type AggregateNodeConfig, type LlmNodeConfig, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
@@ -808,7 +1203,10 @@ const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nod
 const hasExecutionMeta = computed(
   () =>
     !!node.value &&
-    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
+    [
+      'HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT',
+      'DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE', 'NOTIFY', 'DELAY', 'TRANSFORM', 'AGGREGATE', 'LLM',
+    ].includes(node.value.data.nodeType)
 )
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
@@ -897,6 +1295,73 @@ const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
 ]
 
 const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
+
+// ===== 数据查询/新增/删除：业务表单清单（懒加载一次，降级手输） =====
+const bizForms = ref<{ key: string; name: string }[]>([])
+const bizFormsLoading = ref(false)
+let bizFormsLoaded = false
+async function loadBizForms(): Promise<void> {
+  if (bizFormsLoaded || bizFormsLoading.value) return
+  bizFormsLoading.value = true
+  try {
+    const res = await formApi.getFormDefinitions({ page: 1, size: 100, type: 'BUSINESS' })
+    const rows = res.data?.rows ?? []
+    bizForms.value = rows.map((f) => ({ key: f.key, name: f.name }))
+    bizFormsLoaded = true
+  } catch {
+    // 降级：下拉为空时 allow-create 手输 key 仍可用
+  } finally {
+    bizFormsLoading.value = false
+  }
+}
+
+const dataQueryCfg = computed(() => ensureConfig<DataQueryNodeConfig>())
+const dataInsertCfg = computed(() => ensureConfig<DataInsertNodeConfig>())
+const dataDeleteCfg = computed(() => ensureConfig<DataDeleteNodeConfig>())
+/** 删除方式视图态：id 非空 → 按 ID，否则按条件（不写回 config，纯 UI 切换） */
+const dataDeleteMode = computed<'id' | 'filter'>({
+  get: () => (String(dataDeleteCfg.value.id ?? '').trim() ? 'id' : 'filter'),
+  set: (mode) => {
+    if (mode === 'filter') dataDeleteCfg.value.id = ''
+    else if (!dataDeleteCfg.value.id) dataDeleteCfg.value.id = ''
+  },
+})
+
+// ===== NOTIFY / DELAY / TRANSFORM / AGGREGATE / LLM =====
+const notifyCfg = computed(() => ensureConfig<NotifyNodeConfig>())
+const delayCfg = computed(() => ensureConfig<DelayNodeConfig>())
+const delayHint = computed(() => {
+  const ms = Number(delayCfg.value?.durationMs ?? 0)
+  if (!ms || ms <= 0) return ''
+  return ms % 1000 === 0 ? `约 ${ms / 1000} 秒` : `约 ${(ms / 1000).toFixed(1)} 秒`
+})
+const transformCfg = computed(() => ensureConfig<TransformNodeConfig>())
+/** TRANSFORM 模板软预检：占位符代换为 1 后须为合法 JSON（与后端发布校验同语义） */
+const transformPreviewError = computed<string | null>(() => {
+  const tpl = String(transformCfg.value?.template ?? '').trim()
+  if (!tpl) return null
+  const normalized = tpl.replace(/\{\{\s*[\w.]+\s*}}/g, '1')
+  try {
+    const parsed = JSON.parse(normalized)
+    if (!parsed || typeof parsed !== 'object') return '模板编译产物须为 JSON 对象或数组'
+    return null
+  } catch {
+    return '模板不是合法 JSON（占位符代换后仍解析失败，请检查括号/引号）'
+  }
+})
+const aggregateCfg = computed(() => ensureConfig<AggregateNodeConfig>())
+const llmCfg = computed(() => ensureConfig<LlmNodeConfig>())
+
+// ===== 数据节点业务表单清单懒加载：节点为数据族时拉取 =====
+watch(
+  () => node.value?.data.nodeType,
+  (type) => {
+    if (type && ['DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE'].includes(type)) {
+      void loadBizForms()
+    }
+  },
+  { immediate: true }
+)
 
 // ===== DATA_UPDATE 目标表/列下拉（取库真实 schema） =====
 // 目标表展示数据库全部表清单（后端已放开前缀白名单，保留表名合法性+存在性校验）；
@@ -1693,6 +2158,14 @@ async function copyNodeId() {
   color: color-mix(in srgb, var(--lf-data) 82%, var(--el-text-color-primary));
   background: color-mix(in srgb, var(--lf-data) 8%, transparent);
   border: 1px dashed color-mix(in srgb, var(--lf-data) 38%, transparent);
+}
+
+/* DELAY 时长换算提示 */
+.delay-hint {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .sql-onerror {

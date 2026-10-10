@@ -30,7 +30,23 @@ public enum NodeType {
     /** 数据更新（纯配置 UPDATE 动态表：SET/ADD/SUB + WHERE，参数绑定防注入，受影响行数写回 resultVar）。 */
     DATA_UPDATE,
     /** SQL 批处理（多条 SQL 按 ; 顺序执行，{{var}} 占位符编译为 JDBC ? 参数绑定，返回执行汇总 Map）。 */
-    SQL_SCRIPT;
+    SQL_SCRIPT,
+    /** 数据查询（按 formKey 租户隔离查询业务表数据：等值筛选 + 关键字，返回分页结果 Map）。 */
+    DATA_QUERY,
+    /** 数据新增（按 formKey 向业务表插入一行，值支持 {{var}} 取上下文，返回含 id 的新行）。 */
+    DATA_INSERT,
+    /** 数据删除（按 id 精确删或按条件删，条件形态自动附加租户过滤，返回删除行数）。 */
+    DATA_DELETE,
+    /** 消息通知（按模板代码发送站内信/短信，模板变量支持 {{var}} 取上下文）。 */
+    NOTIFY,
+    /** 延时（同步等待指定毫秒，1~60000 硬上限，返回实际等待时长）。 */
+    DELAY,
+    /** 数据映射（JSON 模板 {{var.path}} 占位符编译为新对象：值位占位符注入原始值、字符串内插值）。 */
+    TRANSFORM,
+    /** 聚合（对集合做 SUM/AVG/COUNT/MIN/MAX，可按 groupBy 分组，输出汇总 Map 或分组列表）。 */
+    AGGREGATE,
+    /** 大模型调用（平台内置 LLM：prompt/system 支持 {{var}} 插值，返回模型文本）。 */
+    LLM;
 
     @JsonCreator
     public static NodeType fromJson(String value) {

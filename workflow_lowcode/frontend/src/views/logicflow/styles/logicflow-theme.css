@@ -36,6 +36,16 @@
   --lf-subflow: color-mix(in srgb, #14b8a6 82%, var(--el-color-primary));
   /* DATA_UPDATE — 深蓝绿（数据写操作，区别于 SUBFLOW 青绿更沉稳） */
   --lf-data: color-mix(in srgb, #0e7490 85%, var(--el-color-primary));
+  /* 数据查询/新增/删除 — 钉蓝绿（数据读写族，比 DATA_UPDATE 亮一档） */
+  --lf-data-query: color-mix(in srgb, #0ea5e9 78%, var(--el-color-primary));
+  /* NOTIFY — 品红（消息/通知，明暗双态可读） */
+  --lf-notify: color-mix(in srgb, #ec4899 80%, var(--el-color-primary));
+  /* DELAY — 灰紫（等待/节奏，弱存在感） */
+  --lf-delay: color-mix(in srgb, #94a3b8 72%, var(--el-color-primary));
+  /* TRANSFORM/AGGREGATE — 橄欖黄绿（数据整形族） */
+  --lf-transform: color-mix(in srgb, #65a30d 80%, var(--el-color-primary));
+  /* LLM — 电紫（AI 能力族） */
+  --lf-llm: color-mix(in srgb, #8b5cf6 85%, var(--el-color-primary));
   /* START/END — 中性 */
   --lf-neutral: var(--el-color-info);
 }
@@ -49,6 +59,11 @@
   --lf-batch: color-mix(in srgb, #a855f7 82%, var(--el-color-primary));
   --lf-subflow: color-mix(in srgb, #14b8a6 82%, var(--el-color-primary));
   --lf-data: color-mix(in srgb, #0e7490 85%, var(--el-color-primary));
+  --lf-data-query: color-mix(in srgb, #0ea5e9 78%, var(--el-color-primary));
+  --lf-notify: color-mix(in srgb, #ec4899 80%, var(--el-color-primary));
+  --lf-delay: color-mix(in srgb, #94a3b8 72%, var(--el-color-primary));
+  --lf-transform: color-mix(in srgb, #65a30d 80%, var(--el-color-primary));
+  --lf-llm: color-mix(in srgb, #8b5cf6 85%, var(--el-color-primary));
   --lf-neutral: var(--el-color-info);
 }
 

@@ -515,7 +515,7 @@ function removeNode(id: string) {
   if (selectedNodeId.value === id) selectedNodeId.value = null
 }
 
-// ===== 连线：CONDITION 出边按 sourceHandle 写入 branch；循环连接点禁止手动连线 =====
+// ===== 连线：CONDITION 出边按 sourceHandle 写入 branch（真/假）；执行型节点 error 出点写入 branch=error（失败路由）；循环连接点禁止手动连线 =====
 function onConnect(connection: Connection) {
   const { source, target, sourceHandle, targetHandle } = connection
   if (!source || !target) return
@@ -532,7 +532,21 @@ function onConnect(connection: Connection) {
     ElMessage.warning('循环体请把动作节点拖到循环虚线上自动接入，不支持手动连线')
     return
   }
-  const branch = sourceHandle === 'true' || sourceHandle === 'false' ? sourceHandle : undefined
+  if (sourceHandle === 'error') {
+    // 失败路由边：每节点至多一条（重复连线时替换旧错误边，避免语义歧义）
+    const existing = (storeEdges.value ?? []).find(
+      (e: { source?: string; sourceHandle?: string | null; target?: string }) =>
+        e.source === source && e.sourceHandle === 'error' && e.target !== target
+    )
+    if (existing) {
+      ElMessage.warning('该节点已有失败分支，请先删除原失败连线（红色败点出边）')
+      return
+    }
+  }
+  const branch =
+    sourceHandle === 'true' || sourceHandle === 'false' || sourceHandle === 'error'
+      ? sourceHandle
+      : undefined
   addEdges([
     {
       source,

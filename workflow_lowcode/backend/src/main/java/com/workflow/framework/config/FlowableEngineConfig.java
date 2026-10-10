@@ -78,7 +78,7 @@ public class FlowableEngineConfig {
         return new ProcessConfigResolver(nodeConfigRepository, objectMapper);
     }
 
-    /** 逻辑编排引擎：复用三型执行器（HTTP/Bean/Groovy 沙箱）+ 条件求值 + 子流程调用 + 数据更新节点，独立于 BPMN 流程运行。 */
+    /** 逻辑编排引擎：复用三型执行器（HTTP/Bean/Groovy 沙箱）+ 条件求值 + 子流程调用 + 数据节点 + 通知/延时/转换/聚合/LLM，独立于 BPMN 流程运行。 */
     @Bean
     public com.workflow.engine.logicflow.engine.LogicFlowEngine logicFlowEngine(
             HttpLogicExecutor httpExecutor,
@@ -88,10 +88,15 @@ public class FlowableEngineConfig {
             ObjectMapper objectMapper,
             com.workflow.engine.logicflow.repository.LogicFlowDefRepository logicFlowDefRepository,
             org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
-            com.workflow.engine.form.column.DynamicTableManager dynamicTableManager) {
+            com.workflow.engine.form.column.DynamicTableManager dynamicTableManager,
+            com.workflow.engine.form.bizdata.BizDataSupport bizDataSupport,
+            com.workflow.engine.tenant.TenantProvider tenantProvider,
+            com.workflow.notification.dispatch.MessageSender messageSender,
+            com.workflow.ai.model.ChatModel chatModel) {
         return new com.workflow.engine.logicflow.engine.LogicFlowEngine(
                 httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper,
-                logicFlowDefRepository, jdbcTemplate, dynamicTableManager);
+                logicFlowDefRepository, jdbcTemplate, dynamicTableManager,
+                bizDataSupport, tenantProvider, messageSender, chatModel);
     }
 
     @Bean

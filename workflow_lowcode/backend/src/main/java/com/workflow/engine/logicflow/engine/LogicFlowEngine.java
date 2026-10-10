@@ -2,11 +2,26 @@ package com.workflow.engine.logicflow.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.BizDataPageVO;
+import com.workflow.api.dto.BizDataQueryRequest;
+import com.workflow.api.dto.BizDataVO;
+import com.workflow.ai.model.ChatMessage;
+import com.workflow.ai.model.ChatModel;
+import com.workflow.ai.model.ChatOptions;
+import com.workflow.engine.form.bizdata.BizDataSupport;
 import com.workflow.engine.form.column.ColumnInfo;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logic.BackendBeanRegistry;
+import com.workflow.engine.logic.config.BackendAggregateConfig;
+import com.workflow.engine.logic.config.BackendDataDeleteConfig;
+import com.workflow.engine.logic.config.BackendDataInsertConfig;
+import com.workflow.engine.logic.config.BackendDataQueryConfig;
 import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+import com.workflow.engine.logic.config.BackendDelayConfig;
+import com.workflow.engine.logic.config.BackendLlmConfig;
+import com.workflow.engine.logic.config.BackendNotifyConfig;
 import com.workflow.engine.logic.config.BackendSqlScriptConfig;
+import com.workflow.engine.logic.config.BackendTransformConfig;
 import com.workflow.engine.logic.config.BackendLogicBeanConfig;
 import com.workflow.engine.logic.config.BackendLogicHttpConfig;
 import com.workflow.engine.logic.config.BackendLogicScriptConfig;
@@ -14,6 +29,10 @@ import com.workflow.engine.logic.executor.GroovyScriptLogic;
 import com.workflow.engine.logic.executor.HttpLogicExecutor;
 import com.workflow.engine.logic.parse.ParamMapping;
 import com.workflow.engine.logic.parse.VariableResolver;
+import com.workflow.notification.dispatch.MessageSender;
+import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.MessageType;
 import com.workflow.engine.logicflow.dsl.ConditionEvaluator;
 import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
 import com.workflow.engine.logicflow.dsl.NodeType;
@@ -38,6 +57,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -91,6 +111,14 @@ public class LogicFlowEngine {
     private final JdbcTemplate jdbcTemplate;
     /** 动态表元数据（表/列存在性校验；可为 null，同上）。 */
     private final DynamicTableManager tableManager;
+    /** 业务数据通用 CRUD（DATA_QUERY/INSERT/DELETE 节点依赖；可为 null → 对应节点报未装配）。 */
+    private final BizDataSupport bizDataSupport;
+    /** 租户提供者（DATA_DELETE 条件形态强制租户过滤；可为 null，同上）。 */
+    private final TenantProvider tenantProvider;
+    /** 消息发送器（NOTIFY 节点依赖；可为 null，同上）。 */
+    private final MessageSender messageSender;
+    /** 平台内置大模型（LLM 节点依赖；可为 null，同上）。 */
+    private final ChatModel chatModel;
 
     public LogicFlowEngine(HttpLogicExecutor httpExecutor,
                            GroovyScriptLogic groovyScriptLogic,
@@ -110,6 +138,7 @@ public class LogicFlowEngine {
                 defRepository, null, null);
     }
 
+    /** 存量八参构造器（新节点依赖均为 null：DATA_QUERY/INSERT/DELETE/NOTIFY/DELAY/TRANSFORM/AGGREGATE/LLM 报未装配）。 */
     public LogicFlowEngine(HttpLogicExecutor httpExecutor,
                            GroovyScriptLogic groovyScriptLogic,
                            BackendBeanRegistry backendBeanRegistry,
@@ -118,6 +147,22 @@ public class LogicFlowEngine {
                            LogicFlowDefRepository defRepository,
                            JdbcTemplate jdbcTemplate,
                            DynamicTableManager tableManager) {
+        this(httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper,
+                defRepository, jdbcTemplate, tableManager, null, null, null, null);
+    }
+
+    public LogicFlowEngine(HttpLogicExecutor httpExecutor,
+                           GroovyScriptLogic groovyScriptLogic,
+                           BackendBeanRegistry backendBeanRegistry,
+                           VariableResolver variableResolver,
+                           ObjectMapper objectMapper,
+                           LogicFlowDefRepository defRepository,
+                           JdbcTemplate jdbcTemplate,
+                           DynamicTableManager tableManager,
+                           BizDataSupport bizDataSupport,
+                           TenantProvider tenantProvider,
+                           MessageSender messageSender,
+                           ChatModel chatModel) {
         this.httpExecutor = httpExecutor;
         this.groovyScriptLogic = groovyScriptLogic;
         this.backendBeanRegistry = backendBeanRegistry;
@@ -126,6 +171,10 @@ public class LogicFlowEngine {
         this.defRepository = defRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.tableManager = tableManager;
+        this.bizDataSupport = bizDataSupport;
+        this.tenantProvider = tenantProvider;
+        this.messageSender = messageSender;
+        this.chatModel = chatModel;
     }
 
     /** 单节点执行轨迹（record，可被 Jackson 直接序列化）。 */
@@ -246,10 +295,14 @@ public class LogicFlowEngine {
     // 节点执行
     // ------------------------------------------------------------------
 
+    /** 错误分支出边标记（EdgeDef.branch）：节点失败时优先路由到该边（onError 失败路由）。 */
+    public static final String BRANCH_ERROR = "error";
+
     /**
-     * 执行 HTTP/BEAN/SCRIPT 三型逻辑节点，返回下一节点。
-     * 失败按 errorAction：FAIL_FLOW → 抛 {@link FlowAbortedException}（run 顶层收敛为 FAILED）；
-     * IGNORE_CONTINUE → trace 记 FAILED 后继续走边。
+     * 执行 HTTP/BEAN/SCRIPT/数据/通知等逻辑节点，返回下一节点。
+     * 失败按顺序尝试：① 存在 branch=error 出边 → 路由到失败分支（trace 记 FAILED，输出不写入）；
+     * ② errorAction=IGNORE_CONTINUE → trace 记 FAILED 后继续主边；
+     * ③ FAIL_FLOW（默认）→ 抛 {@link FlowAbortedException}（run 顶层收敛为 FAILED）。
      */
     private LogicFlowDsl.NodeDef executeLogicNode(LogicFlowDsl.NodeDef node,
                                                   Map<String, LogicFlowDsl.NodeDef> nodeById,
@@ -269,6 +322,11 @@ public class LogicFlowEngine {
             String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_FAILED, null, error, duration));
+            LogicFlowDsl.NodeDef errorTarget = resolveErrorTarget(node, nodeById, outEdges.get(node.getId()));
+            if (errorTarget != null) {
+                log.debug("Logic flow node '{}' failed, route to error branch: {}", node.getId(), error);
+                return errorTarget;
+            }
             if (!ACTION_IGNORE_CONTINUE.equalsIgnoreCase(node.getErrorAction())) {
                 throw new FlowAbortedException("节点执行失败: " + node.getId() + ": " + error);
             }
@@ -299,6 +357,10 @@ public class LogicFlowEngine {
             String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
                     TRACE_FAILED, null, error, duration));
+            LogicFlowDsl.NodeDef errorTarget = resolveErrorTarget(node, nodeById, outEdges.get(node.getId()));
+            if (errorTarget != null) {
+                return errorTarget;
+            }
             if (!ACTION_IGNORE_CONTINUE.equalsIgnoreCase(node.getErrorAction())) {
                 throw new FlowAbortedException("条件评估失败: " + node.getId() + ": " + error);
             }
@@ -313,7 +375,7 @@ public class LogicFlowEngine {
         return resolveBranchTarget(node, nodeById, outEdges.get(node.getId()), branch);
     }
 
-    /** 四型逻辑 + 批处理/子流程分发。 */
+    /** 四型逻辑 + 批处理/子流程/数据/通知/延时/转换/聚合/LLM 分发。 */
     private Object dispatch(LogicFlowDsl.NodeDef node, Map<String, Object> vars, List<NodeTrace> traces) {
         return switch (node.getType()) {
             case HTTP -> executeHttp(node, vars);
@@ -323,6 +385,14 @@ public class LogicFlowEngine {
             case SUBFLOW -> executeSubflow(node, vars);
             case DATA_UPDATE -> executeDataUpdate(node, vars);
             case SQL_SCRIPT -> executeSqlScript(node, vars);
+            case DATA_QUERY -> executeDataQuery(node, vars);
+            case DATA_INSERT -> executeDataInsert(node, vars);
+            case DATA_DELETE -> executeDataDelete(node, vars);
+            case NOTIFY -> executeNotify(node, vars);
+            case DELAY -> executeDelay(node, vars);
+            case TRANSFORM -> executeTransform(node, vars);
+            case AGGREGATE -> executeAggregate(node, vars);
+            case LLM -> executeLlm(node, vars);
             default -> throw new IllegalArgumentException("节点 " + node.getId() + " 不支持执行: " + node.getType());
         };
     }
@@ -953,6 +1023,509 @@ public class LogicFlowEngine {
     }
 
     // ------------------------------------------------------------------
+    // 数据查询（DATA_QUERY）/ 数据新增（DATA_INSERT）/ 数据删除（DATA_DELETE）
+    // ------------------------------------------------------------------
+
+    /**
+     * 执行数据查询节点：按 formKey 复用 {@link BizDataSupport#queryGeneric}
+     * （租户隔离内建：tenant_id 由上下文强制注入，动态表列白名单防注入）。
+     *
+     * <p>config：{@code { formKey, filter?: [{column, value}], keyword?, keywordColumn?, size? }}。
+     * 输出 {@code { total, page, size, rows: [...] }}（rows 行 = {id, version, ...业务列}）。
+     */
+    private Object executeDataQuery(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        if (bizDataSupport == null) {
+            throw new IllegalStateException("引擎未装配数据查询能力(BizDataSupport): " + node.getId());
+        }
+        BackendDataQueryConfig config = readConfig(node, BackendDataQueryConfig.class);
+        if (config == null || isBlank(config.getFormKey())) {
+            throw new IllegalArgumentException("DATA_QUERY 节点缺少 formKey 配置: " + node.getId());
+        }
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        Map<String, Object> filters = new LinkedHashMap<>();
+        if (config.getFilter() != null) {
+            for (BackendDataQueryConfig.DataFilter f : config.getFilter()) {
+                if (f == null || isBlank(f.getColumn())) {
+                    continue;
+                }
+                Object value = resolveDataUpdateValue(f.getValue(), vars);
+                filters.put(f.getColumn().trim(), value);
+            }
+        }
+        if (!filters.isEmpty()) {
+            req.setFilter(writeJsonSafe(filters));
+        }
+        req.setKeyword(orNullToTrimmed(config.getKeyword()));
+        req.setKeywordColumn(orNullToTrimmed(config.getKeywordColumn()));
+        int size = config.getSize() == null || config.getSize() <= 0
+                ? BackendDataQueryConfig.DEFAULT_SIZE
+                : Math.min(config.getSize(), BackendDataQueryConfig.MAX_SIZE);
+        req.setSize(size);
+
+        BizDataPageVO page = bizDataSupport.queryGeneric(config.getFormKey().trim(), req);
+        List<Object> rows = new ArrayList<>(page.getRecords() != null ? page.getRecords().size() : 0);
+        if (page.getRecords() != null) {
+            for (BizDataVO vo : page.getRecords()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", vo.getId());
+                if (vo.getVersion() != null) {
+                    row.put("version", vo.getVersion());
+                }
+                if (vo.getData() != null) {
+                    row.putAll(vo.getData());
+                }
+                rows.add(row);
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", page.getTotal());
+        out.put("page", page.getPage());
+        out.put("size", page.getSize());
+        out.put("rows", rows);
+        return out;
+    }
+
+    /**
+     * 执行数据新增节点：按 formKey 复用 {@link BizDataSupport#createGeneric}
+     * （必填校验/JSON 列/日期归一/data-picker 冗余，租户隔离内建）。
+     *
+     * <p>config：{@code { formKey, data: [{column, value}] }}，value 支持 {@code {{var}}} 取上下文。
+     * 输出新行对象 {@code { id, version, data: {...} }}。
+     */
+    private Object executeDataInsert(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        if (bizDataSupport == null) {
+            throw new IllegalStateException("引擎未装配数据新增能力(BizDataSupport): " + node.getId());
+        }
+        BackendDataInsertConfig config = readConfig(node, BackendDataInsertConfig.class);
+        if (config == null || isBlank(config.getFormKey())) {
+            throw new IllegalArgumentException("DATA_INSERT 节点缺少 formKey 配置: " + node.getId());
+        }
+        if (config.getData() == null || config.getData().isEmpty()) {
+            throw new IllegalArgumentException("DATA_INSERT 节点缺少 data 配置: " + node.getId());
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        for (BackendDataInsertConfig.DataField field : config.getData()) {
+            if (field == null || isBlank(field.getColumn())) {
+                continue;
+            }
+            data.put(field.getColumn().trim(), resolveDataUpdateValue(field.getValue(), vars));
+        }
+        if (data.isEmpty()) {
+            throw new IllegalArgumentException("DATA_INSERT 节点 data 无有效列值对: " + node.getId());
+        }
+        BizDataVO created = bizDataSupport.createGeneric(config.getFormKey().trim(), data);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", created.getId());
+        if (created.getVersion() != null) {
+            out.put("version", created.getVersion());
+        }
+        out.put("data", created.getData() != null ? created.getData() : Map.of());
+        return out;
+    }
+
+    /**
+     * 执行数据删除节点。两种形态（id 优先）：
+     * <ul>
+     *   <li>按 id：{@code { formKey, id }} → {@link BizDataSupport#deleteGeneric}（级联子表，行不存在报错）；</li>
+     *   <li>按条件：{@code { formKey, filter: [{column, op, value}] }} → 纯配置 DELETE，
+     *       列经业务列白名单校验，<b>自动追加 tenant_id = 当前租户</b>（跨租户误删防护），至少一个条件。</li>
+     * </ul>
+     * 输出 {@code { deleted: N, mode: "id"|"filter" }}。
+     */
+    private Object executeDataDelete(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        BackendDataDeleteConfig config = readConfig(node, BackendDataDeleteConfig.class);
+        if (config == null || isBlank(config.getFormKey())) {
+            throw new IllegalArgumentException("DATA_DELETE 节点缺少 formKey 配置: " + node.getId());
+        }
+        if (bizDataSupport == null || jdbcTemplate == null || tenantProvider == null) {
+            throw new IllegalStateException("引擎未装配数据删除能力(BizDataSupport/JdbcTemplate/TenantProvider): " + node.getId());
+        }
+        String formKey = config.getFormKey().trim();
+        Object resolvedId = config.getId() == null ? null : resolveDataUpdateValue(config.getId(), vars);
+        String id = resolvedId == null ? null : String.valueOf(resolvedId);
+        if (id != null && !id.isBlank()) {
+            bizDataSupport.deleteGeneric(formKey, id.toString());
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("deleted", 1);
+            out.put("mode", "id");
+            return out;
+        }
+        List<BackendDataDeleteConfig.DeleteCond> filter = config.getFilter();
+        if (filter == null || filter.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "DATA_DELETE 节点须提供 id 或至少一个 filter 条件（防全表删除）: " + node.getId());
+        }
+        var ctx = bizDataSupport.loadContext(formKey);
+        Set<String> allowed = new HashSet<>(ctx.columnKeys());
+        allowed.add("id");
+        allowed.add("version");
+        allowed.add("tenant_id");
+        StringBuilder sql = new StringBuilder("DELETE FROM ").append(ctx.tableName()).append(" WHERE ");
+        List<Object> params = new ArrayList<>();
+        List<String> parts = new ArrayList<>();
+        for (BackendDataDeleteConfig.DeleteCond cond : filter) {
+            if (cond == null || isBlank(cond.getColumn())) {
+                continue;
+            }
+            String column = cond.getColumn().trim();
+            if (!allowed.contains(column)) {
+                throw new IllegalArgumentException("DATA_DELETE 目标表缺少列: " + ctx.tableName() + "." + column);
+            }
+            String op = cond.getOp() == null ? "EQ" : cond.getOp().trim().toUpperCase(Locale.ROOT);
+            switch (op) {
+                case "IS_NULL" -> parts.add(column + " IS NULL");
+                case "NOT_NULL" -> parts.add(column + " IS NOT NULL");
+                case "EQ", "NE", "GT", "GTE", "LT", "LTE" -> {
+                    String symbol = switch (op) {
+                        case "NE" -> "<>";
+                        case "GT" -> ">";
+                        case "GTE" -> ">=";
+                        case "LT" -> "<";
+                        case "LTE" -> "<=";
+                        default -> "=";
+                    };
+                    parts.add(column + " " + symbol + " ?");
+                    params.add(resolveDataUpdateValue(cond.getValue(), vars));
+                }
+                default -> throw new IllegalArgumentException(
+                        "DATA_DELETE 节点 filter.op 非法(须 EQ/NE/GT/GTE/LT/LTE/IS_NULL/NOT_NULL): " + cond.getOp());
+            }
+        }
+        if (parts.isEmpty()) {
+            throw new IllegalArgumentException("DATA_DELETE 节点 filter 无有效条件: " + node.getId());
+        }
+        // 租户强制过滤（跨租户误删防护；条件形态专有）
+        parts.add("tenant_id = ?");
+        params.add(tenantProvider.getTenantId());
+        sql.append(String.join(" AND ", parts));
+        int deleted = jdbcTemplate.update(sql.toString(), params.toArray());
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("deleted", deleted);
+        out.put("mode", "filter");
+        return out;
+    }
+
+    // ------------------------------------------------------------------
+    // 消息通知（NOTIFY）/ 延时（DELAY）/ 数据映射（TRANSFORM）/ 聚合（AGGREGATE）/ LLM
+    // ------------------------------------------------------------------
+
+    /**
+     * 执行消息通知节点：复用 {@link MessageSender#sendByTemplate}（模板加载/必填变量校验/渲染/投递）。
+     * config：{@code { templateCode, recipientIds: [{{var}}|数值串], variables: [{name,value}],
+     * messageType?: PRIVATE(默认)|PUBLIC|SYSTEM, channels?: [IN_APP(默认)|SMS] }}。
+     * 输出 {@code { sent: true, templateCode, recipients: N, channels: [...] }}。
+     */
+    private Object executeNotify(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        if (messageSender == null) {
+            throw new IllegalStateException("引擎未装配消息通知能力(MessageSender): " + node.getId());
+        }
+        BackendNotifyConfig config = readConfig(node, BackendNotifyConfig.class);
+        if (config == null || isBlank(config.getTemplateCode())) {
+            throw new IllegalArgumentException("NOTIFY 节点缺少 templateCode 配置: " + node.getId());
+        }
+        if (config.getRecipientIds() == null || config.getRecipientIds().isEmpty()) {
+            throw new IllegalArgumentException("NOTIFY 节点缺少 recipientIds 配置: " + node.getId());
+        }
+        if (config.getRecipientIds().size() > BackendNotifyConfig.MAX_RECIPIENTS) {
+            throw new IllegalArgumentException("NOTIFY 节点接收人数超出上限("
+                    + BackendNotifyConfig.MAX_RECIPIENTS + "): " + config.getRecipientIds().size());
+        }
+        List<Long> recipients = new ArrayList<>(config.getRecipientIds().size());
+        for (String raw : config.getRecipientIds()) {
+            Object value = resolveDataUpdateValue(raw, vars);
+            if (value == null) {
+                continue;
+            }
+            try {
+                recipients.add(Long.parseLong(String.valueOf(value).trim()));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("NOTIFY 节点接收人 ID 须为数字（解析失败）: " + raw);
+            }
+        }
+        if (recipients.isEmpty()) {
+            throw new IllegalArgumentException("NOTIFY 节点无有效接收人: " + node.getId());
+        }
+        Map<String, Object> variables = new LinkedHashMap<>();
+        if (config.getVariables() != null) {
+            for (BackendNotifyConfig.VarPair pair : config.getVariables()) {
+                if (pair == null || isBlank(pair.getName())) {
+                    continue;
+                }
+                variables.put(pair.getName().trim(), resolveDataUpdateValue(pair.getValue(), vars));
+            }
+        }
+        MessageType messageType;
+        try {
+            messageType = MessageType.valueOf(orDefault(config.getMessageType(), BackendNotifyConfig.TYPE_PRIVATE)
+                    .trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("NOTIFY 节点 messageType 非法(须 PRIVATE/PUBLIC/SYSTEM): "
+                    + config.getMessageType());
+        }
+        List<ChannelType> channels = new ArrayList<>();
+        if (config.getChannels() != null) {
+            for (String raw : config.getChannels()) {
+                if (isBlank(raw)) {
+                    continue;
+                }
+                try {
+                    channels.add(ChannelType.valueOf(raw.trim().toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("NOTIFY 节点渠道非法(须 IN_APP/SMS): " + raw);
+                }
+            }
+        }
+        if (channels.isEmpty()) {
+            channels.add(ChannelType.IN_APP);
+        }
+        messageSender.sendByTemplate(null, config.getTemplateCode().trim(), variables,
+                messageType, recipients, channels);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("sent", true);
+        out.put("templateCode", config.getTemplateCode().trim());
+        out.put("recipients", recipients.size());
+        out.put("channels", channels.stream().map(Enum::name).toList());
+        return out;
+    }
+
+    /**
+     * 执行延时节点：同步等待（逻辑流运行在请求线程，上限 60000ms 防拖垮吞吐）。
+     * 输出 {@code { waitedMs: N }}。
+     */
+    private Object executeDelay(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        BackendDelayConfig config = readConfig(node, BackendDelayConfig.class);
+        int duration = config == null || config.getDurationMs() == null ? 0 : config.getDurationMs();
+        if (duration < BackendDelayConfig.MIN_MS || duration > BackendDelayConfig.MAX_MS) {
+            throw new IllegalArgumentException("DELAY 节点 durationMs 须在 "
+                    + BackendDelayConfig.MIN_MS + "~" + BackendDelayConfig.MAX_MS + " 之间: " + duration);
+        }
+        long begin = System.currentTimeMillis();
+        try {
+            Thread.sleep(duration);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("DELAY 节点等待被中断: " + node.getId());
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("waitedMs", System.currentTimeMillis() - begin);
+        return out;
+    }
+
+    /**
+     * 执行数据映射节点：JSON 模板 {@code {{var.path}}} 两段式编译——
+     * ① 值位占位符（独占 JSON 值位置）注入变量原始值（类型保留，缺失注入 null）；
+     * ② 字符串内占位符 toString 插值（缺失空串）；产物须为合法 JSON（对象/数组）。
+     */
+    private Object executeTransform(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        BackendTransformConfig config = readConfig(node, BackendTransformConfig.class);
+        if (config == null || isBlank(config.getTemplate())) {
+            throw new IllegalArgumentException("TRANSFORM 节点缺少 template 配置: " + node.getId());
+        }
+        String compiled = compileTransformTemplate(config.getTemplate(), vars);
+        try {
+            JsonNode tree = objectMapper.readTree(compiled);
+            if (tree == null || (!tree.isObject() && !tree.isArray())) {
+                throw new IllegalArgumentException("TRANSFORM 模板编译产物须为 JSON 对象或数组");
+            }
+            return objectMapper.convertValue(tree, Object.class);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("TRANSFORM 模板编译产物不是合法 JSON: " + e.getMessage());
+        }
+    }
+
+    /**
+     * TRANSFORM 模板编译：先替换值位占位符（`: {{path}}` → `: <原始值 JSON>`，类型保留），
+     * 再对字符串字面量内的剩余占位符做 toString 插值（缺失空串）。
+     * 注意：第二步不走 resolveDataUpdateValue（它会把整段折叠成 String 丢掉已注入值的类型）。
+     */
+    private String compileTransformTemplate(String template, Map<String, Object> vars) {
+        java.util.regex.Pattern valuePos = java.util.regex.Pattern
+                .compile(":\\s*\\{\\{\\s*([\\w]+(?:\\.[\\w]+)*)\\s*}}");
+        java.util.regex.Matcher matcher = valuePos.matcher(template);
+        StringBuilder sb = new StringBuilder();
+        int last = 0;
+        while (matcher.find()) {
+            sb.append(template, last, matcher.start()).append(": ");
+            Object value = resolvePath(matcher.group(1), vars);
+            sb.append(writeJsonSafe(value));
+            last = matcher.end();
+        }
+        sb.append(template.substring(last));
+        String withValues = sb.toString();
+        // 字符串字面量内占位符插值（toString，缺失空串）；值位已在上一步处理
+        java.util.regex.Matcher inline = java.util.regex.Pattern
+                .compile("\\{\\{\\s*([\\w]+(?:\\.[\\w]+)*)\\s*}}").matcher(withValues);
+        StringBuilder out = new StringBuilder();
+        last = 0;
+        while (inline.find()) {
+            Object value = resolvePath(inline.group(1), vars);
+            out.append(withValues, last, inline.start()).append(value != null ? value : "");
+            last = inline.end();
+        }
+        out.append(withValues.substring(last));
+        return out.toString();
+    }
+
+    /**
+     * 执行聚合节点：集合元素须为 Map（或可转换），对 field 做 SUM/AVG/COUNT/MIN/MAX，
+     * 可按 groupBy 分组。输出汇总 Map（无分组）或分组列表（有分组）。
+     */
+    private Object executeAggregate(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        BackendAggregateConfig config = readConfig(node, BackendAggregateConfig.class);
+        if (config == null || isBlank(config.getCollection())) {
+            throw new IllegalArgumentException("AGGREGATE 节点缺少 collection 配置: " + node.getId());
+        }
+        List<String> ops = config.getOps() == null ? List.of()
+                : config.getOps().stream().filter(o -> !isBlank(o)).map(String::trim).toList();
+        if (ops.isEmpty()) {
+            throw new IllegalArgumentException("AGGREGATE 节点缺少 ops 配置: " + node.getId());
+        }
+        for (String op : ops) {
+            if (!Set.of(BackendAggregateConfig.OP_SUM, BackendAggregateConfig.OP_AVG,
+                    BackendAggregateConfig.OP_COUNT, BackendAggregateConfig.OP_MIN,
+                    BackendAggregateConfig.OP_MAX).contains(op.toUpperCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("AGGREGATE 节点 ops 非法(须 SUM/AVG/COUNT/MIN/MAX): " + op);
+            }
+        }
+        boolean countOnly = ops.size() == 1
+                && BackendAggregateConfig.OP_COUNT.equalsIgnoreCase(ops.get(0));
+        if (!countOnly && isBlank(config.getField())) {
+            throw new IllegalArgumentException("AGGREGATE 节点缺少 field 配置（纯 COUNT 可省）: " + node.getId());
+        }
+        List<Object> items = resolveCollectionOrPath(config.getCollection(), vars, node.getId());
+        String field = config.getField() == null ? null : config.getField().trim();
+        String groupBy = isBlank(config.getGroupBy()) ? null : config.getGroupBy().trim();
+
+        if (groupBy == null) {
+            return aggregateGroup(items, field, ops, null);
+        }
+        // 分组聚合：按 groupBy 值分组后逐组聚合，输出按分组键排序
+        Map<String, List<Object>> groups = new TreeMap<>();
+        for (Object item : items) {
+            Map<?, ?> map = toMapOrNull(item, node.getId());
+            if (map == null) {
+                continue;
+            }
+            Object key = map.get(groupBy);
+            groups.computeIfAbsent(key == null ? "" : String.valueOf(key), k -> new ArrayList<>()).add(item);
+        }
+        List<Object> out = new ArrayList<>(groups.size());
+        for (Map.Entry<String, List<Object>> e : groups.entrySet()) {
+            Map<String, Object> row = aggregateGroup(e.getValue(), field, ops, e.getKey());
+            out.add(row);
+        }
+        return out;
+    }
+
+    /** 单组聚合计算：count 恒输出；其余按 ops 输出（数值经 BigDecimal 精确计算）。 */
+    private Map<String, Object> aggregateGroup(List<Object> items, String field,
+                                               List<String> ops, String groupKey) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (groupKey != null) {
+            out.put("group", groupKey);
+        }
+        out.put("count", items.size());
+        boolean needValues = ops.stream().anyMatch(o -> !BackendAggregateConfig.OP_COUNT.equalsIgnoreCase(o));
+        List<BigDecimal> values = new ArrayList<>(items.size());
+        if (needValues) {
+            for (Object item : items) {
+                Map<?, ?> map = toMapOrNull(item, null);
+                Object raw = map == null ? null : map.get(field);
+                if (raw instanceof Number number) {
+                    values.add(new BigDecimal(number.toString()));
+                } else if (raw != null && !String.valueOf(raw).isBlank()) {
+                    try {
+                        values.add(new BigDecimal(String.valueOf(raw).trim()));
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException(
+                                "AGGREGATE 聚合字段值须为数字: " + field + "=" + raw);
+                    }
+                }
+            }
+        }
+        for (String op : ops) {
+            switch (op.toUpperCase(Locale.ROOT)) {
+                case BackendAggregateConfig.OP_SUM -> out.put("sum", values.stream()
+                        .reduce(BigDecimal.ZERO, BigDecimal::add).doubleValue());
+                case BackendAggregateConfig.OP_AVG -> out.put("avg", values.isEmpty() ? 0.0
+                        : values.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                        .divide(BigDecimal.valueOf(values.size()), java.math.MathContext.DECIMAL64)
+                        .doubleValue());
+                case BackendAggregateConfig.OP_MIN -> out.put("min", values.isEmpty() ? null
+                        : values.stream().min(BigDecimal::compareTo).orElseThrow().doubleValue());
+                case BackendAggregateConfig.OP_MAX -> out.put("max", values.isEmpty() ? null
+                        : values.stream().max(BigDecimal::compareTo).orElseThrow().doubleValue());
+                default -> {
+                    // COUNT 已在头部输出
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 元素 → Map（Map 直通；其余 null；strict 时非 Map 抛错）。 */
+    private Map<?, ?> toMapOrNull(Object item, String nodeId) {
+        if (item instanceof Map<?, ?> map) {
+            return map;
+        }
+        if (nodeId != null) {
+            throw new IllegalArgumentException(
+                    "AGGREGATE 集合元素须为对象（Map）：节点 " + nodeId + " 收到 " + item.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    /**
+     * 执行 LLM 节点：平台内置模型（{@link ChatModel#complete}），prompt/system 支持 {@code {{var}}} 插值。
+     * 输出 {@code { content }}。
+     */
+    private Object executeLlm(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        if (chatModel == null) {
+            throw new IllegalStateException("引擎未装配大模型能力(ChatModel): " + node.getId());
+        }
+        BackendLlmConfig config = readConfig(node, BackendLlmConfig.class);
+        if (config == null || isBlank(config.getPrompt())) {
+            throw new IllegalArgumentException("LLM 节点缺少 prompt 配置: " + node.getId());
+        }
+        Double temperature = config.getTemperature();
+        if (temperature != null && (temperature < 0 || temperature > 2)) {
+            throw new IllegalArgumentException("LLM 节点 temperature 须在 0~2 之间: " + temperature);
+        }
+        String prompt = String.valueOf(resolveDataUpdateValue(config.getPrompt(), vars));
+        List<ChatMessage> messages = new ArrayList<>(2);
+        if (!isBlank(config.getSystem())) {
+            messages.add(ChatMessage.system(
+                    String.valueOf(resolveDataUpdateValue(config.getSystem(), vars))));
+        }
+        messages.add(ChatMessage.user(prompt));
+        ChatOptions options = temperature == null
+                ? ChatOptions.defaults()
+                : new ChatOptions(temperature, null, false, null, null);
+        String content = chatModel.complete(messages, options);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("content", content);
+        return out;
+    }
+
+    /** null→null；非空白→trim。 */
+    private String orNullToTrimmed(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /** 对象 → JSON 字符串（失败回退 "{}"，防止单点序列化异常中断流程）。 */
+    private String writeJsonSafe(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("Logic flow JSON serialize failed, fallback '{}': {}", value,
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            return "{}";
+        }
+    }
+
+    // ------------------------------------------------------------------
     // 子流程（SUBFLOW）节点
     // ------------------------------------------------------------------
 
@@ -1041,18 +1614,27 @@ public class LogicFlowEngine {
     /** 循环体节点 trace 记录的迭代上限（只记首轮 + 失败项，防轨迹膨胀）。 */
     private static final int BATCH_BODY_TRACE_ITERATIONS = 1;
 
-    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套）。 */
+    /** 批处理循环体允许的节点类型（业务执行多型 + SQL_SCRIPT + 新数据/通知/转换/聚合/LLM + BATCH 嵌套；DELAY 阻塞型不可入循环体）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = EnumSet.of(
             NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.SQL_SCRIPT, NodeType.BATCH);
+            NodeType.SQL_SCRIPT, NodeType.BATCH,
+            NodeType.DATA_QUERY, NodeType.DATA_INSERT, NodeType.DATA_DELETE, NodeType.NOTIFY,
+            NodeType.TRANSFORM, NodeType.AGGREGATE, NodeType.LLM);
 
     /** BATCH 嵌套深度运行时上限（发布校验限 3 层，此处纵深防御防绕过校验的自引用 DSL） */
     private static final int MAX_BATCH_NESTING_DEPTH = 5;
     private static final ThreadLocal<Integer> BATCH_DEPTH = ThreadLocal.withInitial(() -> 0);
 
-    /** 批处理汇总（节点返回值，由 results 声明写入 / 节点轨迹 result）。 */
+    /** 批处理汇总（节点返回值，由 results 声明写入 / 节点轨迹 result）；chunkSize/brokenAt 为 P1 增强可选字段。 */
     record BatchSummary(int total, int succeeded, int failed, boolean truncated,
-                        List<Object> results, List<Map<String, Object>> errors) {
+                        List<Object> results, List<Map<String, Object>> errors,
+                        Integer chunkSize, Integer brokenAt) {
+
+        /** 兼容旧字段序构造（chunkSize/brokenAt 均空）。 */
+        BatchSummary(int total, int succeeded, int failed, boolean truncated,
+                     List<Object> results, List<Map<String, Object>> errors) {
+            this(total, succeeded, failed, truncated, results, errors, null, null);
+        }
     }
 
     /**
@@ -1101,12 +1683,27 @@ public class LogicFlowEngine {
         boolean stopOnError = !config.has("stopOnError") || config.get("stopOnError").isNull()
                 || config.get("stopOnError").asBoolean(true);
         int maxItems = normalizeMaxItems(config.get("maxItems"));
+        // P1 增强：chunk 分批 / interval 节流 / breakWhen 提前跳出
+        int chunkSize = normalizeBounded(config.get("chunkSize"), 1, 1, 100);
+        long intervalMs = normalizeBounded(config.get("intervalMs"), 0, 0, 5000);
+        JsonNode breakWhen = config.get("breakWhen");
+        boolean breakEnabled = breakWhen != null && breakWhen.isObject()
+                && textOrNull(breakWhen, "variable") != null && !textOrNull(breakWhen, "variable").isBlank();
         if (body.isEmpty() && (textOrNull(config, "actionType") == null || textOrNull(config, "actionType").isBlank())) {
             throw new IllegalArgumentException(
                     "BATCH 节点缺少循环体(body)或 legacy actionType 配置: " + node.getId());
         }
 
         List<Object> items = resolveCollection(collectionExpr, vars);
+        // chunk 分批：集合按 chunkSize 切片，每批 List 整体作为迭代项（itemVar = 批次列表）
+        boolean chunked = chunkSize > 1;
+        if (chunked) {
+            List<Object> chunks = new ArrayList<>((items.size() + chunkSize - 1) / chunkSize);
+            for (int i = 0; i < items.size(); i += chunkSize) {
+                chunks.add(new ArrayList<>(items.subList(i, Math.min(i + chunkSize, items.size()))));
+            }
+            items = chunks;
+        }
         boolean truncated = items.size() > maxItems;
         if (truncated) {
             items = items.subList(0, maxItems);
@@ -1116,11 +1713,25 @@ public class LogicFlowEngine {
         List<Map<String, Object>> errors = new ArrayList<>();
         int succeeded = 0;
         int failed = 0;
+        Integer brokenAt = null;
         for (int i = 0; i < items.size(); i++) {
             Object item = items.get(i);
             Map<String, Object> childVars = new LinkedHashMap<>(vars);
             childVars.put(itemVar, item);
             childVars.put(indexVar, i);
+            // breakWhen：每项循环体执行前评估，true → 提前跳出（已处理项保留）
+            if (breakEnabled && evaluateBreakWhen(breakWhen, childVars, node.getId())) {
+                brokenAt = i;
+                break;
+            }
+            if (intervalMs > 0 && i > 0) {
+                try {
+                    Thread.sleep(intervalMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("BATCH 节点迭代间隔被中断: " + node.getId());
+                }
+            }
             try {
                 Object last = null;
                 if (!body.isEmpty()) {
@@ -1168,7 +1779,25 @@ public class LogicFlowEngine {
         List<Object> traceResults = results.size() > BATCH_TRACE_DETAIL_LIMIT
                 ? new ArrayList<>(results.subList(0, BATCH_TRACE_DETAIL_LIMIT)) : results;
         return new BatchSummary(items.size(), succeeded, failed, truncated,
-                traceResults, errors);
+                traceResults, errors, chunked ? chunkSize : null, brokenAt);
+    }
+
+    /** breakWhen 条件评估：复用 ConditionEvaluator（变量/算子/值语义与 CONDITION 一致）；评估异常视为 false（不阻断迭代，容错优先）。 */
+    private boolean evaluateBreakWhen(JsonNode breakWhen, Map<String, Object> childVars, String nodeId) {
+        try {
+            return ConditionEvaluator.evaluate(textOrNull(breakWhen, "variable"),
+                    textOrNull(breakWhen, "operator"), textOrNull(breakWhen, "value"),
+                    childVars, variableResolver);
+        } catch (Exception e) {
+            log.debug("BATCH node '{}' breakWhen evaluate failed, treat as false: {}", nodeId, e.getMessage());
+            return false;
+        }
+    }
+
+    /** 有界整数归一化：null/非法回退默认，钳位 [min, max]。 */
+    private int normalizeBounded(JsonNode raw, int fallback, int min, int max) {
+        int value = raw == null || raw.isNull() ? fallback : raw.asInt(fallback);
+        return Math.max(min, Math.min(value, max));
     }
 
     /**
@@ -1332,6 +1961,26 @@ public class LogicFlowEngine {
         throw new IllegalArgumentException("BATCH 集合变量类型不支持（需数组）: " + name);
     }
 
+    /**
+     * 集合解析（AGGREGATE 专用）：支持 {{var}} 与 {{var.sub.path}} 点路径直接取上下文集合
+     * （保留元素原始类型）；其余形态回退 {@link #resolveCollection}（JSON 数组字面量等）。
+     */
+    @SuppressWarnings("unchecked")
+    private List<Object> resolveCollectionOrPath(String expression, Map<String, Object> vars, String nodeId) {
+        String trimmed = expression == null ? "" : expression.trim();
+        java.util.regex.Matcher direct = java.util.regex.Pattern
+                .compile("^\\{\\{\\s*([\\w]+(?:\\.[\\w]+)*)\\s*}}$").matcher(trimmed);
+        if (direct.matches()) {
+            Object value = resolvePath(direct.group(1), vars);
+            if (value == null) {
+                throw new IllegalArgumentException("AGGREGATE 集合变量不存在或为 null: " + direct.group(1)
+                        + " (节点 " + nodeId + ")");
+            }
+            return toItemList(value, direct.group(1));
+        }
+        return resolveCollection(expression, vars);
+    }
+
     private static String orDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value.trim();
     }
@@ -1354,20 +2003,47 @@ public class LogicFlowEngine {
     // 图行走
     // ------------------------------------------------------------------
 
-    /** 非 CONDITION 节点的后继：取首条出边；缺出边/边引用缺失节点 → FAILED（经 FlowAbortedException 收敛）。 */
+    /** 非 CONDITION 节点的后继：取首条<b>非 error</b>出边（error 边仅失败路由使用）；缺出边/边引用缺失节点 → FAILED（经 FlowAbortedException 收敛）。 */
     private LogicFlowDsl.NodeDef requireNext(Map<String, LogicFlowDsl.NodeDef> nodeById,
                                              Map<String, List<LogicFlowDsl.EdgeDef>> outEdges,
                                              String nodeId) {
         List<LogicFlowDsl.EdgeDef> edges = outEdges.get(nodeId);
-        if (edges == null || edges.isEmpty()) {
-            throw new FlowAbortedException("节点无出边: " + nodeId);
+        if (edges != null) {
+            for (LogicFlowDsl.EdgeDef edge : edges) {
+                if (BRANCH_ERROR.equalsIgnoreCase(edge.getBranch() == null ? "" : edge.getBranch().trim())) {
+                    continue; // 错误分支边不参与成功路径
+                }
+                String target = edge.getTarget();
+                LogicFlowDsl.NodeDef next = target != null ? nodeById.get(target) : null;
+                if (next == null) {
+                    throw new FlowAbortedException("边引用不存在的节点: " + target);
+                }
+                return next;
+            }
         }
-        String target = edges.get(0).getTarget();
-        LogicFlowDsl.NodeDef next = target != null ? nodeById.get(target) : null;
-        if (next == null) {
-            throw new FlowAbortedException("边引用不存在的节点: " + target);
+        throw new FlowAbortedException("节点无出边: " + nodeId);
+    }
+
+    /**
+     * 失败路由：取该节点 branch=error 的出边目标（至多一条；取首条）。
+     * 无 error 出边返回 null（调用方回落 errorAction 全局策略）。
+     */
+    private LogicFlowDsl.NodeDef resolveErrorTarget(LogicFlowDsl.NodeDef node,
+                                                    Map<String, LogicFlowDsl.NodeDef> nodeById,
+                                                    List<LogicFlowDsl.EdgeDef> edges) {
+        if (edges == null) {
+            return null;
         }
-        return next;
+        for (LogicFlowDsl.EdgeDef edge : edges) {
+            if (BRANCH_ERROR.equalsIgnoreCase(edge.getBranch() == null ? "" : edge.getBranch().trim())) {
+                LogicFlowDsl.NodeDef next = edge.getTarget() != null ? nodeById.get(edge.getTarget()) : null;
+                if (next == null) {
+                    throw new FlowAbortedException("边引用不存在的节点: " + edge.getTarget());
+                }
+                return next;
+            }
+        }
+        return null;
     }
 
     /** CONDITION 节点的后继：按 branch=true/false 选边；缺边 → FAILED。 */

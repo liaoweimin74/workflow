@@ -29,6 +29,14 @@ export const NODE_COLOR_VAR: Record<LogicNodeType, string> = {
   SUBFLOW: '--lf-subflow',
   DATA_UPDATE: '--lf-data',
   SQL_SCRIPT: '--lf-data',
+  DATA_QUERY: '--lf-data-query',
+  DATA_INSERT: '--lf-data-query',
+  DATA_DELETE: '--lf-data-query',
+  NOTIFY: '--lf-notify',
+  DELAY: '--lf-delay',
+  TRANSFORM: '--lf-transform',
+  AGGREGATE: '--lf-transform',
+  LLM: '--lf-llm',
   START: '--lf-neutral',
   END: '--lf-neutral',
 }
@@ -40,10 +48,18 @@ const NODE_META: Record<LogicNodeType, { label: string; description: string; bad
   BEAN: { label: 'Bean 方法', description: '调用系统内已注册的服务方法', badge: 'B' },
   SCRIPT: { label: 'Groovy 脚本', description: '执行服务端 Groovy 脚本（注意安全）', badge: 'S' },
   CONDITION: { label: '条件', description: '按变量条件走「真/假」分支', badge: '条' },
-  BATCH: { label: '批处理', description: '遍历集合并按循环体链逐项执行（把动作节点拖到循环虚线上组成循环体），聚合结果列表', badge: '批' },
+  BATCH: { label: '批处理', description: '遍历集合并按循环体链逐项执行（把动作节点拖到循环虚线上组成循环体），聚合结果列表；支持分批/节流/提前跳出', badge: '批' },
   SUBFLOW: { label: '子流程', description: '调用另一条已发布的逻辑流，输出写回变量', badge: '子' },
-  DATA_UPDATE: { label: '数据更新', description: '纯配置更新动态表（SET/ADD/SUB + 条件），支持单事务多表更新，无需写代码', badge: '数' },
+  DATA_UPDATE: { label: '数据更新', description: '纯配置更新动态表（SET/ADD/SUB + 条件），支持单事务多表更新，无需写代码', badge: '改' },
   SQL_SCRIPT: { label: 'SQL 批处理', description: '多条 SQL 按 ; 顺序执行（{{var}} 参数绑定防注入），可选单事务回滚，输出执行汇总', badge: 'Q' },
+  DATA_QUERY: { label: '数据查询', description: '按业务表单查询数据（等值筛选 + 关键字，租户隔离自动注入），输出 { total, rows }', badge: '查' },
+  DATA_INSERT: { label: '数据新增', description: '按业务表单插入一行（值支持 {{var}} 取上下文），输出含 id 的新行', badge: '增' },
+  DATA_DELETE: { label: '数据删除', description: '按 id 精确删或按条件删（自动追加租户过滤防跨租户误删），输出删除行数', badge: '删' },
+  NOTIFY: { label: '消息通知', description: '按消息模板发送站内信/短信（模板变量支持 {{var}} 取上下文）', badge: '信' },
+  DELAY: { label: '延时', description: '同步等待指定毫秒（1~60000），返回实际等待时长', badge: '延' },
+  TRANSFORM: { label: '数据映射', description: 'JSON 模板 {{var.path}} 占位符编译为新对象：值位注入原始值、字符串内插值', badge: '映' },
+  AGGREGATE: { label: '聚合', description: '对集合做 SUM/AVG/COUNT/MIN/MAX，可按字段分组，输出汇总', badge: '聚' },
+  LLM: { label: 'AI 大模型', description: '调用平台内置大模型（prompt 支持 {{var}} 取上下文），返回模型文本', badge: 'AI' },
 }
 
 export function nodeMeta(type: LogicNodeType): PaletteNode {
@@ -51,11 +67,11 @@ export function nodeMeta(type: LogicNodeType): PaletteNode {
   return { type, ...meta, colorVar: NODE_COLOR_VAR[type] }
 }
 
-/** 调色板分组：控制（开始/结束/条件）+ 动作（HTTP/Bean/脚本/批处理/子流程/数据更新） */
+/** 调色板分组：控制（开始/结束/条件）+ 动作 + 数据 + 智能 */
 export const PALETTE_GROUPS: PaletteGroup[] = [
   {
     title: '控制',
-    items: [nodeMeta('START'), nodeMeta('END'), nodeMeta('CONDITION')],
+    items: [nodeMeta('START'), nodeMeta('END'), nodeMeta('CONDITION'), nodeMeta('DELAY')],
   },
   {
     title: '动作',
@@ -65,9 +81,24 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       nodeMeta('SCRIPT'),
       nodeMeta('BATCH'),
       nodeMeta('SUBFLOW'),
-      nodeMeta('DATA_UPDATE'),
-      nodeMeta('SQL_SCRIPT'),
+      nodeMeta('NOTIFY'),
     ],
+  },
+  {
+    title: '数据',
+    items: [
+      nodeMeta('DATA_QUERY'),
+      nodeMeta('DATA_INSERT'),
+      nodeMeta('DATA_UPDATE'),
+      nodeMeta('DATA_DELETE'),
+      nodeMeta('SQL_SCRIPT'),
+      nodeMeta('TRANSFORM'),
+      nodeMeta('AGGREGATE'),
+    ],
+  },
+  {
+    title: '智能',
+    items: [nodeMeta('LLM')],
   },
 ]
 

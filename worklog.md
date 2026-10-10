@@ -6071,3 +6071,24 @@ Work Log:
 Stage Summary:
 - 运行代码=最新合并版（jar 17:32 构建 + vite 磁盘直服），四链路 200×4 真绿，本地与远端零差异
 - 新增运维资产 scripts/start-java.sh；收割器规律确认：java 仅可由脚本主体启动，内联 setsid nohup 仍会被收割
+
+---
+Task ID: 1
+Agent: error-action-lasterror
+Task: ① errorAction 面板动态提示 + {{__lastError}} 变量
+
+Work Log:
+- 【探索】error 出边数据模型=FlowEdge sourceHandle='error' + data.branch='error'（双标记，onConnect 写入/DSL 回灌均两者兼备）；画布边真值在 useVueFlow store（v-model 副本滞后不回写，先例注释明示），故 PropertyPanel 动态提示的边集合必须取 store 真值
+- 【任务A·PropertyPanel】新增可选 prop edges（FlowEdge[]）+ hasErrorOutEdge computed（按 source===当前节点 且 sourceHandle/branch 含 error 判定）+ errorActionHint computed 三态：①已连 error 出边 → warning「已连接失败分支：失败时优先走该分支，此属性不生效」且 errorAction 选择器 disabled；②无 error 出边且非 IGNORE_CONTINUE → info 中性说明（失败中断/可连失败分支/可选 IGNORE_CONTINUE）；③IGNORE_CONTINUE 且无 error 出边 → info「失败详情可通过 {{__lastError}} 在后续节点引用」。提示文案经 :title 绑定（script 字符串）规避 Vue 模板 {{}} 插值冲突；el-alert 复用 panel-alert 样式，置于异常处理 form-item 之后（仅 hasExecutionMeta 节点渲染）
+- 【任务A·LogicFlowDesigner】新增 panelEdges computed（allEdges() 读 storeEdges.value，reactive 真值）传 :edges="panelEdges"——连接/删边/切节点提示实时联动，最小侵入（两行）
+- 【任务B·引擎】LogicFlowEngine：新增 VAR_LAST_ERROR 常量 + recordLastError()（Map{nodeId,nodeName,type,message,timestamp}，timestamp=OffsetDateTime ISO-8601 带时区）；executeLogicNode 与 executeCondition 的 catch 在三级回落链（error 出边路由 / IGNORE_CONTINUE 继续 / FAIL_FLOW 抛 FlowAbortedException）之前统一写入 vars——FAIL_FLOW 路径经 fail() 快照同样进入 FAILED 结果的 outputVars
+- 【任务B·选型】选嵌套 Map 形态：引擎通用插值 resolveDataUpdateValue（TRANSFORM 模板/NOTIFY 文案变量/LLM prompt/DATA_UPDATE 值）原生支持 {{__lastError}} 整体取用与 {{__lastError.message}} 点路径（resolvePath 逐层 Map）；覆盖语义=单次运行多节点连续失败取最近一次（后写覆盖），已注释说明；不改 trace、不聚合历史
+- 【测试·后端】新增 LogicFlowLastErrorTest 5 用例（IGNORE_CONTINUE 下游模板点路径解析 / 值位纯占位符注入原始 Map / error 出边补救节点读取 / FAIL_FLOW 收敛快照带出 / 连续失败最近覆盖），LogicFlowLastErrorTest 5/5 绿；定向回归 LogicFlowNewNodesTest 22/22 + LogicFlowEngineTest 31/31 绿（只跑受影响类，未跑全量）
+- 【测试·前端】新增 PropertyPanelLastErrorHint.test.ts 5 用例（三态文案+置灰/setProps 响应式联动/他节点 error 出边不误伤，ElementPlus 真装挂载），与 dsl.test.ts 一并 vitest 37/37 绿；vue-tsc 54 与基线持平零新增（含新测试文件）
+- 【纪律】未 commit、未重启任何 Java/vite 进程、未动 backups/、未跑全量测试套件
+
+Stage Summary:
+- 改动文件：backend LogicFlowEngine.java（+VAR_LAST_ERROR/recordLastError/两 catch 注入，36 行）；frontend PropertyPanel.vue（edges prop+双 computed+alert/disabled，53 行）；LogicFlowDesigner.vue（panelEdges 传递，4 行）；新增后端 LogicFlowLastErrorTest.java、前端 PropertyPanelLastErrorHint.test.ts
+- __lastError 数据形态：Map{nodeId, nodeName, type, message, timestamp(ISO-8601 带时区)}——理由=resolvePath 支持嵌套取值，补救节点主插值通道（TRANSFORM/NOTIFY/LLM/DATA_UPDATE）真能取到 {{__lastError.message}}；整体 {{__lastError}} 为 Map toString/JSON 对象
+- 测试结果：后端 5/5 新 + 53/53 定向回归；前端 vitest 37/37（32 dsl + 5 新）、vue-tsc 54=基线
+- 遗留风险：①VariableResolver（HTTP url/headers、CONDITION value、BATCH collection）仅扁平 {{var}}，{{__lastError.message}} 点路径在这些位置取不到（仅 {{__lastError}} 整体 toString），如需全局点路径需升级 VariableResolver（独立专项）；②运行中 jar 未重建（禁重启），__lastError 引擎行为待下次部署后可在 UI 验证（单测已覆盖）；③PropertyPanel 新测试断言依赖 element-plus 2.14 disabled 类落点（.el-select__wrapper.is-disabled），升级组件库需回看

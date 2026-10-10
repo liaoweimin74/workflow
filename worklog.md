@@ -6340,3 +6340,20 @@ Stage Summary:
 - 待用户处理：PAT 属敏感凭据，建议用完后在 GitHub 撤销轮换
 - 待清理：/tmp/wf_token.txt /tmp/imp_row2.xlsx /tmp/imp_row3.xlsx /tmp/exported.xlsx /tmp/exported2.xlsx
 - 遗留：dept 列导出显示原始 JSON（["2"]）翻译显示值待排期；wf_form_def 13 条定义消失成因未定位
+
+---
+Task ID: incident-preview-conn
+Agent: Z.ai Code
+Task: 用户预览域名「关闭了连接」故障排查 + Vite 重启恢复
+
+Work Log:
+- 用户报预览域名 preview-chat-d925c950-....space-z.ai 连接被关闭；沙箱侧排查：Caddy :81 正常、Vite :3000 正常、外网域名 curl 200（故障期间即已恢复过一次）
+- 用户反馈仍不行 → 执行 Vite 重启：kill pid 1159（运行 3h52m/RSS 532MB）→ 双层 fork 重启（setsid nohup node node_modules/.bin/vite --host 0.0.0.0 --port 3000 → pid 20670，日志 /home/z/tools/vite.log）
+- Caddy 为受保护基础设施（Bash 禁止 caddy 命令），无法重启也无需重启（全程响应正常）
+- 重启后四级验证全绿：3000=200 / 网关81=200 / 外网域名=200 / agent-browser 经外网域名渲染登录页+登录进仪表盘 ✓
+- 稳定性探测：连续 5 次外网域名请求全部 200，延迟稳定 ~65ms
+
+Stage Summary:
+- 根因判断：Vite 长时间运行（近 4h）+ 边缘 ALB 瞬时抖动叠加导致连接异常；Vite 重启后外网全链路实测恢复
+- 经验沉淀：预览连接类故障处理顺序 = ①curl 外网域名三级探测（3000/81/外网）②浏览器外网域名实测 ③无效再重启 Vite（双层 fork 模式）④Caddy 属保护进程不可操作
+- 登录态经外网域名验证有效（admin/admin123）

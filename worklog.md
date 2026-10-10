@@ -6317,3 +6317,26 @@ Stage Summary:
 - 【风险观察】wf_form_def 13 条定义无操作者痕迹消失，成因未定位；建议下一轮：①重启后复查 form_def 行数是否稳定 ②排查是否有测试进程误连真实库 ③考虑 dump-db 增加行数基线告警
 - 【体验遗留】导出 dept 列显示原始 JSON（["2"]）而非部门名——可在导出时对 elTreeSelect 型列做显示值翻译（待排期）；导入弹窗浏览器拖拽上传受无头环境限制未 UI 实测（API+弹窗渲染已验）
 - 三问收口素材：①汇总标签=首个未配置聚合列显示「汇总」，其余列显数值 ②Excel=设计器数据源绑定弹窗表格增强区两开关（table 模式）+ 运行页工具栏按钮 ③表头筛选/批量开关=同弹窗表格增强区
+
+---
+Task ID: dev-6-finale
+Agent: Z.ai Code (continuation session)
+Task: 服务健康核查 + PAT push 收尾 + Excel 导入导出端到端验证（curl + 浏览器双通道）+ worklog 收口
+
+Work Log:
+- 服务核查：MariaDB(pid 2660, 3306)/Java(pid 18145, 8080, login 200)/Vite(pid 1159, 3000)/Vite→后端代理(3000 经 /api/login 200) 全绿；此前"服务没起来"系旧浏览器状态，刷新即恢复
+- PAT push：git push origin main 成功 1acbc4b2..cffca80f；fetch 核对 local=origin=cffca80f；凭据已在 ~/.git-credentials（credential.helper store）
+- dump-db.sh 复核：已是修复版（push 失败显式 WARN + tee 落盘 /home/z/tools/dump-db-push-fail.log），无需再改
+- Excel 路由核实：PageDataExcelController @RequestMapping("/api/v1/pages")，导出 POST /{pageKey}/data/export、导入 POST /{pageKey}/data/import(multipart)；确认 16:24 构建 jar 已含该类（运行进程 18145 即用此 jar）
+- 导出实测：首次 400（缺 X-Tenant-Id，多租户拦截器要求）→ 补 X-Tenant-Id: default（与前端 http.ts/excelTransfer.ts 一致）→ 200 xlsx 3.6KB，表头 人员编码/人员姓名/所属部门 + 001 张三 + IMP001
+- 导入实测(curl)：生成 IMP002 往返验证/QA部 → POST import → {"success":1,"failed":0} → 再导出可见 IMP002，闭环 ✅
+- 导入实测(浏览器 agent-browser)：登录 admin → /page/table-enhance-e2e → 运行页「导出 Excel」「导入 Excel」「新增」按钮全部渲染 ✅ → 导入弹窗完整（拖拽区/说明/5000行上限/失败明细说明）→ 上传 imp_row3.xlsx（CSS 选择器 input[type=file]，快照 ref 为装饰按钮会报 Node is not a file input）→ 「开始导入」→「导入成功 成功1 失败0」→ 关闭后表格出现 IMP003/浏览器上传/验证部 ✅
+- worklog 更新本节；临时文件待清理清单见下
+
+Stage Summary:
+- 【收官】PAGE 型 Excel 导入导出双通道验证完成：API(curl) 与 UI(agent-browser 上传弹窗) 均实测通过，此前遗留「弹窗上传未 UI 实测」已补全
+- 关键配置知识：Excel/页面数据类接口必须带 X-Tenant-Id: default；运行页路由 /page/:pageKey；导入弹窗 file input 需用 CSS 选择器上传
+- push 已同步（cffca80f 含 933a48a4 设计器 Excel 开关 + designMode 泄漏修复）
+- 待用户处理：PAT 属敏感凭据，建议用完后在 GitHub 撤销轮换
+- 待清理：/tmp/wf_token.txt /tmp/imp_row2.xlsx /tmp/imp_row3.xlsx /tmp/exported.xlsx /tmp/exported2.xlsx
+- 遗留：dept 列导出显示原始 JSON（["2"]）翻译显示值待排期；wf_form_def 13 条定义消失成因未定位

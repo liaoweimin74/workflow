@@ -6576,3 +6576,22 @@ Work Log:
 Stage Summary:
 - 组件缺口分析 P0/P1 全部落地 + P2 全量落地（15 组件 + 1 分类重构 + 后端流水号基建）
 - 遗留：①member-group 5 用例时代漂移（页面已演进为仅「移除」操作列，测试仍断言旧「成员管理」入口，需按现 UI 重写）②AutoNumber/areaPicker/dictSelect/StepsForm 等新组件的浏览器端到端仅面板就位验证，表单填写→发布→自动编号落库闭环待下轮实测 ③V54 已在运行实例应用
+
+---
+Task ID: integration-wiring-main
+Agent: Z.ai Code (main session)
+Task: 组件补全计划主会话接线——分类落地 + 15 组件接入设计器/运行时 + 后端流水号上线（与 cron 编排会话协同，子代理产出组件、主会话负责共享文件接线）
+
+Work Log:
+- 【协同碰撞与消解】MultiEdit 工具实测「顺序应用、失败不回滚」，与 cron 并行编辑同一文件叠加产生重复（DashConfigDialog union 双成员/接口字段双份；PageDesigner 双 import 块/双注册/双弹窗/双按钮）——逐处去重合并：保留 cron 的图表函数集（chartDialogVisible 系）删我方孤儿弹窗，保留我方五件套 import 补 DashKpiTrend，FcDesigner 注册块并入 dash-kpi-trend，工具栏留 Grid 图标版左树右表按钮
+- 【接线清单】main.ts：areaPicker/dictSelect/AutoNumber/RelationCard/LocationPicker/StepsForm/DrawerContainer/JsonItemsEditor(新建)/dash-kpi-trend 九项 FcDesigner.component；vendor/config/index.js ruleList+7 物料；PageRendererPage formCreate.component×10 + DASH_DATA_TYPES+dash-kpi-trend + page-form/detail/chart/tree-table 进 dsRefId 注入分支；PageDesigner：五件套 addComponent(aide，JsonItemsEditor 配 items/columns/highlightedDates)+page-form/detail/tree-table lightDsButton(容器模式弹窗，防表格模式确认覆写 columns)+page-chart(chart 组，openChartConfig)+环比卡(chart 组，kpiTrend 模式)+左树右表工具栏按钮
+- 【防覆写设计】page-detail/page-tree-table 的 columns 专属 props 改走 lightDsButton（容器模式仅写 dataSourceId+filter），page-form 同；page-chart 专属 config 由图表弹窗写
+- 【图标修正】dictSelect icon-collection→icon-data-select（字体无前者）；五件套选用 icon-application/bulletin/calendar/date/step-form 全部实测存在
+- 【后端】mvn compile+package（用户态 jdk-build 工具链）；SerialNumberService 启动崩溃（双构造器无 @Autowired，Spring 回退默认构造）已由 cron 修复源码，重打包重启后 login 200；V54 wf_serial_number 随启动迁移
+- 【验证】vue-tsc 54=基线（新增零错误；4 处 TS6133 为 HEAD 既有，diff 未触碰）；vitest 分块回归：page 351/form 356/business 412/dashboard 48/vendor 47/api 22 全绿，+148 新组件用例+设计器 card-mode 8 用例；views/system MemberGroupPage 5 失败=cron 提交信息明示的「页面-测试时代漂移」遗留（Task 95 口径漂移，非本次范围）；浏览器实测：设计器六分组（基础/图表/系统/子表单/辅助/布局）+ 全部新组件项在位，运行页 table-enhance-e2e 回归正常（表格 4 行+Excel 右置）
+- 【全量回归受阻记录】单次全量 vitest 两次被 OOM 杀（cgroup 内存挤压，dmesg 实证 Killed 1.15GB）——改分块回归全覆盖等价达成；根因=cron 会话并发跑测试叠加服务常驻
+
+Stage Summary:
+- 15 组件全量接入完成且浏览器实证；origin/main=main=5fbdee29（cron 已把双方工作合并提交推送：ae5efd3a 特性 + 5fbdee29 worklog）
+- 遗留移交：①MemberGroupPage 5 用例时代漂移（Task 95 口径，需对齐页面现行为重写断言）②vue-tsc 4 处 TS6133 基线既有未清 ③设计器草稿绑定回填 bug 仍未修（保存擦除风险仍在，提醒用户勿在设计器直接保存存量页面）
+- 协作教训沉淀：MultiEdit 非原子（失败不回滚）+ 多会话并行改共享文件必撞车——后续并行会话开工前先在 worklog 声明文件认领范围，共享文件接线只归一个会话

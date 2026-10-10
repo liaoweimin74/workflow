@@ -5586,3 +5586,28 @@ Work Log:
 Stage Summary:
 - 重供给 #5 由自愈链自动恢复，全栈真绿；用户报障时段=重供给窗口，现已正常
 - P0/P1/P2 节点开发任务仍待开工（上轮探查被重供给打断，NodeType 现存 10 节点、无 DATA_UPSERT，与摘要描述不符，下轮开发需先核实 git 历史）
+
+---
+Task ID: p0p1p2-nodes
+Agent: 主控（Z.ai Code，用户「继续」+ 中途「后端java似乎没有启动」）
+Task: 逻辑流平台 P0/P1/P2 节点能力一次性补齐（8 新节点 + onError 失败路由 + BATCH 增强）
+
+Work Log:
+- 【应急恢复·重供给#5】用户报「后端java似乎没有启动」→ 诊断 uptime=205s 环境刚重供给，jar/mariadb/jdk 全灭，8080 被 bun 假绿接管（no such table: SYS_USER）→ recover-dplus.sh 两窗口幂等续作（600s 窗口不够 JDK 下载，重跑自动续作）→ Java 真绿 + 四链路 200×4 + 快照入库
+- 【事实澄清】会话摘要所称「DATA_UPSERT 已实施（b129d60a）」在 git 全历史中不存在（git log --all -S DATA_UPSERT 为空）；worklog du-* 系列实为 DATA_UPDATE 多表更新。NodeType 实际 10 节点起步，P0 三节点全部真实从零实现
+- 【后端 8 新节点】NodeType 10→18：DATA_QUERY（BizDataSupport.queryGeneric 复用，租户隔离内建，输出 {total,page,size,rows}）/ DATA_INSERT（createGeneric 复用，输出新行含 id）/ DATA_DELETE（id 精删级联子表 | 条件删自动追加 tenant_id=? 强制过滤防跨租户误删）/ NOTIFY（MessageSender.sendByTemplate 复用，接收人≤20）/ DELAY（1~60000ms 同步硬上限）/ TRANSFORM（JSON 模板两段式编译：值位 {{path}} 注入原始值 + 字符串内 toString 插值）/ AGGREGATE（SUM/AVG/COUNT/MIN/MAX + groupBy，BigDecimal 精确，集合支持 {{var.path}} 点路径）/ LLM（平台内置 ChatModel，prompt/system 插值）
+- 【onError 失败路由】执行节点失败优先走 branch=error 出边（trace FAILED 后路由，输出不写入），无 error 边回落全局 errorAction 两档；requireNext 跳过 error 边保证成功路径不误入；CONDITION 评估失败同样支持
+- 【BATCH 增强】chunkSize 分批（每批 List 作 item）/ intervalMs 节流（0~5000）/ breakWhen 提前跳出（brokenAt 写入汇总）；BatchSummary record 加可选字段 chunkSize/brokenAt 向后兼容（返 Map 导致存量 6 用例 ClassCastException，已回改 record）
+- 【循环体白名单三处同步】引擎 EnumSet + 校验器 Set + 前端 BATCH_BODY_TYPES：+7 型（DATA_QUERY/INSERT/DELETE/NOTIFY/TRANSFORM/AGGREGATE/LLM；DELAY 排除防循环阻塞）
+- 【校验器】8 节点硬校验（formKey 合法性/防全表删/接收人≤20/temperature 范围/TRANSFORM 占位符代换后 JSON 合法性）+ chunk/interval/breakWhen 边界
+- 【前端】dsl.ts 类型/默认值/branch 'error' 全链贯通；nodeMeta 调色板重构四组（控制/动作/数据/智能）+ 6 新类型色（--lf-data-query/notify/delay/transform/llm，双选择器声明防 CSSOM 丢失前科）；FlowNode 执行型红色「败」error 出点 + 8 节点摘要；设计器 error 边连线（每节点至多一条，重复拦截）；PropertyPanel 8 节点完整 UI（业务表单下拉懒加载、TRANSFORM 软预检红条、DELAY 秒换算、AGGREGATE 算子多选）
+- 【测试】LogicFlowNewNodesTest 22/22（查询/插入/删除双形态/NOTIFY/DELAY/TRANSFORM 值位+插值/聚合分组/onError 路由三条/chunk/breakWhen/未装配报错）+ logicflow 包 105/105 全绿 + vue-tsc 基线 54 零新增 + vitest 1398/1398
+- 【E2E】scripts/e2e-new-nodes.mjs 13/13 PASS：主链（空查→插张三12.5→插李四20→查2行→TRANSFORM→聚合 sum32.5→条件删1→按id删1→NOTIFY模板不存在失败→error边路由fb1→DELAY）+ 流B（chunk 5→3批 + LLM 网关真实调用成功）。E2E 调出 3 个真 bug 并修复：①AGGREGATE collection 不支持 {{var.path}} 点路径（新增 resolveCollectionOrPath）②TRANSFORM 混合插值把已注入值折叠成 String 丢类型（改两段独立处理）③E2E 侧 outputVars 字段名/表单 content 分页字段/残留数据幂等
+- 【重要发现】全局 ObjectMapper 配置 Long→String ToStringSerializer（JS 精度保护）：TRANSFORM 值位注入 Long 值产出字符串——决策：遵循平台约定保持一致性（同一变量经 API 返回与经 TRANSFORM 注入形态一致），tooltip 已注明；Integer 不受影响
+- 【部署】mvn 重建 103M jar → 重启三次（nohup 直启两度被收割者静默 SIGKILL——铁律再验证：必须 start-services.sh detached 路径；最终 setsid nohup start-services.sh 拉起 PID 7161 稳定）→ E2E 13/13 在新 jar 上验证
+- 【收口】本地 commit 360ed48a；push 失败（GitHub credential store 随重供给 #5 丢失，与 worklog 既有备案同因），本地 main 领先 origin/main，待凭据恢复后补推
+
+Stage Summary:
+- P0/P1/P2 节点能力全量交付：NodeType 10→18 + onError 节点级失败路由 + BATCH 三增强，发布校验/设计器画布/属性面板/循环体白名单全链路同步
+- 质量证据：后端单测 22 新 + 105 包全绿 / vue-tsc 54 基线零新增 / vitest 1398 全绿 / API E2E 13/13（含 LLM 真实网关调用）
+- 待办移交：①git push 待凭据恢复（本地 360ed48a 领先）②P3（PARALLEL/EVENT_WAIT/SCHEDULE）需异步执行模型，不在本次范围 ③浏览器 UI E2E 未跑（agent-browser 本轮未启动，画布 error 出点/属性面板由 vue-tsc+vitest+API E2E 兜底，建议下轮 webDevReview 补浏览器验证）④E2E 临时表单 e2enew_task 已发布不可删（留库复用，幂等设计）

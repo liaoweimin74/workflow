@@ -88,7 +88,7 @@ class PageDataExcelControllerTest {
         pageAccessGuard = mock(PageAccessGuard.class);
         service = new PageDataExcelService(bizDataService, bizDataSupport, dsService, new ObjectMapper());
         controller = new PageDataExcelController(pageDefService, pageAccessGuard,
-                new PageViewQuerySupport(new ObjectMapper()), service, new ObjectMapper());
+                new PageViewQuerySupport(new ObjectMapper()), service, dsService, new ObjectMapper());
 
         when(pageDefService.getPublishedByKey("emp_view")).thenReturn(viewPage());
         // 导入目标业务表上下文（列白名单）
@@ -154,7 +154,7 @@ class PageDataExcelControllerTest {
         when(spyService.export(any(), any(), any()))
                 .thenReturn(new PageDataExcelService.ExportResult(bytes, 3, false));
         PageDataExcelController withSpy = new PageDataExcelController(pageDefService, pageAccessGuard,
-                new PageViewQuerySupport(new ObjectMapper()), spyService, new ObjectMapper());
+                new PageViewQuerySupport(new ObjectMapper()), spyService, dsService, new ObjectMapper());
 
         PageDataExportRequest req = new PageDataExportRequest();
         req.setFilename("员工/名单"); // 含非法路径字符 → 清洗
@@ -178,7 +178,7 @@ class PageDataExcelControllerTest {
         when(spyService.export(any(), any(), any()))
                 .thenReturn(new PageDataExcelService.ExportResult(new byte[]{1}, 10000, true));
         PageDataExcelController withSpy = new PageDataExcelController(pageDefService, pageAccessGuard,
-                new PageViewQuerySupport(new ObjectMapper()), spyService, new ObjectMapper());
+                new PageViewQuerySupport(new ObjectMapper()), spyService, dsService, new ObjectMapper());
 
         ResponseEntity<byte[]> resp = withSpy.export("emp_view", new PageDataExportRequest());
 
@@ -186,7 +186,7 @@ class PageDataExcelControllerTest {
     }
 
     @Test
-    void export_onNonViewPage_rejected400() {
+    void export_onPageWithoutTableComponent_rejected400() {
         PageDefinition page = new PageDefinition();
         page.setType("PAGE");
         page.setSchema("{}");
@@ -194,7 +194,7 @@ class PageDataExcelControllerTest {
 
         assertThatThrownBy(() -> controller.export("custom_page", new PageDataExportRequest()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("不是视图类型");
+                .hasMessageContaining("未包含数据表格组件");
     }
 
     @Test

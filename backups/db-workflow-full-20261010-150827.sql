@@ -20,7 +20,11 @@
 -- Current Database: `workflow`
 --
 
+<<<<<<<< HEAD:backups/db-workflow-full-20261010-150827.sql
 CREATE DATABASE /*!32312 IF NOT EXISTS*/ `workflow` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */;
+========
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `workflow` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci */;
+>>>>>>>> origin/main:backups/db-workflow-full-20261010-120517.sql
 
 USE `workflow`;
 
@@ -3765,4 +3769,8 @@ SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
+<<<<<<<< HEAD:backups/db-workflow-full-20261010-150827.sql
 -- Dump completed on 2026-10-10 15:08:27
+========
+-- Dump completed on 2026-10-10 12:05:17
+>>>>>>>> origin/main:backups/db-workflow-full-20261010-120517.sql

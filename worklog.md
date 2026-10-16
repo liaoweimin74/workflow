@@ -8021,3 +8021,17 @@ Work Log:
 
 Stage Summary:
 - 全绿 200×4 真绿；零 mvn 恢复（第 4 次）；后台 recover + timeout 保护 + 组合等待在本轮表现良好（MariaDB 未需重建时 ~2 分钟内完成）
+
+---
+Task ID: r67
+Agent: main
+Task: r67 巡检（2026-10-16 12:05）
+
+Work Log:
+- 第 21 次重供给：假绿 + MariaDB 离线（需全链路重建）
+- 标准流水线：kill 占位 → 重组 jar（md5=e369839b）→ recover-dplus.sh 前台完整跑完（rc=0，未超时）→ TRUE GREEN
+- 四链路 200×4；收口 dump 20261016-040629 推送成功（76b0bd9f..4a119d7c）；内存 3.54GB，oom_kill=0
+- java pid 1425 新拉起
+
+Stage Summary:
+- 全绿 200×4 真绿；零 mvn 恢复（第 5 次）；含 MariaDB 全链路重建时 recover 也能在 550s 内完整跑完（rc=0），前台模式可靠性验证通过

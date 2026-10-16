@@ -8110,3 +8110,18 @@ Work Log:
 Stage Summary:
 - 重供给 #25 单轮内恢复（~2 分钟）；内存 3.46GB，oom_kill=0；零 mvn 计数 9
 - 再次印证：冷启动 recover 无 jar 备份必走 mvn 空耗，需人工接管分卷恢复（第 4 次）
+
+---
+Task ID: r73
+Agent: main
+Task: 2026-10-16 18:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #26）
+- pkill bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，28s done，零 mvn 第 10 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261016-1006 推送成功
+
+Stage Summary:
+- 重供给 #26 单轮内恢复（~2 分钟）；内存 3.51GB，oom_kill=0；零 mvn 计数 10

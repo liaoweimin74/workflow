@@ -8219,3 +8219,17 @@ Work Log:
 
 Stage Summary:
 - 重供给 #32 单轮内恢复（~2 分钟）；内存 3.55GB，oom_kill=0；零 mvn 计数 16
+
+---
+Task ID: r80
+Agent: main
+Task: 2026-10-17 01:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #33）
+- 冷启动自动 recover 在场（PID 1078，MariaDB apt 下载阶段）→ 不打断，预置策略：checkout jar-parts + 重拼 md5 e369839b，让 recover 跑到 jar 步骤时直接命中
+- 轮询 try6（~1 分钟）即 accessToken 真绿——recover 使用预置 jar 跳过 mvn（零 mvn 第 17 次）
+- 复探 200×4；收口 dump 20261016-1707 推送成功
+
+Stage Summary:
+- 重供给 #33 恢复（预置 jar 策略首次实战成功，全程无人工接管）；内存 3.39GB，oom_kill=0；零 mvn 计数 17

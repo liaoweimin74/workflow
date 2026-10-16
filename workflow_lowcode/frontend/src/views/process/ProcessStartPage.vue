@@ -15,13 +15,6 @@
         <el-descriptions-item label="描述" :span="3">{{ processDef?.description || '—' }}</el-descriptions-item>
       </el-descriptions>
 
-      <!-- 流程图预览（可折叠） -->
-      <el-collapse v-model="diagramCollapse" style="margin-top: 16px">
-        <el-collapse-item title="流程图预览" name="diagram">
-          <div ref="diagramRef" class="bpmn-preview" />
-        </el-collapse-item>
-      </el-collapse>
-
       <!-- 发起表单区 -->
       <el-divider content-position="left">发起表单</el-divider>
 
@@ -72,19 +65,9 @@
 <script setup lang="ts">
 defineOptions({ name: 'ProcessStart' })
 
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
-import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
-import { normalizeBpmnXmlForRender } from '@/views/designer/utils/xmlParser'
-import { customRendererModule } from '@/views/designer/utils/customRenderer'
-
-// bpmn-js 基础样式 + 画布通用主题（与设计器同源，四态明暗自适应 —— 暗色下节点名称可读）
-import 'bpmn-js/dist/assets/diagram-js.css'
-import 'bpmn-js/dist/assets/bpmn-js.css'
-import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
-import '@/views/designer/styles/bpmn-canvas-theme.css'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { processInstanceApi } from '@/api/processInstance'
 import { formApi } from '@/api/form'
@@ -101,8 +84,6 @@ const submitting = ref(false)
 const savingDraft = ref(false)
 const processDef = ref<DeployedProcessDefinition | null>(null)
 const formDefId = ref<string | null>(null)
-const diagramCollapse = ref<string[]>([])
-const diagramRef = ref<HTMLElement>()
 const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
 const draftValues = ref<Record<string, unknown> | null>(null)
 
@@ -110,8 +91,6 @@ const draftValues = ref<Record<string, unknown> | null>(null)
 const initiatorSelectNodes = ref<{ id: string; name: string }[]>([])
 /** 自选办理人选择结果：nodeId → 用户 id 数组（提交时转字符串数组放入 assignee_<nodeId>） */
 const initiatorSelectValues = ref<Record<string, number[]>>({})
-
-let viewer: ViewerType | null = null
 
 // ── 加载流程定义信息 + XML ──
 async function loadProcessDefinition() {
@@ -137,22 +116,6 @@ async function loadProcessDefinition() {
         }
       } catch {
         // 无草稿或加载失败，忽略
-      }
-    }
-
-    // 渲染流程图
-    diagramCollapse.value = ['diagram']
-    await nextTick()
-    if (diagramRef.value && !viewer) {
-      viewer = new BpmnViewer({ container: diagramRef.value, additionalModules: [customRendererModule] })
-    }
-    if (viewer) {
-      try {
-        await viewer.importXML(normalizeBpmnXmlForRender(xml))
-        const canvas = viewer.get('canvas') as { zoom: (type: string, auto?: boolean) => void }
-        canvas.zoom('fit-viewport', true)
-      } catch {
-        // XML 解析失败，忽略
       }
     }
 
@@ -270,15 +233,6 @@ async function handleSubmit() {
   }
 }
 
-// ── 折叠展开时重新 zoom ──
-watch(diagramCollapse, async (val) => {
-  if (val.includes('diagram') && viewer) {
-    await nextTick()
-    const canvas = viewer.get('canvas') as { zoom: (type: string, auto?: boolean) => void }
-    canvas.zoom('fit-viewport', true)
-  }
-})
-
 onMounted(() => {
   loadProcessDefinition()
 })
@@ -292,13 +246,6 @@ onMounted(() => {
 .header-title {
   font-size: 16px;
   font-weight: bold;
-}
-
-.bpmn-preview {
-  height: 300px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
-  overflow: hidden;
 }
 
 .submit-bar {

@@ -45,20 +45,7 @@
         </el-descriptions>
       </el-card>
 
-      <!-- 中部：流程图高亮 -->
-      <el-card shadow="never" style="margin-top: 16px">
-        <template #header><span style="font-weight: bold">流程图</span></template>
-        <div class="bpmn-container">
-          <BpmnViewer
-            v-if="bpmnXml"
-            :xml="bpmnXml"
-            :highlights="highlightIds"
-          />
-          <el-empty v-else-if="!loading" description="流程图加载失败" :image-size="80" />
-        </div>
-      </el-card>
-
-      <!-- 底部：任务执行列表（已执行 + 活跃 + 预测） -->
+      <!-- 任务执行列表（已执行 + 活跃 + 预测） -->
       <el-card shadow="never" style="margin-top: 16px">
         <template #header><span style="font-weight: bold">任务执行列表</span></template>
         <ProcessTaskExecutionList :nodes="executionNodes" />
@@ -82,11 +69,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell, RefreshRight } from '@element-plus/icons-vue'
 import { processInstanceApi } from '@/api/processInstance'
-import { deployedProcessApi } from '@/api/processDefinition'
 import { taskRemindApi } from '@/api/taskRemind'
 import type { ProcessInstanceVO, ExecutionNodeVO } from '@/api/processInstance'
 import type { ApprovalRecordVO } from '@/api/task'
-import { BpmnViewer, ApprovalTimeline, ProcessTaskExecutionList } from '@/components/business'
+import { ApprovalTimeline, ProcessTaskExecutionList } from '@/components/business'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,8 +81,6 @@ const instanceId = route.params.instanceId as string
 const loading = ref(true)
 const reminding = ref(false)
 const instance = ref<ProcessInstanceVO | null>(null)
-const bpmnXml = ref('')
-const highlightIds = ref<string[]>([])
 const approvalRecords = ref<ApprovalRecordVO[]>([])
 const executionNodes = ref<ExecutionNodeVO[]>([])
 
@@ -160,20 +144,11 @@ onMounted(async () => {
     const instanceRes = await processInstanceApi.get(instanceId)
     instance.value = instanceRes.data
 
-    // 并行加载 XML + 高亮 + 审批记录 + 执行预测
-    const [xmlRes, highlightRes, historyRes, predictionRes] = await Promise.all([
-      deployedProcessApi.getXml(instance.value.processDefinitionId),
-      processInstanceApi.highlight(instanceId),
+    // 并行加载审批记录 + 执行预测
+    const [historyRes, predictionRes] = await Promise.all([
       processInstanceApi.history(instanceId),
       processInstanceApi.prediction(instanceId),
     ])
-
-    bpmnXml.value = xmlRes.data
-
-    const highlight = highlightRes.data
-    const completed = (highlight.completedActivityIds as string[]) ?? []
-    const active = (highlight.activeActivityIds as string[]) ?? []
-    highlightIds.value = [...completed, ...active]
 
     approvalRecords.value = historyRes.data
     executionNodes.value = predictionRes.data
@@ -197,12 +172,5 @@ onMounted(async () => {
 
 .track-body {
   max-width: 1000px;
-}
-
-.bpmn-container {
-  height: 400px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
-  overflow: hidden;
 }
 </style>

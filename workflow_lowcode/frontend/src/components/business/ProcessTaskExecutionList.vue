@@ -1,64 +1,88 @@
 <template>
   <div class="task-execution-timeline">
-    <el-timeline v-if="nodes.length > 0">
-      <el-timeline-item
-        v-for="(node, index) in nodes"
-        :key="index"
-        :timestamp="node.endTime ? formatDateTime(node.endTime) : ''"
-        placement="top"
-        :type="statusTimelineType(node.status)"
-        :hollow="node.status === 'predicted'"
-      >
-        <div class="timeline-item" :class="{ 'is-predicted': node.status === 'predicted' }">
-          <div class="timeline-header">
-            <el-icon class="node-type-icon" :class="nodeTypeIconClass(node.type)">
-              <component :is="nodeTypeIcon(node.type)" />
-            </el-icon>
-            <span class="node-name">{{ node.activityName || '—' }}</span>
+    <div v-if="nodes.length > 0" class="exec-timeline">
+      <div v-for="(node, index) in nodes" :key="index" class="exec-item">
+        <span class="exec-dot" :class="dotClass(node)"></span>
+
+        <!-- 结束事件：轻量收尾 -->
+        <div v-if="node.type === 'endEvent'" class="exec-endcap">
+          {{ node.activityName || '流程结束' }}
+          <span v-if="node.endTime" class="exec-time">{{ formatDateTime(node.endTime) }}</span>
+        </div>
+
+        <!-- 普通节点卡片 -->
+        <div
+          v-else
+          class="exec-card"
+          :class="{ 'is-active': node.status === 'active', 'is-predicted': node.status === 'predicted' }"
+        >
+          <div class="exec-head">
+            <span class="exec-name">{{ node.activityName || '—' }}</span>
             <el-tag
-              v-if="node.type !== 'endEvent' && node.type !== 'startEvent'"
+              v-if="node.type !== 'startEvent'"
               :type="statusTagType(node.status)"
               size="small"
-              effect="plain"
+              effect="light"
+              round
             >
               {{ statusLabel(node.status) }}
             </el-tag>
-            <el-icon v-if="node.hasBranch" class="branch-icon" title="此处有分支">
-              <Connection />
-            </el-icon>
+            <el-tag v-if="multiModeLabel(node.multiMode)" type="warning" size="small" effect="plain" round>
+              {{ multiModeLabel(node.multiMode) }}
+            </el-tag>
+            <el-icon v-if="node.hasBranch" class="branch-icon" title="此处有分支"><Connection /></el-icon>
+            <span v-if="node.endTime" class="exec-time">{{ formatDateTime(node.endTime) }}</span>
           </div>
-          <div class="timeline-body" v-if="node.type !== 'endEvent' && node.type !== 'startEvent'">
-            <div v-if="multiModeLabel(node.multiMode)" class="multi-mode-row">
-              <el-tag size="small" type="warning" effect="plain">{{ multiModeLabel(node.multiMode) }}</el-tag>
-            </div>
-            <span class="assignee" v-if="node.candidateNames">
-              候选人：{{ node.candidateNames }}
-            </span>
-            <span class="assignee" v-else-if="node.status === 'active' && node.assigneeName">
-              当前办理人：{{ node.assigneeName }}
-            </span>
-            <span class="assignee" v-else>
-              办理人：{{ node.assigneeName || '—' }}
-              <el-tag v-if="node.action === 'transfer' || node.action === 'delegate'"
-                :type="actionTagType(node.action)" size="small" effect="plain">{{ actionLabel(node.action) }}</el-tag>
+
+          <div v-if="hasPersonRow(node)" class="exec-person">
+            <!-- 候选人（未认领） -->
+            <template v-if="node.candidateNames">
+              <span v-for="(c, ci) in candidateList(node.candidateNames)" :key="ci" class="exec-avatar">
+                {{ avatarChar(c) }}
+              </span>
+              <span class="exec-pname">{{ node.candidateNames }}</span>
+              <span class="exec-psub">候选人</span>
+            </template>
+
+            <!-- 进行中 -->
+            <template v-else-if="node.status === 'active' && node.assigneeName">
+              <span class="exec-avatar">{{ avatarChar(node.assigneeName) }}</span>
+              <span class="exec-pname">{{ node.assigneeName }}</span>
+              <span class="exec-psub">当前办理人</span>
+            </template>
+
+            <!-- 预测节点 -->
+            <template v-else-if="node.status === 'predicted'">
+              <span class="exec-avatar is-ghost">?</span>
+              <span class="exec-psub">办理人：{{ node.assigneeName || '待定' }}</span>
+            </template>
+
+            <!-- 已完成 -->
+            <template v-else>
+              <span class="exec-avatar">{{ avatarChar(node.assigneeName) }}</span>
+              <span class="exec-pname">{{ node.assigneeName || '—' }}</span>
+              <el-tag v-if="node.action" :type="actionTagType(node.action)" size="small" effect="light" round>
+                {{ actionLabel(node.action) }}
+              </el-tag>
               <template v-if="node.action === 'transfer' || node.action === 'delegate'">
-                {{ node.targetUserName || '—' }}
+                <el-icon class="target-arrow"><Right /></el-icon>
+                <span class="exec-avatar">{{ avatarChar(node.targetUserName) }}</span>
+                <span class="exec-pname">{{ node.targetUserName || '—' }}</span>
               </template>
-              <el-tag v-else-if="node.action"
-                :type="actionTagType(node.action)" size="small" effect="plain">{{ actionLabel(node.action) }}</el-tag>
-            </span>
-            <p v-if="node.comment" class="comment">{{ node.comment }}</p>
+            </template>
           </div>
+
+          <div v-if="node.comment" class="exec-comment">{{ node.comment }}</div>
         </div>
-      </el-timeline-item>
-    </el-timeline>
+      </div>
+    </div>
     <el-empty v-else description="暂无执行记录" :image-size="80" />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ExecutionNodeVO } from '@/api/processInstance'
-import { Connection, Avatar, Flag, CircleClose, Switch } from '@element-plus/icons-vue'
+import { Connection, Right } from '@element-plus/icons-vue'
 
 defineProps<{
   nodes: ExecutionNodeVO[]
@@ -80,15 +104,6 @@ function statusLabel(status: string): string {
 
 function statusTagType(status: string): 'success' | 'primary' | 'info' {
   const map: Record<string, 'success' | 'primary' | 'info'> = {
-    completed: 'success',
-    active: 'primary',
-    predicted: 'info',
-  }
-  return map[status] ?? 'info'
-}
-
-function statusTimelineType(status: string): 'primary' | 'success' | 'info' {
-  const map: Record<string, 'primary' | 'success' | 'info'> = {
     completed: 'success',
     active: 'primary',
     predicted: 'info',
@@ -139,18 +154,27 @@ function actionTagType(action: string): 'success' | 'danger' | 'warning' | 'info
   return map[action] ?? 'info'
 }
 
-function nodeTypeIcon(type: string) {
-  const map: Record<string, unknown> = {
-    userTask: Avatar,
-    startEvent: Flag,
-    endEvent: CircleClose,
-    serviceTask: Switch,
-  }
-  return map[type] ?? Flag
+function dotClass(node: ExecutionNodeVO): string {
+  if (node.status === 'active') return 'is-active'
+  if (node.status === 'predicted') return 'is-ghost'
+  return 'is-done'
 }
 
-function nodeTypeIconClass(type: string): string {
-  return `node-icon-${type || 'default'}`
+function hasPersonRow(node: ExecutionNodeVO): boolean {
+  return Boolean(node.candidateNames || node.assigneeName || node.status === 'predicted')
+}
+
+/** 拆分候选人串（后端以 、,， 等分隔） */
+function candidateList(names: string): string[] {
+  return names
+    .split(/[、,，;；/]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function avatarChar(name: string | null): string {
+  const n = (name || '').trim()
+  return n ? n.charAt(0) : '—'
 }
 </script>
 
@@ -159,91 +183,176 @@ function nodeTypeIconClass(type: string): string {
   padding: 8px 0;
 }
 
-.timeline-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.exec-timeline {
+  position: relative;
+  margin-left: var(--spacer-8, 8px);
+  padding-left: 28px;
 }
 
-.timeline-item.is-predicted {
-  opacity: 0.6;
+.exec-timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 10px;
+  bottom: 18px;
+  width: 2px;
+  background: var(--el-border-color-lighter);
+  border-radius: 2px;
 }
 
-.timeline-header {
+.exec-item {
+  position: relative;
+  padding-bottom: 12px;
+}
+
+.exec-item:last-child {
+  padding-bottom: 0;
+}
+
+.exec-dot {
+  position: absolute;
+  left: -28px;
+  top: 15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--el-color-success);
+  border: 2px solid var(--el-bg-color);
+  box-sizing: content-box;
+  z-index: 1;
+}
+
+.exec-dot.is-active {
+  background: var(--el-color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .exec-dot.is-active {
+    animation: exec-pulse 1.8s ease-out infinite;
+  }
+}
+
+@keyframes exec-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--el-color-primary) 35%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--el-color-primary) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--el-color-primary) 0%, transparent);
+  }
+}
+
+.exec-dot.is-ghost {
+  background: var(--el-bg-color);
+  border: 2px dashed var(--el-text-color-placeholder);
+}
+
+.exec-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  padding: 10px 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.exec-card:hover {
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.exec-card.is-active {
+  border-color: var(--el-color-primary);
+}
+
+.exec-card.is-predicted {
+  border-style: dashed;
+}
+
+.exec-head {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.node-name {
+.exec-name {
   font-weight: 600;
   font-size: 14px;
+  color: var(--el-text-color-primary);
 }
 
-.node-type-icon {
-  font-size: 16px;
+.exec-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.exec-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.exec-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.node-icon-userTask {
-  color: var(--el-color-primary);
+.exec-avatar.is-ghost {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-placeholder);
 }
 
-.node-icon-startEvent {
-  color: var(--el-color-success);
+.exec-pname {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
 }
 
-.node-icon-endEvent {
-  color: var(--el-color-info);
+.exec-psub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
-.node-icon-serviceTask {
-  color: var(--el-color-warning);
+.exec-comment {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: var(--el-fill-color-light);
+  border-left: 3px solid var(--el-color-primary);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
 }
 
-.timeline-body {
+.exec-endcap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
 
-.multi-mode-row {
-  margin-bottom: 4px;
-}
-
-.assignee {
-  display: block;
-}
-
-.assignee .el-tag {
-  margin: 0 4px;
-}
-
-.comment {
-  margin: 4px 0 0;
-  padding: 4px 8px;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
-  color: var(--el-text-color-regular);
+.exec-endcap .exec-time {
+  margin-left: 0;
 }
 
 .branch-icon {
   color: var(--el-color-warning);
-  vertical-align: middle;
-}
-
-.target-user {
-  font-size: 13px;
-  color: var(--el-color-warning);
-  font-weight: 500;
-}
-
-.action-row {
-  display: block;
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-shrink: 0;
 }
 
 .target-arrow {

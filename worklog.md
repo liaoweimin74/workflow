@@ -8035,3 +8035,16 @@ Work Log:
 
 Stage Summary:
 - 全绿 200×4 真绿；零 mvn 恢复（第 5 次）；含 MariaDB 全链路重建时 recover 也能在 550s 内完整跑完（rc=0），前台模式可靠性验证通过
+
+---
+Task ID: r68
+Agent: main
+Task: r68 巡检（2026-10-16 13:05）
+
+Work Log:
+- 第 22 次重供给：假绿 + MariaDB 空库（dump 校验失败属预期，恢复后自愈）
+- 标准流水线：kill 占位 → 重组 jar（md5=e369839b）→ recover 前台完整跑完（rc=0）→ TRUE GREEN
+- 四链路 200×4；收口 dump 20261016-050623 推送成功（261df924..cdd54b99）；内存 3.59GB，oom_kill=0
+
+Stage Summary:
+- 全绿 200×4 真绿；零 mvn 恢复（第 6 次）；流程已完全稳定化

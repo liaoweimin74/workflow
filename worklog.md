@@ -8125,3 +8125,20 @@ Work Log:
 
 Stage Summary:
 - 重供给 #26 单轮内恢复（~2 分钟）；内存 3.51GB，oom_kill=0；零 mvn 计数 10
+
+---
+Task ID: r74
+Agent: main
+Task: 2026-10-16 19:05 cron 巡检（轻量运维）
+
+Work Log:
+- 四链路全 000，进程表无 vite/mariadbd/java/bun/node → 彻底冷启动（重供给 #27）
+- /home/z/tools/ 丢失（JDK21/Maven 全没），/usr/bin/java 幸存；本地 HEAD 被回滚至 29850a8c（jar-parts 幸存）；无自动 recover 触发
+- mkdir /home/z/tools + checkout jar-parts + 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0：MariaDB 全链路重建（deb 下载→initdb）→ 100640 dump 导入 → jar 恢复（零 mvn 第 11 次）→ Java 拉起，28s done
+- 8080 真绿后 3000 仍 000（recover 不管前端）→ start-services.sh 幂等拉起（bun install 补依赖）→ 3000=200
+- 复探 200×4 真绿；收口 dump 20261016-110732，fetch+rebase 同步被回滚的 git，8bf75d1f 推送成功
+
+Stage Summary:
+- 重供给 #27 冷启动全链路恢复（recover 28s + 前端 1 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 11
+- 教训重申：recover 只覆盖 3306/8080，3000 前端需 start-services.sh 补拉；/home/z/tools 非持久区

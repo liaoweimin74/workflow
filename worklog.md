@@ -8008,3 +8008,16 @@ Work Log:
 
 Stage Summary:
 - 全绿 200×4 真绿；零 mvn 恢复（第 3 次）；重供给频率 ~1 次/小时，冷启动 mvn 空耗 8 分钟问题持续，仍建议授权 recover 前置 jar 分卷恢复
+
+---
+Task ID: r66
+Agent: main
+Task: r66 巡检（2026-10-16 11:05）
+
+Work Log:
+- 第 20 次重供给：假绿；标准流水线（kill 占位 → 重组 jar md5=e369839b → 后台 recover timeout 500 保护）
+- t=150s 真绿（本轮恢复 <3 分钟，最快纪录）；java pid 1466
+- 四链路 200×4；收口 dump 20261016-030855 推送成功（6a202ed0..5f1a5c87）；内存 3.40GB，oom_kill=0
+
+Stage Summary:
+- 全绿 200×4 真绿；零 mvn 恢复（第 4 次）；后台 recover + timeout 保护 + 组合等待在本轮表现良好（MariaDB 未需重建时 ~2 分钟内完成）

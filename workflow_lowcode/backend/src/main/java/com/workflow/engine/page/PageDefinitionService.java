@@ -3,9 +3,7 @@ package com.workflow.engine.page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workflow.common.exception.BusinessException;
-import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -26,9 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 版本管理策略（对齐 FormDefinitionService）：
  * - create: 创建 version=1, status=DRAFT 的记录
  * - update: 原地更新（不创建新版本，不改变状态）
- * - publish: DRAFT → PUBLISHED，旧 PUBLISHED 降 ARCHIVED，不建表；type=VIEW 时
- *   PageValidator.validateForPublish + PageValidator.resolveBindColumns + ViewCompiler.compile，
- *   编译产物 {rule, option} 合并进 schema 持久化；type=PAGE（阶段二预留）仅基础校验不编译
+ * - publish: DRAFT → PUBLISHED，旧 PUBLISHED 降 ARCHIVED，不建表；
+ *   PageValidator.validateForPublish 校验页面 schema（自定义页面 PAGE 的数据源/组件/动作绑定），
+ *   通过后直接持久化（VIEW 视图编译已废弃，不再编译）
  * - delete: 软删除，PUBLISHED 拒绝，状态改为 ARCHIVED
  */
 @Service
@@ -37,7 +35,6 @@ public class PageDefinitionService {
     private final PageDefinitionRepository pageDefRepository;
     private final TenantProvider tenantProvider;
     private final PageValidator validator;
-    private final ViewCompiler compiler;
     private final ObjectMapper objectMapper;
 
     /**
@@ -49,12 +46,10 @@ public class PageDefinitionService {
     public PageDefinitionService(PageDefinitionRepository pageDefRepository,
                                  TenantProvider tenantProvider,
                                  PageValidator validator,
-                                 ViewCompiler compiler,
                                  ObjectMapper objectMapper) {
         this.pageDefRepository = pageDefRepository;
         this.tenantProvider = tenantProvider;
         this.validator = validator;
-        this.compiler = compiler;
         this.objectMapper = objectMapper;
     }
 
@@ -63,7 +58,7 @@ public class PageDefinitionService {
      *
      * @param name    页面名称
      * @param key     页面标识（租户内唯一）
-     * @param type    页面类型（VIEW/PAGE，null 或空白默认 VIEW）
+     * @param type    页面类型（VIEW 已废弃 / PAGE，null 或空白默认 PAGE）
      * @param formKey 绑定的业务表单 key（VIEW 用，可空，遗留字段）
      * @param dataSourceId 绑定的数据源 ID（新协议，可空）
      * @return 创建的页面定义
@@ -82,7 +77,7 @@ public class PageDefinitionService {
         pageDef.setTenantId(tenantId);
         pageDef.setName(name);
         pageDef.setKey(key);
-        pageDef.setType(type == null || type.isBlank() ? "VIEW" : type);
+        pageDef.setType(type == null || type.isBlank() ? "PAGE" : type);
         pageDef.setFormKey(formKey);
         pageDef.setDataSourceId(dataSourceId);
         pageDef.setSchema(null);
@@ -111,34 +106,10 @@ public class PageDefinitionService {
     }
 
     /**
-     * 预览：按 key 获取最新定义，未发布的 DRAFT 视图动态编译（含编译产物 rule/option）。
-     * 与发布不同：编译结果不持久化（不调用 save），仅返回内存中合并后的 schema，
-     * 使设计器预览效果与发布后一致（查询/操作/详情/事件完整可渲染）。
+     * 预览：按 key 获取最新定义（VIEW 视图编译已废弃，PAGE 的 schema 即渲染配置，无需编译）。
      */
     public PageDefinition getPreviewByKey(String key) {
-        PageDefinition page = getByKey(key);
-        if (!"VIEW".equals(page.getType())) {
-            return page;
-        }
-        // 已含编译产物（发布过或残留）→ 直接返回；否则动态编译
-        if (page.getSchema() != null && schemaHasCompiled(page.getSchema())) {
-            return page;
-        }
-        validator.validateForPublish(page);
-        List<ColumnConfig> bindColumns = validator.resolveBindColumns(page);
-        String compiled = compiler.compile(page, bindColumns);
-        page.setSchema(mergeCompiled(page.getSchema(), compiled));
-        return page;
-    }
-
-    /** schema 是否已含编译产物（rule 键存在） */
-    private boolean schemaHasCompiled(String schema) {
-        try {
-            JsonNode node = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            return node.isObject() && node.has("rule");
-        } catch (JsonProcessingException e) {
-            return false;
-        }
+        return getByKey(key);
     }
 
     /**
@@ -266,7 +237,7 @@ public class PageDefinitionService {
      * 发布页面（不建表）。
      * 流程：findByIdForUpdate 悲观锁 → 状态校验（DRAFT/PUBLISHED 可重发，ARCHIVED 拒绝）
      * → 同 key 进程内锁内：内容未变化拒绝（对比同 key 排除自身的最新 PUBLISHED）
-     * → type=VIEW 时 validateForPublish + resolveBindColumns + compile，编译产物合并进 schema
+     * → validateForPublish 校验 schema 绑定（VIEW 编译已废弃，PAGE 无编译）
      * → 旧 PUBLISHED 降 ARCHIVED → 当前 status=PUBLISHED、publishedVersion=version → save。
      *
      * 并发保证：findByIdForUpdate 仅锁单行，同 key 不同 id 的并发发布需按 key 粒度
@@ -298,13 +269,8 @@ public class PageDefinitionService {
                 throw new BusinessException(400, "页面内容与已发布版本未变化，无需发布");
             }
 
-            // 校验 + 编译（type=PAGE 阶段二预留：仅基础校验，不编译）
+            // 校验（VIEW 视图编译已废弃，PAGE 仅校验 schema 绑定，无编译产物）
             validator.validateForPublish(current);
-            if ("VIEW".equals(current.getType())) {
-                List<ColumnConfig> bindColumns = validator.resolveBindColumns(current);
-                String compiled = compiler.compile(current, bindColumns);
-                current.setSchema(mergeCompiled(current.getSchema(), compiled));
-            }
 
             // 旧 PUBLISHED 降 ARCHIVED
             oldPublishedOpt.ifPresent(old -> {
@@ -319,57 +285,15 @@ public class PageDefinitionService {
     }
 
     /**
-     * schema 语义比较：剔除编译产物（rule/option）后做 JSON 规范化比对。
-     * 发布时编译产物会合并进 schema，直接比较会把"相同声明"误判为"已变化"。
+     * schema 语义比较：JSON 规范化后比对（VIEW 视图编译已废弃，schema 全为用户声明内容）。
      */
     private boolean schemaEquals(String a, String b) {
         try {
             JsonNode na = objectMapper.readTree(a == null || a.isBlank() ? "{}" : a);
             JsonNode nb = objectMapper.readTree(b == null || b.isBlank() ? "{}" : b);
-            return stripCompiled(na).equals(stripCompiled(nb));
+            return na.equals(nb);
         } catch (JsonProcessingException e) {
             return false;
-        }
-    }
-
-    /**
-     * 移除 schema 中的编译产物键（rule/option/display），仅保留用户声明内容。
-     *
-     * <p>⚠️ 剥离清单必须与 {@link #mergeCompiled(String, String)} 的合并键保持同步：
-     * mergeCompiled 会把编译产出的 rule/option/display 合入已发布 schema，
-     * 漏剥任一键会把「相同声明」误判为「已变化」，导致同内容重复发布不被拒绝。
-     */
-    private JsonNode stripCompiled(JsonNode node) {
-        if (node != null && node.isObject()) {
-            ObjectNode copy = ((ObjectNode) node).deepCopy();
-            copy.remove("rule");
-            copy.remove("option");
-            copy.remove("display");
-            return copy;
-        }
-        return node;
-    }
-
-    /**
-     * 将编译产物 {rule, option} 合并进声明 schema，保留原始声明配置。
-     */
-    private String mergeCompiled(String schema, String compiled) {
-        try {
-            JsonNode rootNode = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            ObjectNode root = rootNode.isObject() ? (ObjectNode) rootNode : objectMapper.createObjectNode();
-            JsonNode compiledNode = objectMapper.readTree(compiled);
-            if (compiledNode.has("rule")) {
-                root.set("rule", compiledNode.get("rule"));
-            }
-            if (compiledNode.has("option")) {
-                root.set("option", compiledNode.get("option"));
-            }
-            if (compiledNode.has("display")) {
-                root.put("display", compiledNode.get("display").asText());
-            }
-            return objectMapper.writeValueAsString(root);
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(400, "视图编译产物合并失败");
         }
     }
 }

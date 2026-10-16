@@ -288,7 +288,7 @@ import {
   QuestionFilled,
 } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
-import type { ViewActionsConfig, ViewActionButton, ViewDetailConfig } from '../ViewDesigner.vue'
+import type { ViewActionsConfig, ViewActionButton, ViewDetailConfig } from './schemaTypes'
 
 const props = defineProps<{
   modelValue: ViewActionsConfig

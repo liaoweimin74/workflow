@@ -2,18 +2,19 @@ package com.workflow.engine.page;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.controller.PageQueryController;
+import com.workflow.api.controller.PageViewQuerySupport;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.FormDefinitionService;
-import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
-import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
@@ -42,12 +43,13 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 页面发布-查询集成测试（真实组件装配）。
+ * 页面发布-查询集成测试（真实组件装配，自定义页面 PAGE）。
+ * VIEW 视图编译/查询已废弃，本测试以 PAGE 数据源绑定验证发布链路与白名单查询。
  *
- * 覆盖（对齐 Task 7）：
+ * 覆盖：
  * 1. 发布 BUSINESS 表单触发建表（真实 FormDefinitionService + mock DynamicTableManager）
- * 2. 发布 VIEW 页面成功且不执行 DDL（页面链路无 DynamicTableManager 触点）
- * 3. /pages/{key}/data 查询：filter 白名单（未知字段 400）、租户隔离
+ * 2. 发布 PAGE 页面成功且不执行 DDL（页面链路无 DynamicTableManager 触点、无编译）
+ * 3. /pages/{key}/ds/{dsId}/data 查询：filter 白名单（未知字段 400）、租户隔离
  * 4. 同 key 多稿发布 → 同一时刻仅一条 PUBLISHED（旧稿降 ARCHIVED、内容未变拒绝）
  * 5. 绑定表单 column_config 变化后，页面再次发布校验跟随（引用已删列 → 400）
  *
@@ -67,9 +69,6 @@ class PageDefinitionPublishIntegrationTest {
     private DynamicTableManager tableManager;
 
     @Mock
-    private BizDataService bizDataService;
-
-    @Mock
     private DataSourceDefinitionService dsService;
 
     @Mock
@@ -83,6 +82,7 @@ class PageDefinitionPublishIntegrationTest {
 
     private static final String TENANT_ID = "tenant-a";
     private static final String TENANT_B = "tenant-b";
+    private static final String DS_REF = "ds_ref_1";
 
     @BeforeEach
     void setUp() {
@@ -96,14 +96,17 @@ class PageDefinitionPublishIntegrationTest {
             public void publishEvent(Object event) {}
         });
 
-        // 页面链路全真实：Validator/Compiler/Service + 内存仓库（发布临界区同步模拟行锁）
+        // 页面链路全真实：Validator/Service + 内存仓库（发布临界区同步模拟行锁）
         pageRepo = new InMemoryPageRepository();
         PageValidator validator = new PageValidator(formDefRepository, objectMapper, tenantProvider, dsService);
-        ViewCompiler compiler = new ViewCompiler(objectMapper);
-        pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, compiler, objectMapper);
+        pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, objectMapper);
+
+        // PAGE 引用的全局数据源（FORM 型，绑定 biz_leave）
+        lenient().when(dsService.getEnabled()).thenReturn(List.of(enabledFormDs(DS_REF, "biz_leave")));
 
         // 访问守卫 mock 为放行（本测试聚焦发布/查询链路，不测权限）
-        queryController = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, new com.workflow.api.controller.PageViewQuerySupport(objectMapper));
+        queryController = new PageQueryController(pageDefService, dsService, pageAccessGuard,
+                new PageViewQuerySupport(objectMapper));
     }
 
     @AfterEach
@@ -161,6 +164,29 @@ class PageDefinitionPublishIntegrationTest {
         lenient().when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
+    private DataSourceDefinition enabledFormDs(String id, String formKey) {
+        DataSourceDefinition ds = new DataSourceDefinition();
+        ds.setId(id);
+        ds.setTenantId(TENANT_ID);
+        ds.setName("ds-" + id);
+        ds.setType("FORM");
+        ds.setFormKey(formKey);
+        ds.setStatus("ENABLED");
+        return ds;
+    }
+
+    /** PAGE schema：page-table 绑定 ds-main→DS_REF，数据源 searchFields 由参数给定 */
+    private String pageSchema(String searchFieldsJson, String propsColumns) {
+        return """
+                {"rule":[{"type":"page-table","field":"t","props":{"dataSourceId":"ds-main","columns":%s}}],
+                 "option":{},
+                 "dataSources":[{"id":"ds-main","refId":"%s","searchFields":%s}],
+                 "actions":[]}
+                """.formatted(propsColumns, DS_REF, searchFieldsJson);
+    }
+
+    private static final String COLS_NAME = "[{\"prop\":\"name\",\"label\":\"姓名\"}]";
+
     // ==================== 1. BUSINESS 表单发布触发建表 ====================
 
     @Test
@@ -175,39 +201,35 @@ class PageDefinitionPublishIntegrationTest {
         verify(tableManager).ensureTable(eq("biz_leave"), anyList());
     }
 
-    // ==================== 2. VIEW 发布成功且无 DDL ====================
+    // ==================== 2. PAGE 发布成功且无 DDL/编译 ====================
 
     @Test
-    void publishViewPage_success_withoutDdl() {
-        // 绑定表单已发布（页面上游既有能力，非本次 DDL 来源）
+    void publishPage_success_withoutDdl() {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("apply_date", "DATE", false)));
 
-        String id = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
+        String id = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"name\"]", COLS_NAME));
 
         PageDefinition result = pageDefService.publish(id);
 
         assertEquals("PUBLISHED", result.getStatus());
         assertEquals(1, result.getPublishedVersion());
-        assertTrue(result.getSchema().contains("\"rule\""));
-        // 页面发布链路不产生任何 DDL：tableManager 仅被业务表单发布调用过（本测试未触发表单发布 → never）
+        // schema 原样持久化（无编译产物注入）
+        assertTrue(result.getSchema().contains("ds-main"));
+        // 页面发布链路不产生任何 DDL
         verify(tableManager, never()).ensureTable(anyString(), anyList());
     }
 
-    // ==================== 3. /pages/{key}/data：fiter 白名单 + 租户隔离 ====================
+    // ==================== 3. /pages/{key}/ds/{dsId}/data：filter 白名单 + 租户隔离 ====================
 
     @Test
     void queryData_filterWithUnknownField_rejected() {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
-        pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
-        pageRepo.findByIdAndTenantId(pageRepo.keys().get(0), TENANT_ID).ifPresent(p -> {
-            pageDefService.publish(p.getId());
-        });
+        String id = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"name\"]", COLS_NAME));
+        pageDefService.publish(id);
 
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setPage(0);
@@ -215,22 +237,20 @@ class PageDefinitionPublishIntegrationTest {
         req.setFilter("{\"name\":\"张\",\"hack\":\"x\"}");
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> queryController.query("leave-query", req));
+                () -> queryController.queryPageDataSource("leave-page", "ds-main", req));
         assertTrue(ex.getMessage().contains("白名单"));
-        verify(bizDataService, never()).query(anyString(), any());
+        verify(dsService, never()).queryData(anyString(), any());
     }
 
     @Test
-    void queryData_whitelistFilter_passedToBizService() {
+    void queryData_whitelistFilter_passedToDataSourceService() {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
-        String id = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"},"
-                        + "{\"key\":\"amount\",\"label\":\"金额\",\"matchType\":\"eq\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
+        String id = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"name\",\"amount\"]", COLS_NAME));
         pageDefService.publish(id);
 
-        when(bizDataService.query(eq("biz_leave"), any())).thenReturn(
+        when(dsService.queryData(eq(DS_REF), any())).thenReturn(
                 new BizDataPageVO(List.of(mockBizRow()), 1, 0, 20));
 
         BizDataQueryRequest req = new BizDataQueryRequest();
@@ -238,20 +258,19 @@ class PageDefinitionPublishIntegrationTest {
         req.setSize(20);
         req.setFilter("{\"name\":\"张\",\"amount\":100}");
 
-        R<BizDataPageVO> result = queryController.query("leave-query", req);
+        R<BizDataPageVO> result = queryController.queryPageDataSource("leave-page", "ds-main", req);
         BizDataPageVO vo = result.getData();
 
         assertEquals(1, vo.getTotal());
-        verify(bizDataService).query(eq("biz_leave"), any());
+        verify(dsService).queryData(eq(DS_REF), any());
     }
 
     @Test
     void queryData_otherTenant_notFound() {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
-        String id = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
+        String id = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"name\"]", COLS_NAME));
         pageDefService.publish(id);
 
         // 切换租户：TENANT_B 无该页面 → 404
@@ -261,7 +280,8 @@ class PageDefinitionPublishIntegrationTest {
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter(null);
 
-        assertThrows(BusinessException.class, () -> queryController.query("leave-query", req));
+        assertThrows(BusinessException.class,
+                () -> queryController.queryPageDataSource("leave-page", "ds-main", req));
     }
 
     private BizDataVO mockBizRow() {
@@ -279,15 +299,11 @@ class PageDefinitionPublishIntegrationTest {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
 
-        // 两篇草稿，内容不同，同 key
-        String id1 = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
-        String id2 = pageRepo.create(TENANT_ID, "请假查询改", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"amount\",\"label\":\"金额\",\"matchType\":\"eq\"}],"
-                        + "\"columns\":[{\"key\":\"amount\",\"label\":\"金额\"}]}");
+        String id1 = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"name\"]", COLS_NAME));
+        String id2 = pageRepo.create(TENANT_ID, "请假页面改", "leave-page", "PAGE",
+                pageSchema("[\"amount\"]", "[{\"prop\":\"amount\",\"label\":\"金额\"}]"));
 
-        // 并发发布：两个线程同时发布（仓库临界区同步模拟行锁）
         AtomicReference<Exception> failure = new AtomicReference<>();
         Thread t1 = new Thread(() -> safePublish(id1, failure));
         Thread t2 = new Thread(() -> safePublish(id2, failure));
@@ -298,14 +314,12 @@ class PageDefinitionPublishIntegrationTest {
 
         assertNull(failure.get(), "并发发布不应失败: " + failure.get());
 
-        // 不变量：同 key 同一时刻仅一条 PUBLISHED
         List<PageDefinition> published = pageRepo.all().stream()
-                .filter(p -> "leave-query".equals(p.getKey()) && "PUBLISHED".equals(p.getStatus()))
+                .filter(p -> "leave-page".equals(p.getKey()) && "PUBLISHED".equals(p.getStatus()))
                 .collect(Collectors.toList());
         assertEquals(1, published.size(), "同一时刻应仅一条 PUBLISHED，实际: " + published.size());
-        // 其余均为 ARCHIVED（旧稿降级）
         long archived = pageRepo.all().stream()
-                .filter(p -> "leave-query".equals(p.getKey()) && "ARCHIVED".equals(p.getStatus()))
+                .filter(p -> "leave-page".equals(p.getKey()) && "ARCHIVED".equals(p.getStatus()))
                 .count();
         assertEquals(1, archived);
     }
@@ -315,13 +329,10 @@ class PageDefinitionPublishIntegrationTest {
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
 
-        String id1 = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
+        String schema = pageSchema("[\"name\"]", COLS_NAME);
+        String id1 = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE", schema);
         // 第二稿与已发布内容相同 → 拒绝（同 key）
-        String id2 = pageRepo.create(TENANT_ID, "请假查询副本", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"}]}");
+        String id2 = pageRepo.create(TENANT_ID, "请假页面副本", "leave-page", "PAGE", schema);
         pageDefService.publish(id1);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> pageDefService.publish(id2));
@@ -332,28 +343,23 @@ class PageDefinitionPublishIntegrationTest {
 
     @Test
     void publish_afterFormColumnDeleted_rejected() {
-        // 表单已发布：含 name、amount 两列
         publishedBusinessForm("biz_leave",
                 columnConfig(col("name", "VARCHAR", false), col("amount", "DECIMAL", false)));
 
-        String id = pageRepo.create(TENANT_ID, "请假查询", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"amount\",\"label\":\"金额\",\"matchType\":\"eq\"}],"
-                        + "\"columns\":[{\"key\":\"amount\",\"label\":\"金额\"}]}");
+        String id = pageRepo.create(TENANT_ID, "请假页面", "leave-page", "PAGE",
+                pageSchema("[\"amount\"]", "[{\"prop\":\"amount\",\"label\":\"金额\"}]"));
         pageDefService.publish(id); // 首次发布成功
 
-        // 表单列变化：amount 列被删除（重新发布表单后的有效列集合）
+        // 表单列变化：amount 列被删除
         publishedBusinessForm("biz_leave", columnConfig(col("name", "VARCHAR", false)));
-        // 新稿内容与已发布版本不同（新增 name 搜索条件），但仍引用已删列 amount → 校验跟随 → 400
-        String id2 = pageRepo.create(TENANT_ID, "请假查询改", "leave-query", "VIEW", "biz_leave",
-                "{\"searchFields\":[{\"key\":\"amount\",\"label\":\"金额\",\"matchType\":\"eq\"},"
-                        + "{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
-                        + "\"columns\":[{\"key\":\"amount\",\"label\":\"金额\"}]}");
+        // 新稿引用已删列 amount → 校验跟随 → 400
+        String id2 = pageRepo.create(TENANT_ID, "请假页面改", "leave-page", "PAGE",
+                pageSchema("[\"amount\",\"name\"]", COLS_NAME));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> pageDefService.publish(id2));
-        assertTrue(ex.getMessage().contains("列不存在") || ex.getMessage().contains("列"));
-        // 已发布版本保持有效，未被破坏
+        assertTrue(ex.getMessage().contains("列不存在"));
         assertEquals(1, pageRepo.all().stream()
-                .filter(p -> "leave-query".equals(p.getKey()) && "PUBLISHED".equals(p.getStatus()))
+                .filter(p -> "leave-page".equals(p.getKey()) && "PUBLISHED".equals(p.getStatus()))
                 .count());
     }
 
@@ -367,16 +373,12 @@ class PageDefinitionPublishIntegrationTest {
 
     // ==================== 内存 PageDefinitionRepository ====================
 
-    /**
-     * 内存仓库：id → 记录。发布相关读改写临界区加锁以模拟数据库行锁语义，
-     * 保证"同 key 同一时刻仅一条 PUBLISHED"在并发下可断言。
-     */
     private class InMemoryPageRepository implements PageDefinitionRepository {
 
         private final Map<String, PageDefinition> store = new ConcurrentHashMap<>();
         private final Object publishLock = new Object();
 
-        String create(String tenantId, String name, String key, String type, String formKey, String schema) {
+        String create(String tenantId, String name, String key, String type, String schema) {
             PageDefinition p = new PageDefinition();
             String id = UUID.randomUUID().toString().replace("-", "");
             p.setId(id);
@@ -384,7 +386,6 @@ class PageDefinitionPublishIntegrationTest {
             p.setName(name);
             p.setKey(key);
             p.setType(type);
-            p.setFormKey(formKey);
             p.setSchema(schema);
             p.setVersion(1);
             p.setStatus("DRAFT");
@@ -424,10 +425,12 @@ class PageDefinitionPublishIntegrationTest {
         @Override
         public Optional<PageDefinition> findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
                 String tenantId, String key, String status, String excludeId) {
-            return store.values().stream()
-                    .filter(p -> p.getTenantId().equals(tenantId) && p.getKey().equals(key)
-                            && status.equals(p.getStatus()) && !excludeId.equals(p.getId()))
-                    .max(Comparator.comparing(PageDefinition::getVersion));
+            synchronized (publishLock) {
+                return store.values().stream()
+                        .filter(p -> p.getTenantId().equals(tenantId) && p.getKey().equals(key)
+                                && status.equals(p.getStatus()) && !excludeId.equals(p.getId()))
+                        .max(Comparator.comparing(PageDefinition::getVersion));
+            }
         }
 
         @Override
@@ -437,14 +440,6 @@ class PageDefinitionPublishIntegrationTest {
                     .filter(p -> p.getTenantId().equals(tenantId) && p.getKey().equals(key)
                             && status.equals(p.getStatus()))
                     .max(Comparator.comparing(PageDefinition::getVersion));
-        }
-
-        @Override
-        public List<PageDefinition> findByTypeAndFormKeyNotNullAndDataSourceIdNull(String type) {
-            return store.values().stream()
-                    .filter(p -> type.equals(p.getType()) && p.getFormKey() != null
-                            && p.getDataSourceId() == null)
-                    .toList();
         }
 
         @Override
@@ -661,8 +656,6 @@ class PageDefinitionPublishIntegrationTest {
             return all();
         }
 
-        // ============ QueryByExampleExecutor（JpaRepository 派生，测试不调用，空实现） ============
-
         @Override
         public <S extends PageDefinition> Optional<S> findOne(Example<S> example) {
             return Optional.empty();
@@ -681,6 +674,7 @@ class PageDefinitionPublishIntegrationTest {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         public <S extends PageDefinition> Page<S> findAll(Example<S> example, Pageable pageable) {
             return (Page<S>) page(all(), pageable);
         }
@@ -702,10 +696,8 @@ class PageDefinitionPublishIntegrationTest {
         }
 
         @SuppressWarnings("unchecked")
-        private <S extends PageDefinition> Page<S> page(List<S> list, Pageable pageable) {
-            int from = Math.min((int) pageable.getOffset(), list.size());
-            int to = Math.min(from + pageable.getPageSize(), list.size());
-            return new PageImpl<>(new ArrayList<>(list.subList(from, to)), pageable, list.size());
+        private Page<PageDefinition> page(List<PageDefinition> content, Pageable pageable) {
+            return new PageImpl<>(content, pageable, content.size());
         }
     }
 }

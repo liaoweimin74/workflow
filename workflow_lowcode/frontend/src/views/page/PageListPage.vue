@@ -11,11 +11,6 @@
         :default-page-size="20"
         :max-visible-buttons="4"
       >
-        <template #type="{ row }">
-          <el-tag :type="row.type === 'VIEW' ? 'primary' : 'success'">
-            {{ row.type === 'VIEW' ? '视图' : '页面' }}
-          </el-tag>
-        </template>
         <template #status="{ row }">
           <el-tag :type="statusTagType(row.status)">
             {{ statusLabel(row.status) }}
@@ -177,17 +172,6 @@ const searchFields = computed<SearchField[]>(() => [
   { type: 'input', label: '页面名称', prop: 'name', placeholder: '搜索页面名称', style: 'width: 200px' },
   {
     type: 'select',
-    label: '类型',
-    prop: 'type',
-    placeholder: '全部',
-    options: [
-      { label: '视图', value: 'VIEW' },
-      { label: '页面', value: 'PAGE' },
-    ],
-    style: 'width: 140px',
-  },
-  {
-    type: 'select',
     label: '状态',
     prop: 'status',
     placeholder: '全部',
@@ -204,7 +188,6 @@ const searchFields = computed<SearchField[]>(() => [
 const columns: TableColumn[] = [
   { prop: 'name', label: '页面名称', minWidth: 180 },
   { prop: 'key', label: '页面标识', width: 180 },
-  { prop: 'type', label: '类型', width: 90, align: 'center', slotName: 'type' },
   { prop: 'formKey', label: '绑定表单', width: 150, slotName: 'formKey' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'version', label: '版本', width: 80, align: 'center' },
@@ -218,7 +201,6 @@ async function fetchApi(params: any) {
     size: params.size || 20,
     name: params.name || undefined,
     status: params.status || undefined,
-    type: params.type || undefined,
   })
   const data = res.data as any
   return {

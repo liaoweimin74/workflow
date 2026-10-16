@@ -276,7 +276,7 @@ export const SCHEMA_SQL: string[] = [
     "tenant_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "key" TEXT NOT NULL,
-    "type" TEXT NOT NULL DEFAULT 'VIEW',
+    "type" TEXT NOT NULL DEFAULT 'PAGE',
     "form_key" TEXT,
     "data_source_id" TEXT,
     "schema" TEXT,

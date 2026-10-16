@@ -181,7 +181,7 @@
 import { ref, computed, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import ExpressionEditor from '@/components/expression/ExpressionEditor.vue'
-import type { ColumnViewConfig } from '../ViewDesigner.vue'
+import type { ColumnViewConfig } from './schemaTypes'
 import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
 import { aggregateOptionsOf } from './tableEnhance'

@@ -386,7 +386,7 @@ public class ModuleImportService {
         page.setTenantId(tenantId);
         page.setName(p.name());
         page.setKey(p.key());
-        page.setType(p.pageType() == null ? "VIEW" : p.pageType());
+        page.setType(p.pageType() == null ? "PAGE" : p.pageType());
         page.setFormKey(p.formKey());
         page.setDataSourceId(newDataSourceId);
         page.setSchema(newSchema);

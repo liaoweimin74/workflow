@@ -1,6 +1,5 @@
 package com.workflow.engine.page;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
@@ -12,7 +11,6 @@ import com.workflow.engine.form.bizdata.BizDataContext;
 import com.workflow.engine.form.bizdata.BizDataSupport;
 import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.form.column.ColumnConfig;
-import com.workflow.engine.page.entity.PageDefinition;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -97,18 +95,6 @@ public class PageDataExcelService {
     // ==================== 导出 ====================
 
     /**
-     * 导出视图当前查询结果为 .xlsx。
-     *
-     * @param page             已发布 VIEW 页面（含数据源绑定与 schema 列声明）
-     * @param query            已过白名单的查询上下文（本方法仅接管分页参数）
-     * @param requestedColumns 导出列 key 子集（可空 = 全部可见列）
-     */
-    public ExportResult export(PageDefinition page, BizDataQueryRequest query, List<String> requestedColumns) {
-        List<ExportColumn> columns = resolveExportColumns(page, requestedColumns);
-        return fetchAndWrite(q -> queryOnce(page, q), columns, query);
-    }
-
-    /**
      * 导出自定义页面（PAGE）数据表格绑定的数据源为 .xlsx。
      * 列声明来自 rule.props.columns（prop/label/hidden/custom），取数走页面内数据源 refId
      * （与 PageQueryController#queryPageDataSource 同链路）。
@@ -160,68 +146,7 @@ public class PageDataExcelService {
         return new ExportResult(xlsx, collected.size(), truncated);
     }
 
-    /** 取数分支：dataSourceId（新协议）优先，formKey（兼容）回落 —— 与 PageQueryController.query 一致 */
-    private BizDataPageVO queryOnce(PageDefinition page, BizDataQueryRequest query) {
-        if (page.getDataSourceId() != null && !page.getDataSourceId().isBlank()) {
-            return dsService.queryData(page.getDataSourceId(), query);
-        }
-        return bizDataService.query(page.getFormKey(), query);
-    }
-
-    /**
-     * 解析导出列（列头 = label 缺省 key）：
-     * 1. schema.columns 声明 → 候选 = 非 custom 列（含 hidden，显式指定可导），缺省取非 hidden；
-     * 2. 未声明 columns 且绑定 formKey → 回落业务表单列（非 hidden 非子表列）；
-     * 3. 皆无 → 400。
-     * requestedColumns 非空时按其顺序过滤，未命中候选 → 400（防注入/越权取列）。
-     */
-    private List<ExportColumn> resolveExportColumns(PageDefinition page, List<String> requestedColumns) {
-        LinkedHashSet<String> orderedKeys = new LinkedHashSet<>();
-        Map<String, String> labelByKey = new LinkedHashMap<>();
-        Set<String> defaultKeys = new LinkedHashSet<>();
-        boolean declared = false;
-
-        JsonNode columnsNode = schemaNode(page.getSchema(), "columns");
-        if (columnsNode.isArray() && !columnsNode.isEmpty()) {
-            declared = true;
-            for (JsonNode column : columnsNode) {
-                String key = column.path("key").asText("");
-                if (key.isBlank() || column.path("custom").asBoolean(false)) {
-                    continue;
-                }
-                orderedKeys.add(key);
-                labelByKey.put(key, column.path("label").asText(key));
-                if (!column.path("hidden").asBoolean(false)) {
-                    defaultKeys.add(key);
-                }
-            }
-        }
-        if (!declared && page.getFormKey() != null && !page.getFormKey().isBlank()) {
-            // 回落：业务表单列（动态表列白名单，天然防注入）
-            BizDataContext ctx = bizDataSupport.loadContext(page.getFormKey());
-            for (ColumnConfig c : ctx.columns()) {
-                if (c.getKey() == null || c.isHidden()) {
-                    continue;
-                }
-                orderedKeys.add(c.getKey());
-                labelByKey.put(c.getKey(), c.getLabel() == null || c.getLabel().isBlank() ? c.getKey() : c.getLabel());
-                defaultKeys.add(c.getKey());
-            }
-        }
-        if (orderedKeys.isEmpty()) {
-            throw new BusinessException(400, "页面未声明展示列，无法导出");
-        }
-
-        Set<String> chosen = chooseColumns(requestedColumns, orderedKeys, defaultKeys);
-
-        List<ExportColumn> out = new ArrayList<>(chosen.size());
-        for (String key : chosen) {
-            out.add(new ExportColumn(key, labelByKey.getOrDefault(key, key)));
-        }
-        return out;
-    }
-
-    /** PAGE 数据表格列声明 → 导出列（选择语义与 {@link #resolveExportColumns} 尾段一致） */
+    /** PAGE 数据表格列声明 → 导出列（选择语义与导出列缺省规则一致） */
     private List<ExportColumn> exportColumnsOf(List<ColumnDecl> decls, List<String> requestedColumns) {
         LinkedHashSet<String> orderedKeys = new LinkedHashSet<>();
         Map<String, String> labelByKey = new LinkedHashMap<>();
@@ -270,15 +195,6 @@ public class PageDataExcelService {
             throw new BusinessException(400, "无可导出的展示列");
         }
         return chosen;
-    }
-
-    /** 解析 schema 顶层节点（容错：空/非法 schema → missing node） */
-    private JsonNode schemaNode(String schema, String field) {
-        try {
-            return objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema).path(field);
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
     }
 
     /** SXSSF 流式写 xlsx（表头加粗灰底；行窗口 100 常驻内存） */

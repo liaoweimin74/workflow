@@ -5,14 +5,13 @@
  *  POST   /api/v1/pages                                  create（body PageDefinitionSaveRequest）
  *  GET    /api/v1/pages                                  list（page,size,status?,name?,type?）
  *  GET    /api/v1/pages/{id}                             getById（含 schema）
- *  GET    /api/v1/pages/{key}/definition                 getByKey（preview=false 走 PageAccessGuard + 已发布；preview=true 取最新+动态编译）
+ *  GET    /api/v1/pages/{key}/definition                 getByKey（preview=false 走 PageAccessGuard + 已发布；preview=true 取最新）
  *  PUT    /api/v1/pages/{id}                             update
  *  DELETE /api/v1/pages/{id}                             delete（软删，PUBLISHED 拒绝）
- *  POST   /api/v1/pages/{id}/publish                     publish（VIEW 编译 {rule,option} 合并进 schema）
+ *  POST   /api/v1/pages/{id}/publish                     publish（PAGE 走基础校验）
  *  POST   /api/v1/pages/{id}/mount-menu                  mountMenu（仅 PUBLISHED；admin 自动授权 ROLE_ADMIN）
  *  GET    /api/v1/pages/{key}/menus                      getMenus（按 path 反查未删菜单）
  *  DELETE /api/v1/pages/menus/{menuId}                   unmountMenu（软删菜单）
- *  GET    /api/v1/pages/{pageKey}/data                   query（视图数据查询；最终取数委托 bizdata 模块）
  *  GET    /api/v1/pages/{pageKey}/ds/{dataSourceId}/data queryPageDataSource（自定义页面数据源查询；委托 datasource 模块）
  *
  * 对齐要点：
@@ -38,7 +37,6 @@ export const pageRouter = Router();
 
 const COLUMN_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/;
 const FORM_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/;
-const NON_FILTERABLE_TYPES = new Set(['JSON', 'TEXT', 'LONGTEXT']);
 const DATA_COMPONENT_TYPES = new Set(['page-table', 'page-tree']);
 
 function jstr(v: unknown): string {
@@ -119,16 +117,12 @@ export interface BizDataQueryRequest {
 }
 
 /**
- * 页面数据查询/校验委托（由 bizdata 与 datasource 模块任务注入）：
- *  - queryBizData: BizDataService.query（遗留 formKey 直连 wf_biz_* 表）
+ * 页面数据查询/校验委托（由 datasource 模块任务注入）：
  *  - queryDataSource: DataSourceDefinitionService.queryData（数据源 SPI）
- *  - dataSourceMetadata: DataSourceDefinitionService.metadata（VIEW 发布取列）
  *  - enabledDataSourceIds: DataSourceDefinitionService.getEnabled 的 id 集合（PAGE 发布校验）
  */
 export interface PageDataDelegates {
-  queryBizData?(formKey: string, req: BizDataQueryRequest): unknown;
   queryDataSource?(dataSourceId: string, req: BizDataQueryRequest): unknown;
-  dataSourceMetadata?(dataSourceId: string): { columns: ColumnConfig[] };
   enabledDataSourceIds?(): string[];
 }
 
@@ -357,7 +351,7 @@ function parseColumnConfigForPage(columnConfig: string | null): ColumnConfig[] {
   }));
 }
 
-// ---------------------------------------------------------------- ViewCompiler（视图编译，逐方法对齐）
+// ---------------------------------------------------------------- schema JSON 解析工具
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
@@ -372,276 +366,17 @@ function jtext(v: unknown, dflt = ''): string {
   return dflt;
 }
 
-function jbool(v: unknown, dflt: boolean): boolean {
-  if (typeof v === 'boolean') return v;
-  return dflt;
-}
 
-/** ViewCompiler.compile：声明式配置 → {rule, option}（键序 rule, option, display, sortableFields, pagination, filter） */
-function compileView(schema: string | null, bindColumns: ColumnConfig[] | null): string {
-  let root: Json;
-  try {
-    root = JSON.parse(isBlank(schema) ? '{}' : (schema as string)) as Json;
-  } catch {
-    throw new BusinessException('视图配置解析失败', 400);
-  }
-  const ro = jobj(root);
-  const validKeys = new Set<string>();
-  if (bindColumns != null) {
-    for (const c of bindColumns) if (c.key != null) validKeys.add(c.key);
-  }
 
-  const rule: Record<string, unknown>[] = [];
-  const option: Record<string, unknown> = {};
-  const result: Record<string, unknown> = { rule, option };
-
-  // compileDisplay（总在产物写 display）
-  result['display'] = jtext(ro['display']) === 'card' ? 'card' : 'table';
-
-  // compileSearchFields
-  const searchFields = ro['searchFields'];
-  if (Array.isArray(searchFields)) {
-    for (const field of searchFields) {
-      const f = jobj(field);
-      const key = jtext(f['key']);
-      const label = jtext(f['label'], key);
-      const matchType = jtext(f['matchType'], 'eq');
-      if (validKeys.size > 0 && !validKeys.has(key)) {
-        throw new BusinessException(`查询字段引用列不存在: ${key}`, 400);
-      }
-      const item: Record<string, unknown> = { type: 'input', field: key, title: label, value: '' };
-      const props: Record<string, unknown> = { placeholder: label, style: 'width: 180px' };
-      if (matchType === 'range') {
-        item['type'] = 'datePicker';
-        item['value'] = [];
-        props['type'] = 'datetimerange';
-        props['valueFormat'] = 'yyyy-MM-dd HH:mm:ss';
-        props['startPlaceholder'] = `开始${label}`;
-        props['endPlaceholder'] = `结束${label}`;
-      } else if (matchType !== 'eq' && matchType !== 'like') {
-        throw new BusinessException(`未知查询匹配类型: ${matchType}`, 400);
-      }
-      item['props'] = props;
-      item['matchType'] = matchType;
-      rule.push(item);
-    }
-  }
-
-  // compileColumns
-  const columns = ro['columns'];
-  if (Array.isArray(columns) && columns.length > 0) {
-    const colNodes: Record<string, unknown>[] = [];
-    for (const column of columns) {
-      const c = jobj(column);
-      const key = jtext(c['key']);
-      if (key.trim() === '') continue;
-      if (jbool(c['hidden'], false)) continue;
-      const isCustom = jbool(c['custom'], false);
-      if (validKeys.size > 0 && !isCustom && !validKeys.has(key)) {
-        throw new BusinessException(`展示列引用列不存在: ${key}`, 400);
-      }
-      const col: Record<string, unknown> = { prop: key, label: jtext(c['label'], key), minWidth: c['width'] == null ? 130 : Number(c['width']) };
-      if (c['align'] != null) col['align'] = jtext(c['align'], 'left');
-      for (const field of ['contentType', 'contentValue', 'expression', 'template', 'formatter', 'className', 'styleExpr', 'style', 'custom', 'onCellClick']) {
-        if (c[field] !== undefined && c[field] !== null) col[field] = c[field];
-      }
-      colNodes.push(col);
-    }
-    rule.push({
-      type: 'table',
-      field: '__page_table',
-      title: '数据列表',
-      props: { columns: colNodes },
-    });
-  }
-
-  // compileSortableFields
-  const sortableFields = ro['sortableFields'];
-  if (Array.isArray(sortableFields) && sortableFields.length > 0) {
-    const out: string[] = [];
-    for (const f of sortableFields) {
-      const key = jtext(f);
-      if (key.trim() === '') continue;
-      if (validKeys.size > 0 && !validKeys.has(key)) {
-        throw new BusinessException(`排序字段引用列不存在: ${key}`, 400);
-      }
-      out.push(key);
-    }
-    result['sortableFields'] = out;
-  }
-
-  // compilePagination
-  const pagination = ro['pagination'];
-  if (pagination != null && typeof pagination === 'object' && !Array.isArray(pagination)) {
-    const p = jobj(pagination);
-    const pageSize = p['pageSize'] == null ? 20 : Number(p['pageSize']);
-    if (pageSize <= 0) {
-      throw new BusinessException(`每页条数必须为正整数: ${pageSize}`, 400);
-    }
-    const sizes: number[] = [];
-    const pageSizes = p['pageSizes'];
-    if (Array.isArray(pageSizes)) {
-      for (const n of pageSizes) {
-        if (typeof n !== 'number' || !Number.isInteger(n) || n <= 0) {
-          throw new BusinessException(`可选页大小必须为正整数: ${jtext(n, '')}`, 400);
-        }
-        sizes.push(n);
-      }
-    }
-    if (sizes.length === 0) sizes.push(10, 20, 50);
-    result['pagination'] = { show: jbool(p['show'], true), pageSize, pageSizes: sizes };
-  }
-
-  // compileFilter
-  const filter = ro['filter'];
-  if (filter != null && typeof filter === 'object' && !Array.isArray(filter)) {
-    const fo = jobj(filter);
-    const conditions = fo['conditions'];
-    if (Array.isArray(conditions) && conditions.length > 0) {
-      const outConditions: Record<string, unknown>[] = [];
-      for (const c of conditions) {
-        const co = jobj(c);
-        const column = jtext(co['column']);
-        if (column.trim() === '') continue;
-        if (validKeys.size > 0 && !validKeys.has(column)) {
-          throw new BusinessException(`筛选条件引用列不存在: ${column}`, 400);
-        }
-        outConditions.push({ column, op: jtext(co['op'], 'eq'), value: jtext(co['value'], '') });
-      }
-      if (outConditions.length > 0) {
-        result['filter'] = { logic: jtext(fo['logic'], 'AND'), conditions: outConditions };
-      }
-    }
-  }
-
-  // compileActions
-  const actions = ro['actions'];
-  if (actions != null && typeof actions === 'object' && !Array.isArray(actions)) {
-    const ao = jobj(actions);
-    const props: Record<string, unknown> = {};
-    if (typeof ao['permissions'] === 'string') props['permissions'] = ao['permissions'];
-    if (ao['actionColumnWidth'] != null && Number.isInteger(Number(ao['actionColumnWidth'])) && Number(ao['actionColumnWidth']) > 0) {
-      props['actionColumnWidth'] = Number(ao['actionColumnWidth']);
-    }
-    const buttons = ao['buttons'];
-    if (Array.isArray(buttons)) {
-      const btnNodes: Record<string, unknown>[] = [];
-      for (const btn of buttons) {
-        const b = jobj(btn);
-        const key = jtext(b['key']);
-        if (key.trim() === '') {
-          throw new BusinessException('操作按钮 key 不能为空', 400);
-        }
-        const out: Record<string, unknown> = { key, label: jtext(b['label'], key) };
-        const placement = jtext(b['placement'], 'column');
-        if (placement !== 'toolbar' && placement !== 'column') {
-          throw new BusinessException(`未知操作位置 placement: ${placement}`, 400);
-        }
-        out['placement'] = placement;
-        const style = jtext(b['style'], 'button');
-        if (style !== 'icon' && style !== 'text' && style !== 'button') {
-          throw new BusinessException(`未知按钮形态 style: ${style}`, 400);
-        }
-        out['style'] = style;
-        if (typeof b['icon'] === 'string' && b['icon'].trim() !== '') out['icon'] = b['icon'];
-        if (b['events'] != null) out['events'] = b['events'];
-        btnNodes.push(out);
-      }
-      props['buttons'] = btnNodes;
-    } else {
-      for (const action of ['create', 'edit', 'delete', 'view']) {
-        if (jbool(ao[action], false)) props[action] = true;
-      }
-      const placement = jtext(ao['placement'], 'column');
-      if (placement !== 'toolbar' && placement !== 'column') {
-        throw new BusinessException(`未知操作位置 placement: ${placement}`, 400);
-      }
-      props['placement'] = placement;
-      const style = jtext(ao['style'], 'button');
-      if (style !== 'icon' && style !== 'text' && style !== 'button') {
-        throw new BusinessException(`未知按钮形态 style: ${style}`, 400);
-      }
-      props['style'] = style;
-    }
-    rule.push({ type: '__page_actions', field: '__page_actions', title: '操作', props });
-  }
-
-  // compileDetail
-  const detail = ro['detail'];
-  if (detail != null && typeof detail === 'object' && !Array.isArray(detail)) {
-    const d = jobj(detail);
-    const actionsObj = ro['actions'];
-    let viewEnabled = false;
-    if (actionsObj != null && typeof actionsObj === 'object' && !Array.isArray(actionsObj)) {
-      const a = jobj(actionsObj);
-      const btns = a['buttons'];
-      if (Array.isArray(btns)) {
-        viewEnabled = btns.some((b) => jtext(jobj(b)['key']) === 'view');
-      } else {
-        viewEnabled = jbool(a['view'], false);
-      }
-    }
-    const legacyEnabled = jbool(d['enabled'], false);
-    if (viewEnabled || legacyEnabled) {
-      const props: Record<string, unknown> = { enabled: true };
-      if (d['width'] != null) props['width'] = jtext(d['width'], '800px');
-      if (d['height'] != null && jtext(d['height'], '') !== '') props['height'] = jtext(d['height']);
-      if (jtext(d['type'], 'form') === 'form') props['type'] = 'form';
-      const formMode = jtext(d['formMode'], 'popup');
-      if (formMode === 'drawer' || formMode === 'inline') props['formMode'] = formMode;
-      rule.push({ type: '__page_detail', field: '__page_detail', title: '详情', props });
-    }
-  }
-
-  // compileEvents
-  const events = ro['events'];
-  if (Array.isArray(events) && events.length > 0) {
-    rule.push({ type: '__page_events', field: '__page_events', title: '事件', events });
-  }
-
-  return JSON.stringify(result);
-}
-
-/** PageDefinitionService.mergeCompiled：编译产物合并进声明 schema（保留原键序，新键按 rule/option/display 追加） */
-function mergeCompiled(schema: string | null, compiled: string): string {
-  let rootJson: Json;
-  let compiledJson: Json;
-  try {
-    rootJson = JSON.parse(isBlank(schema) ? '{}' : (schema as string)) as Json;
-    compiledJson = JSON.parse(compiled) as Json;
-  } catch {
-    throw new BusinessException('视图编译产物合并失败', 400);
-  }
-  const root: Record<string, unknown> =
-    rootJson != null && typeof rootJson === 'object' && !Array.isArray(rootJson)
-      ? { ...(rootJson as Record<string, unknown>) }
-      : {};
-  const c = jobj(compiledJson);
-  if (c['rule'] !== undefined) root['rule'] = c['rule'];
-  if (c['option'] !== undefined) root['option'] = c['option'];
-  if (c['display'] !== undefined) root['display'] = jtext(c['display']);
-  return JSON.stringify(root);
-}
-
-/** PageDefinitionService.schemaEquals：剔除编译产物后 JSON 规范化比对 */
+/** PageDefinitionService.schemaEquals：JSON 规范化比对 */
 function schemaEquals(a: string | null, b: string | null): boolean {
   try {
     const na = JSON.parse(isBlank(a) ? '{}' : (a as string)) as Json;
     const nb = JSON.parse(isBlank(b) ? '{}' : (b as string)) as Json;
-    return deepEqual(stripCompiled(na), stripCompiled(nb));
+    return deepEqual(na, nb);
   } catch {
     return false;
   }
-}
-
-function stripCompiled(node: Json): Json {
-  if (node != null && typeof node === 'object' && !Array.isArray(node)) {
-    const copy = { ...(node as Record<string, unknown>) };
-    delete copy['rule'];
-    delete copy['option'];
-    return copy as Json;
-  }
-  return node;
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -682,97 +417,7 @@ function parseSchemaNode(schema: string | null): Record<string, unknown> {
 }
 
 function validateForPublish(page: PageDefRow, tenantId: string): void {
-  if (page.type === 'PAGE') {
-    validateForPublishPage(page, tenantId);
-    return;
-  }
-
-  const dataSourceId = page.data_source_id;
-  const formKey = page.form_key;
-  const hasDataSource = !isBlank(dataSourceId);
-  const hasFormKey = !isBlank(formKey);
-
-  if (!hasDataSource && !hasFormKey) {
-    throw new BusinessException('请选择数据源', 400);
-  }
-
-  let columns: ColumnConfig[];
-  if (hasDataSource) {
-    const meta = requireDelegate('dataSourceMetadata')(dataSourceId as string);
-    columns = meta.columns ?? [];
-  } else {
-    const boundForm = one(
-      `SELECT "type","column_config" FROM wf_form_def WHERE tenant_id = ? AND "key" = ? AND status = 'PUBLISHED' ORDER BY "version" DESC LIMIT 1`,
-      [tenantId, formKey],
-    );
-    if (!boundForm) {
-      throw new BusinessException(`绑定表单不存在或未发布: ${jstr(formKey)}`, 400);
-    }
-    if (String(boundForm['type']) !== 'BUSINESS') {
-      throw new BusinessException(`绑定表单 ${jstr(formKey)} 不是业务表单`, 400);
-    }
-    columns = parseColumnConfigForPage((boundForm['column_config'] as string | null) ?? null);
-  }
-
-  const validKeys = new Set<string>();
-  const hiddenKeys = new Set<string>();
-  const nonFilterableKeys = new Set<string>();
-  for (const c of columns) {
-    if (c.key != null) validKeys.add(c.key);
-    if (c.hidden && c.key != null) hiddenKeys.add(c.key);
-    if (c.columnType != null && NON_FILTERABLE_TYPES.has(c.columnType) && c.key != null) nonFilterableKeys.add(c.key);
-  }
-
-  const root = parseSchemaNode(page.schema);
-  const searchFields = root['searchFields'];
-  if (Array.isArray(searchFields)) {
-    for (const field of searchFields) {
-      const key = jtext(jobj(field)['key']);
-      if (!validKeys.has(key)) {
-        throw new BusinessException(`查询字段引用列不存在: ${key}`, 400);
-      }
-      if (hiddenKeys.has(key)) {
-        throw new BusinessException(`查询字段不能引用隐藏列: ${key}`, 400);
-      }
-      if (nonFilterableKeys.has(key)) {
-        throw new BusinessException(`查询字段不能引用大字段列（JSON/TEXT）: ${key}`, 400);
-      }
-    }
-  }
-
-  const pageColumns = root['columns'];
-  if (Array.isArray(pageColumns)) {
-    for (const column of pageColumns) {
-      const c = jobj(column);
-      const key = jtext(c['key']);
-      const isCustom = jbool(c['custom'], false);
-      if (!isCustom && !validKeys.has(key)) {
-        throw new BusinessException(`展示列引用列不存在: ${key}`, 400);
-      }
-      if (hiddenKeys.has(key)) {
-        throw new BusinessException(`展示列不能引用隐藏列: ${key}`, 400);
-      }
-    }
-  }
-}
-
-function resolveBindColumns(page: PageDefRow, tenantId: string): ColumnConfig[] {
-  const dataSourceId = page.data_source_id;
-  if (!isBlank(dataSourceId)) {
-    const meta = requireDelegate('dataSourceMetadata')(dataSourceId as string);
-    return meta.columns ?? [];
-  }
-  if (isBlank(page.form_key)) {
-    throw new BusinessException('视图必须绑定业务表单', 400);
-  }
-  const boundForm = one(
-    `SELECT "column_config" FROM wf_form_def WHERE tenant_id = ? AND "key" = ? AND status = 'PUBLISHED' ORDER BY "version" DESC LIMIT 1`,
-    [tenantId, page.form_key],
-  );
-  if (!boundForm) {
-    throw new BusinessException(`绑定表单不存在或未发布: ${jstr(page.form_key)}`, 400);
-  }
-  return parseColumnConfigForPage((boundForm['column_config'] as string | null) ?? null);
+  validateForPublishPage(page, tenantId);
 }
 
 /** PageValidator.validateForPublishPage（PAGE 类型） */
@@ -890,38 +535,6 @@ function parseOr400(text: string | null): Record<string, Json> {
   }
 }
 
-function searchFieldKeys(schema: string | null): Set<string> {
-  const keys = new Set<string>();
-  const root = parseOr400(schema);
-  const searchFields = root['searchFields'];
-  if (Array.isArray(searchFields)) {
-    for (const field of searchFields) {
-      keys.add(jtext(jobj(field)['key']));
-    }
-  }
-  const filter = root['filter'];
-  if (filter != null && typeof filter === 'object' && !Array.isArray(filter)) {
-    const conditions = jobj(filter)['conditions'];
-    if (Array.isArray(conditions)) {
-      for (const c of conditions) {
-        const column = jtext(jobj(c)['column']);
-        if (column.trim() !== '') keys.add(column);
-      }
-    }
-  }
-  return keys;
-}
-
-function sortableFieldKeys(schema: string | null): Set<string> {
-  const keys = new Set<string>();
-  const root = parseOr400(schema);
-  const fields = root['sortableFields'];
-  if (Array.isArray(fields)) {
-    for (const f of fields) keys.add(jtext(f));
-  }
-  return keys;
-}
-
 function pageDataSources(schema: string | null): unknown[] {
   const root = parseOr400(schema);
   const dataSources = root['dataSources'];
@@ -1013,7 +626,7 @@ pageRouter.post(
       if (exists) throw new BusinessException(`页面 key 已存在: ${jstr(key)}`, 400);
       run(
         `INSERT INTO wf_page_def (${PAGE_DEF_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, tenantId, name, key, isBlank(type) ? 'VIEW' : type, formKey, dataSourceId, null, 1, 'DRAFT', null, null, now, now],
+        [id, tenantId, name, key, isBlank(type) ? 'PAGE' : type, formKey, dataSourceId, null, 1, 'DRAFT', null, null, now, now],
       );
     });
     tx();
@@ -1091,21 +704,6 @@ pageRouter.get(
     let page: PageDefRow;
     if (preview) {
       page = pageDefByKeyLatest(key, tenantId);
-      if (page.type === 'VIEW') {
-        let hasCompiled = false;
-        try {
-          const parsed = JSON.parse(isBlank(page.schema) ? '{}' : (page.schema as string)) as Json;
-          hasCompiled = parsed != null && typeof parsed === 'object' && !Array.isArray(parsed) && 'rule' in (parsed as Record<string, unknown>);
-        } catch {
-          hasCompiled = false;
-        }
-        if (!hasCompiled) {
-          validateForPublish(page, tenantId);
-          const bindColumns = resolveBindColumns(page, tenantId);
-          const compiled = compileView(page.schema, bindColumns);
-          page = { ...page, schema: mergeCompiled(page.schema, compiled) };
-        }
-      }
     } else {
       page = pageDefPublishedByKey(key, tenantId);
     }
@@ -1197,12 +795,7 @@ pageRouter.post(
       }
 
       validateForPublish(current, tenantId);
-      let schema = current.schema;
-      if (current.type === 'VIEW') {
-        const bindColumns = resolveBindColumns(current, tenantId);
-        const compiled = compileView(current.schema, bindColumns);
-        schema = mergeCompiled(current.schema, compiled);
-      }
+      const schema = current.schema;
 
       if (oldPublished) {
         run(`UPDATE wf_page_def SET status = 'ARCHIVED', updated_at = ? WHERE "id" = ?`, [nowText(), oldPublished.id]);
@@ -1355,42 +948,6 @@ pageRouter.delete(
 );
 
 // ---------------------------------------------------------------- 页面数据查询（PageQueryController 层逻辑 + 委托）
-
-/** GET /api/v1/pages/{pageKey}/data —— 视图数据查询 */
-pageRouter.get(
-  '/api/v1/pages/:pageKey/data',
-  authGuard,
-  ah(async (req: AuthedRequest, res) => {
-    const tenantId = tenantOf(req);
-    const pageKey = req.params['pageKey'] as string;
-    const bizReq = readBizQuery(req);
-
-    assertPageAccess(req, pageKey);
-    const page = pageDefPublishedByKey(pageKey, tenantId);
-    if (page.type !== 'VIEW') {
-      throw new BusinessException(`页面 ${pageKey} 不是视图类型，不支持数据查询`, 400);
-    }
-    const hasDataSourceId = !isBlank(page.data_source_id);
-    const hasFormKey = !isBlank(page.form_key);
-    if (!hasDataSourceId && !hasFormKey) {
-      throw new BusinessException(`页面 ${pageKey} 未绑定数据源`, 400);
-    }
-
-    const whitelist = searchFieldKeys(page.schema);
-    const filter = whitelistFilter(bizReq.filter, whitelist);
-    const sortable = sortableFieldKeys(page.schema);
-    if (!isBlank(bizReq.sort) && sortable.size > 0 && !sortable.has(bizReq.sort as string)) {
-      throw new BusinessException(`排序字段不在页面声明的可排序字段中: ${bizReq.sort}`, 400);
-    }
-
-    const delegated = { ...bizReq, filter };
-    if (hasDataSourceId) {
-      ok(res, requireDelegate('queryDataSource')(page.data_source_id as string, delegated));
-      return;
-    }
-    ok(res, requireDelegate('queryBizData')(page.form_key as string, delegated));
-  }),
-);
 
 /** GET /api/v1/pages/{pageKey}/ds/{dataSourceId}/data —— 自定义页面数据源查询 */
 pageRouter.get(

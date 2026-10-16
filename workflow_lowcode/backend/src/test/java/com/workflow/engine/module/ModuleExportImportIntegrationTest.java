@@ -171,7 +171,8 @@ class ModuleExportImportIntegrationTest {
         ModuleExportService.ExportResult exported = exportService.export(T1, "admin",
                 new ModuleExportService.ExportRequest("测试模块", "集成测试",
                         List.of(new ModuleTypes.ElementRef("FORM", "audit_form"),
-                                new ModuleTypes.ElementRef("PAGE", "leave_page"))));
+                                new ModuleTypes.ElementRef("PAGE", "leave_page")),
+                        null));
         assertThat(exported.elementCount()).isEqualTo(6);
 
         // 2. 预检 t2：全部不存在、无缺口
@@ -247,7 +248,8 @@ class ModuleExportImportIntegrationTest {
         seedSourceTenant();
         ModuleExportService.ExportResult exported = exportService.export(T1, "admin",
                 new ModuleExportService.ExportRequest("模块", null,
-                        List.of(new ModuleTypes.ElementRef("LOGIC_FLOW", "main_flow"))));
+                        List.of(new ModuleTypes.ElementRef("LOGIC_FLOW", "main_flow")),
+                        null));
 
         ModuleInspectService.InspectResult inspect = inspectService.inspect(T2, exported.zipBytes());
         List<ModuleImportService.ImportAction> allSkip = inspect.elements().stream()

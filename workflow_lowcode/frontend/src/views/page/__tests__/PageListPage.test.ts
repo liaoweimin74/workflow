@@ -86,13 +86,12 @@ describe('PageListPage — 发布/删除交互', () => {
     expect(formKeyRule.options[0]).toEqual({ label: '员工档案', value: 'emp_profile' })
     // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（page 按 1 基）
     const fetchApi = stub.props('fetchApi') as (params: any) => Promise<any>
-    const res = await fetchApi({ page: 2, size: 20, name: '视图', status: 'DRAFT', type: 'VIEW' })
+    const res = await fetchApi({ page: 2, size: 20, name: '视图', status: 'DRAFT' })
     expect(pageApi.getPages).toHaveBeenCalledWith({
       page: 2,
       size: 20,
       name: '视图',
       status: 'DRAFT',
-      type: 'VIEW',
     })
     expect(res).toEqual({
       rows: [{ id: 'p1', name: '员工视图', key: 'emp_view', type: 'VIEW', status: 'DRAFT', version: 1 }],

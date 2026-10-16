@@ -216,7 +216,7 @@ import Sortable from 'sortablejs'
 import { Plus, QuestionFilled, Delete } from '@element-plus/icons-vue'
 import ColumnAdvancedConfig from './ColumnAdvancedConfig.vue'
 import type { ColumnConfigItem } from '@/api/bizData'
-import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
+import type { SearchFieldConfig, ColumnViewConfig } from './schemaTypes'
 
 const props = withDefaults(defineProps<{
   candidates: ColumnConfigItem[]

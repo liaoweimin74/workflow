@@ -69,58 +69,6 @@ public class PageViewQuerySupport {
     }
 
     /**
-     * 解析 schema 中声明的 searchFields key 集合。
-     * 同时包含 filter.conditions 中引用的列（静态筛选列也需白名单校验）。
-     */
-    public Set<String> searchFieldKeys(String schema) {
-        Set<String> keys = new HashSet<>();
-        try {
-            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            JsonNode searchFields = root.path("searchFields");
-            if (searchFields.isArray()) {
-                for (JsonNode field : searchFields) {
-                    keys.add(field.path("key").asText());
-                }
-            }
-            // 静态筛选列也纳入白名单（ViewDesigner 数据源页签配置）
-            JsonNode filter = root.path("filter");
-            if (filter.isObject()) {
-                JsonNode conditions = filter.path("conditions");
-                if (conditions.isArray()) {
-                    for (JsonNode c : conditions) {
-                        String column = c.path("column").asText();
-                        if (column != null && !column.isBlank()) {
-                            keys.add(column);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
-        return keys;
-    }
-
-    /**
-     * 解析 schema 中声明的 sortableFields key 集合（视图级排序收窄；未声明为空=不限制）。
-     */
-    public Set<String> sortableFieldKeys(String schema) {
-        Set<String> keys = new HashSet<>();
-        try {
-            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            JsonNode fields = root.path("sortableFields");
-            if (fields.isArray()) {
-                for (JsonNode f : fields) {
-                    keys.add(f.asText());
-                }
-            }
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
-        return keys;
-    }
-
-    /**
      * 过滤 filter JSON：仅保留白名单内的字段。
      * 支持两种格式：
      * - 扁平格式 {@code {"col":"value"}}：按顶层 key 校验

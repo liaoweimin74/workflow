@@ -39,7 +39,7 @@
 
 <script setup lang="ts">
 import type { ColumnConfigItem } from '@/api/bizData'
-import type { SearchFieldConfig } from '../ViewDesigner.vue'
+import type { SearchFieldConfig } from './schemaTypes'
 
 const props = defineProps<{
   candidates: ColumnConfigItem[]

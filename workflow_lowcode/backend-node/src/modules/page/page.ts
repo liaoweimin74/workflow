@@ -1,13 +1,13 @@
 /**
  * 页面定义模块 —— PageDefinitionController + PageQueryController + PageMenuController + 
- * PageDefinitionService / ViewCompiler(简化) / PageAccessGuard / PageValidator(基础) 移植（Task 13-5）
- * mount 前缀：/api/v1/pages（12 端点 = 定义 7 + 查询 2 + 菜单 3）
+ * PageDefinitionService / PageAccessGuard / PageValidator(基础) 移植（Task 13-5）
+ * mount 前缀：/api/v1/pages
  *
  * 关键语义：
- *  - 路由顺序：/menus/:menuId、/:key/definition、/:pageKey/data 等具体路径注册在 /:id 之前
+ *  - 路由顺序：/menus/:menuId、/:key/definition 等具体路径注册在 /:id 之前
  *  - PageAccessGuard：按路径 /page/<pageKey> 查菜单（is_deleted=0）；无菜单 404、启用菜单权限码
  *    任一命中放行（admin 自动放行）、全部无权限 403（BusinessException → HTTP200 + R.code）
- *  - publish：VIEW 走基础校验 + 编译产物 {rule,option} 合并进 schema；内容未变化（剔除 rule/option 后比对）拒绝
+ *  - publish：内容未变化拒绝；置 PUBLISHED 并写 publishedVersion
  *  - mount-menu：仅 PUBLISHED；固定 path=/page/{key}、permission=page:read:{key}；admin 挂接自动授权 ROLE_ADMIN
  */
 /* mount: /api/v1/pages */
@@ -17,9 +17,8 @@ import { ok } from "../../lib/http";
 import { BusinessException } from "../../lib/errors";
 import { exec, query, queryOne, queryRows, tx } from "../../lib/db";
 import { nowStr, uuid32 } from "../../lib/dialect";
-import { getBusinessColumnsByKey, parseColumnConfig, tenantOf } from "../form/form-definition";
+import { tenantOf } from "../form/form-definition";
 import { bizQuery, bizQueryJoin, bizQuerySql, bizQuerySqlRaw, parseFormQueryConfig } from "../form/bizdata";
-import type { ColumnConfig } from "../form/dynamic-table";
 
 const router = Router();
 
@@ -97,102 +96,17 @@ function parseSchema(schemaJson: string | null | undefined): Data {
   }
 }
 
-/** 内容比对：剔除编译产物键 rule/option 后 JSON 比对 */
+/** 内容比对：JSON 规范化后比对 */
 function schemaEquals(a: string | null, b: string | null): boolean {
-  const strip = (s: string | null): string => {
+  const norm = (s: string | null): string => {
     if (!s || s.trim() === "") return "{}";
     try {
-      const n = JSON.parse(s);
-      if (n && typeof n === "object" && !Array.isArray(n)) {
-        delete n.rule;
-        delete n.option;
-        return JSON.stringify(n);
-      }
-      return JSON.stringify(n);
+      return JSON.stringify(JSON.parse(s));
     } catch {
       return String(s);
     }
   };
-  return strip(a) === strip(b);
-}
-
-// ==================== ViewCompiler（声明 → 编译产物，简化移植） ====================
-
-function compileView(decl: Data, bindColumns: ColumnConfig[]): { rule: Data[]; option: Data } {
-  const rule: Data[] = [];
-  const searchFields = Array.isArray(decl.searchFields) ? (decl.searchFields as Data[]) : [];
-  for (const sf of searchFields) {
-    const key = String(sf.key ?? "");
-    const label = String(sf.label ?? key);
-    const matchType = String(sf.matchType ?? "eq");
-    if (!["eq", "like", "range"].includes(matchType)) {
-      throw new BusinessException("非法 matchType: " + matchType, 400);
-    }
-    if (matchType === "range") {
-      rule.push({
-        type: "datePicker",
-        field: "search_" + key,
-        title: label,
-        props: { type: "datetimerange", valueFormat: "yyyy-MM-dd HH:mm:ss" },
-      });
-    } else {
-      rule.push({ type: "input", field: "search_" + key, title: label, props: { placeholder: label } });
-    }
-  }
-  const columns = Array.isArray(decl.columns) ? (decl.columns as Data[]) : [];
-  rule.push({
-    type: "el-table",
-    field: "bizTable",
-    props: {
-      columns: columns.map((c) => ({ key: String(c.key ?? ""), label: String(c.label ?? c.key ?? "") })),
-    },
-  });
-  const pagination = (decl.pagination ?? {}) as Data;
-  const pageSize = Number(pagination.pageSize ?? 20);
-  if (!Number.isInteger(pageSize) || pageSize <= 0) throw new BusinessException("pagination.pageSize 非法", 400);
-  const option: Data = {
-    pagination: {
-      show: pagination.show !== false,
-      pageSize,
-      pageSizes: Array.isArray(pagination.pageSizes) && pagination.pageSizes.length ? pagination.pageSizes : [10, 20, 50],
-    },
-    sortableFields: Array.isArray(decl.sortableFields) ? decl.sortableFields : [],
-  };
-  if (decl.display != null) option.display = decl.display;
-  void bindColumns;
-  return { rule, option };
-}
-
-/** 发布基础校验（PageValidator 简化：绑定列存在性） */
-function validateForPublish(tenantId: string, page: Row, decl: Data): ColumnConfig[] {
-  const dataSourceId = page.dataSourceId as string | null;
-  const formKey = page.formKey as string | null;
-  let bindColumns: ColumnConfig[] = [];
-  if (dataSourceId) {
-    const ds = queryOne("SELECT ID FROM WF_DATA_SOURCE WHERE ID = ? AND TENANT_ID = ?", [dataSourceId, tenantId]);
-    if (!ds) throw new BusinessException("绑定的数据源不存在", 400);
-  } else if (formKey) {
-    bindColumns = getBusinessColumnsByKey(tenantId, formKey);
-  } else {
-    throw new BusinessException("视图页面必须绑定数据源（dataSourceId）或业务表单（formKey）", 400);
-  }
-  const keys = new Set(bindColumns.map((c) => c.key));
-  const searchFields = Array.isArray(decl.searchFields) ? (decl.searchFields as Data[]) : [];
-  for (const sf of searchFields) {
-    const key = String(sf.key ?? "");
-    const col = bindColumns.find((c) => c.key === key);
-    if (formKey && !col) throw new BusinessException("查询字段不存在: " + key, 400);
-    if (col && (col.columnType === "JSON" || col.columnType === "TEXT" || col.columnType === "LONGTEXT")) {
-      throw new BusinessException("查询字段不支持 JSON/TEXT 类型: " + key, 400);
-    }
-  }
-  const columns = Array.isArray(decl.columns) ? (decl.columns as Data[]) : [];
-  for (const c of columns) {
-    if (c.custom === true) continue;
-    const key = String(c.key ?? "");
-    if (formKey && !keys.has(key)) throw new BusinessException("展示列不存在: " + key, 400);
-  }
-  return bindColumns;
+  return norm(a) === norm(b);
 }
 
 // ==================== 端点：定义 CRUD（7） ====================
@@ -203,11 +117,11 @@ router.post("/", (req: Request, res: Response) => {
   const body = (req.body ?? {}) as Data;
   const name = String(body.name ?? "");
   const key = String(body.key ?? "");
-  const type = String(body.type ?? "VIEW").toUpperCase();
+  const type = String(body.type ?? "PAGE").toUpperCase();
   const formKey = body.formKey == null ? null : String(body.formKey);
   const dataSourceId = body.dataSourceId == null ? null : String(body.dataSourceId);
   const schema = body.schema == null ? "{}" : String(body.schema);
-  if (type !== "VIEW" && type !== "PAGE") throw new BusinessException("页面类型非法（VIEW/PAGE）", 400);
+  if (type !== "PAGE") throw new BusinessException("页面类型非法（PAGE）", 400);
   if (queryOne('SELECT ID FROM WF_PAGE_DEF WHERE TENANT_ID = ? AND "key" = ? LIMIT 1', [tenantId, key])) {
     throw new BusinessException("页面 key 已存在: " + key, 400);
   }
@@ -263,75 +177,17 @@ router.get("/:key/definition", (req: Request, res: Response) => {
   if (!preview) assertPageAccess(req, req.params.key);
   let row: Row;
   if (preview) {
-    // 动态编译：任意 key 取最新版本，DRAFT VIEW 内存合并编译产物（不持久化）
+    // 预览：任意 key 取最新版本（不持久化）
     const rows = queryRows(
       'SELECT * FROM WF_PAGE_DEF WHERE TENANT_ID = ? AND "key" = ? ORDER BY VERSION DESC LIMIT 1',
       [tenantId, req.params.key],
     );
     if (!rows.length) throw new BusinessException("页面不存在: " + req.params.key, 404);
     row = rows[0];
-    if (row.type === "VIEW" && row.status === "DRAFT") {
-      const decl = parseSchema(row.schema as string);
-      const bindColumns = row.formKey ? getBusinessColumnsByKey(tenantId, String(row.formKey)) : [];
-      const compiled = compileView(decl, bindColumns);
-      row = { ...row, schema: JSON.stringify({ ...decl, ...compiled }) };
-    }
   } else {
     row = publishedByKey(tenantId, req.params.key);
   }
   ok(res, pageJSON(row, true));
-});
-
-/** GET /api/v1/pages/{pageKey}/data —— VIEW 页数据出口（先于 /:id 注册） */
-router.get("/:pageKey/data", (req: Request, res: Response) => {
-  const tenantId = tenantOf(req);
-  assertPageAccess(req, req.params.pageKey);
-  const page = publishedByKey(tenantId, req.params.pageKey);
-  if (page.TYPE !== "VIEW") throw new BusinessException("页面 " + req.params.pageKey + " 不是视图类型，不支持数据查询", 400);
-  const hasDataSourceId = !!(page.DATA_SOURCE_ID && String(page.DATA_SOURCE_ID).trim() !== "");
-  const hasFormKey = !!(page.FORM_KEY && String(page.FORM_KEY).trim() !== "");
-  if (!hasDataSourceId && !hasFormKey) throw new BusinessException("页面 " + req.params.pageKey + " 未绑定数据源", 400);
-  const req2 = queryRequestOf(req);
-  // filter 白名单：仅保留 schema 声明的 searchFields key + filter.conditions 列
-  const decl = parseSchema(page.schema as string);
-  const whitelist = new Set<string>();
-  for (const sf of Array.isArray(decl.searchFields) ? (decl.searchFields as Data[]) : []) {
-    if (sf.key != null) whitelist.add(String(sf.key));
-  }
-  const filter = Array.isArray(decl.filter) ? null : (decl.filter ?? null);
-  if (filter && typeof filter === "object" && Array.isArray((filter as Data).conditions)) {
-    for (const c of (filter as Data).conditions as Data[]) {
-      if (c.column != null) whitelist.add(String(c.column));
-    }
-  }
-  if (req2.filter) {
-    let parsed: Data;
-    try {
-      parsed = JSON.parse(req2.filter);
-    } catch {
-      throw new BusinessException("筛选参数 filter 格式非法", 400);
-    }
-    const kept: Data = {};
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      if (Array.isArray(parsed.conditions)) {
-        kept.conditions = (parsed.conditions as Data[]).filter((c) => whitelist.has(String(c.column ?? "")));
-        kept.logic = parsed.logic ?? "AND";
-      } else {
-        for (const [k, v] of Object.entries(parsed)) if (whitelist.has(k)) kept[k] = v;
-      }
-    }
-    req2.filter = JSON.stringify(kept);
-  }
-  // 排序白名单：schema 声明 sortableFields 时 sort 必须命中
-  const sortable = new Set<string>(Array.isArray(decl.sortableFields) ? (decl.sortableFields as unknown[]).map(String) : []);
-  if (req2.sort && sortable.size > 0 && !sortable.has(req2.sort)) {
-    throw new BusinessException("排序字段不在页面声明的可排序字段中: " + req2.sort, 400);
-  }
-  if (hasDataSourceId) {
-    ok(res, dsQueryData(tenantId, String(page.dataSourceId), req2));
-    return;
-  }
-  ok(res, bizQuery(tenantId, { orgId: userOrgId(req) }, String(page.formKey), req2));
 });
 
 /** GET /api/v1/pages/{pageKey}/ds/{dataSourceId}/data —— PAGE 自定义页数据源查询 */
@@ -489,14 +345,6 @@ function publishInTx(tenantId: string, id: string): Row {
     schemaEquals(cur.schema as string, oldPublished[0].schema as string)
   ) {
     throw new BusinessException("页面内容与已发布版本未变化，无需发布", 400);
-  }
-  let nextSchema = cur.schema as string;
-  if (cur.type === "VIEW") {
-    const decl = parseSchema(cur.schema as string);
-    const bindColumns = validateForPublish(tenantId, cur, decl);
-    const compiled = compileView(decl, bindColumns);
-    nextSchema = JSON.stringify({ ...decl, ...compiled });
-    exec('UPDATE WF_PAGE_DEF SET "schema" = ? WHERE ID = ?', [nextSchema, id]);
   }
   if (oldPublished.length) {
     exec("UPDATE WF_PAGE_DEF SET STATUS = 'ARCHIVED', UPDATED_AT = ? WHERE ID = ?", [nowStr(), oldPublished[0].id]);

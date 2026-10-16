@@ -31,10 +31,10 @@ public class PageDefinition {
     private String key;
 
     /**
-     * 页面类型：VIEW（视图）/ PAGE（自定义页面）。默认 VIEW。
+     * 页面类型：VIEW（视图，已废弃）/ PAGE（自定义页面）。默认 PAGE。
      */
     @Column(name = "type", length = 32, nullable = false)
-    private String type = "VIEW";
+    private String type = "PAGE";
 
     /**
      * 绑定的业务表单 key → wf_biz_<form_key>（VIEW 用）。

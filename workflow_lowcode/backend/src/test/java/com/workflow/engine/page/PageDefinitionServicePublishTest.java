@@ -14,19 +14,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 /**
  * PageDefinitionService 发布流程单元测试（TDD）。
- * 关键断言：发布不执行 DDL（Service 不依赖 DynamicTableManager 等 DDL 组件，
- * 且不直接接触 formDefRepository——绑定列经 PageValidator.resolveBindColumns 获取）；
- * 内容未变化拒绝；同 key 旧 PUBLISHED 降 ARCHIVED；编译产物合并进 schema。
+ * VIEW 视图编译已废弃：发布仅经 PageValidator.validateForPublish 校验 schema，不再编译；
+ * 不执行 DDL（Service 不依赖 DDL 组件、不直接接触 formDefRepository）；
+ * 内容未变化拒绝；同 key 旧 PUBLISHED 降 ARCHIVED。
  */
 @ExtendWith(MockitoExtension.class)
 class PageDefinitionServicePublishTest {
@@ -43,9 +41,6 @@ class PageDefinitionServicePublishTest {
     @Mock
     private PageValidator validator;
 
-    @Mock
-    private ViewCompiler compiler;
-
     private PageDefinitionService service;
 
     private static final String TENANT_ID = "test-tenant";
@@ -55,7 +50,7 @@ class PageDefinitionServicePublishTest {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
         service = new PageDefinitionService(pageDefRepository, tenantProvider,
-                validator, compiler, new ObjectMapper());
+                validator, new ObjectMapper());
     }
 
     @AfterEach
@@ -63,62 +58,35 @@ class PageDefinitionServicePublishTest {
         TenantContext.clear();
     }
 
-    private PageDefinition draftView(String id, String key, String schema) {
+    private PageDefinition draftPage(String id, String key, String schema) {
         PageDefinition page = new PageDefinition();
         page.setId(id);
         page.setTenantId(TENANT_ID);
         page.setName("测试页面");
         page.setKey(key);
-        page.setType("VIEW");
-        page.setFormKey("leave");
+        page.setType("PAGE");
         page.setSchema(schema);
         page.setVersion(1);
         page.setStatus("DRAFT");
         return page;
     }
 
-    // ==================== 发布成功（不建表） ====================
+    // ==================== 发布成功（不建表、不编译） ====================
 
     @Test
-    void publish_view_success_withoutDdl() {
-        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[]}");
+    void publish_success_withoutDdl() {
+        PageDefinition draft = draftPage("page-1", "order-page", "{\"rule\":[]}");
         when(pageDefRepository.findByIdForUpdate("page-1", TENANT_ID)).thenReturn(Optional.of(draft));
         when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
-                TENANT_ID, "leave-query", "PUBLISHED", "page-1")).thenReturn(Optional.empty());
+                TENANT_ID, "order-page", "PUBLISHED", "page-1")).thenReturn(Optional.empty());
         doNothing().when(validator).validateForPublish(draft);
-        when(validator.resolveBindColumns(draft)).thenReturn(List.of());
-        when(compiler.compile(any(PageDefinition.class), anyList())).thenReturn("{\"rule\":[],\"option\":{}}");
         when(pageDefRepository.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PageDefinition result = service.publish("page-1");
 
         assertEquals("PUBLISHED", result.getStatus());
         assertEquals(1, result.getPublishedVersion());
-        // 编译产物已合并进 schema
-        assertNotNull(result.getSchema());
-        assertTrue(result.getSchema().contains("\"rule\""));
-        assertTrue(result.getSchema().contains("\"option\""));
-        // 无 DDL：不直接接触 formDefRepository（绑定列经 validator 解析）；
-        // Service 构造不依赖 DynamicTableManager/JdbcTemplate，结构性排除 DDL
-        verify(compiler).compile(any(PageDefinition.class), anyList());
-    }
-
-    // ==================== 发布不直接接触 DDL/表单仓储 ====================
-
-    @Test
-    void publish_doesNotTouchDdlAndFormRepo() {
-        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[]}");
-        when(pageDefRepository.findByIdForUpdate("page-1", TENANT_ID)).thenReturn(Optional.of(draft));
-        when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
-                TENANT_ID, "leave-query", "PUBLISHED", "page-1")).thenReturn(Optional.empty());
-        doNothing().when(validator).validateForPublish(draft);
-        when(validator.resolveBindColumns(draft)).thenReturn(List.of());
-        when(compiler.compile(any(PageDefinition.class), anyList())).thenReturn("{\"rule\":[]}");
-        when(pageDefRepository.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        service.publish("page-1");
-
-        // 发布链路中不直接接触表单仓储与普通查询（只用 findByIdForUpdate）
+        // 发布链路不直接接触表单仓储与普通查询（只用 findByIdForUpdate）
         verifyNoInteractions(formDefRepository);
         verify(pageDefRepository, never()).findByIdAndTenantId(any(), any());
     }
@@ -127,37 +95,33 @@ class PageDefinitionServicePublishTest {
 
     @Test
     void publish_contentUnchanged_rejected() {
-        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[]}");
-        PageDefinition oldPublished = draftView("page-2", "leave-query", "{\"searchFields\":[]}");
+        PageDefinition draft = draftPage("page-1", "order-page", "{\"rule\":[]}");
+        PageDefinition oldPublished = draftPage("page-2", "order-page", "{\"rule\":[]}");
         oldPublished.setStatus("PUBLISHED");
         oldPublished.setVersion(1);
 
         when(pageDefRepository.findByIdForUpdate("page-1", TENANT_ID)).thenReturn(Optional.of(draft));
         when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
-                TENANT_ID, "leave-query", "PUBLISHED", "page-1")).thenReturn(Optional.of(oldPublished));
+                TENANT_ID, "order-page", "PUBLISHED", "page-1")).thenReturn(Optional.of(oldPublished));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.publish("page-1"));
         assertTrue(ex.getMessage().contains("未变化"));
-        // 未调用 validator/compiler
         verify(validator, never()).validateForPublish(any());
-        verify(compiler, never()).compile(any(), anyList());
     }
 
     // ==================== 旧 PUBLISHED 降 ARCHIVED ====================
 
     @Test
     void publish_archivesPreviousPublished() {
-        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[{\"key\":\"a\"}]}");
-        PageDefinition oldPublished = draftView("page-2", "leave-query", "{\"searchFields\":[{\"key\":\"b\"}]}");
+        PageDefinition draft = draftPage("page-1", "order-page", "{\"rule\":[{\"type\":\"a\"}]}");
+        PageDefinition oldPublished = draftPage("page-2", "order-page", "{\"rule\":[{\"type\":\"b\"}]}");
         oldPublished.setStatus("PUBLISHED");
         oldPublished.setVersion(1);
 
         when(pageDefRepository.findByIdForUpdate("page-1", TENANT_ID)).thenReturn(Optional.of(draft));
         when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
-                TENANT_ID, "leave-query", "PUBLISHED", "page-1")).thenReturn(Optional.of(oldPublished));
+                TENANT_ID, "order-page", "PUBLISHED", "page-1")).thenReturn(Optional.of(oldPublished));
         doNothing().when(validator).validateForPublish(draft);
-        when(validator.resolveBindColumns(draft)).thenReturn(List.of());
-        when(compiler.compile(any(PageDefinition.class), anyList())).thenReturn("{\"rule\":[]}");
         when(pageDefRepository.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.publish("page-1");
@@ -170,60 +134,25 @@ class PageDefinitionServicePublishTest {
 
     @Test
     void publish_archivedStatus_rejected() {
-        PageDefinition archived = draftView("page-1", "leave-query", "{}");
+        PageDefinition archived = draftPage("page-1", "order-page", "{}");
         archived.setStatus("ARCHIVED");
         when(pageDefRepository.findByIdForUpdate("page-1", TENANT_ID)).thenReturn(Optional.of(archived));
 
         assertThrows(BusinessException.class, () -> service.publish("page-1"));
     }
 
-    // ==================== 预览（未发布 DRAFT 动态编译，不持久化） ====================
+    // ==================== 预览（返回最新定义，VIEW 编译已废弃，不编译不持久化） ====================
 
     @Test
-    void preview_draftWithoutCompiledRule_dynamicallyCompiles() {
-        // 未发布 DRAFT：schema 仅有声明式配置（无 rule 编译产物）
-        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[{\"key\":\"name\"}]}");
-        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
+    void preview_returnsLatestDefinition_asIs() {
+        PageDefinition draft = draftPage("page-1", "order-page", "{\"rule\":[{\"type\":\"table\"}]}");
+        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "order-page"))
                 .thenReturn(Optional.of(draft));
-        doNothing().when(validator).validateForPublish(draft);
-        when(validator.resolveBindColumns(draft)).thenReturn(List.of());
-        when(compiler.compile(any(PageDefinition.class), anyList()))
-                .thenReturn("{\"rule\":[{\"type\":\"table\"}],\"option\":{}}");
 
-        PageDefinition result = service.getPreviewByKey("leave-query");
+        PageDefinition result = service.getPreviewByKey("order-page");
 
-        // 编译产物合并进返回的 schema，但不持久化（不调用 save）
-        assertNotNull(result.getSchema());
-        assertTrue(result.getSchema().contains("\"rule\""));
-        verify(compiler).compile(any(PageDefinition.class), anyList());
+        assertSame(draft, result);
         verify(pageDefRepository, never()).save(any());
-    }
-
-    @Test
-    void preview_draftWithCompiledRule_skipsRecompile() {
-        // DRAFT 但 schema 已含编译产物（上次预览/保存残留）→ 不重复编译
-        PageDefinition draft = draftView("page-1", "leave-query",
-                "{\"searchFields\":[{\"key\":\"name\"}],\"rule\":[{\"type\":\"table\"}],\"option\":{}}");
-        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
-                .thenReturn(Optional.of(draft));
-
-        PageDefinition result = service.getPreviewByKey("leave-query");
-
-        assertTrue(result.getSchema().contains("\"rule\""));
-        verify(compiler, never()).compile(any(), anyList());
-    }
-
-    @Test
-    void preview_publishedPage_returnsDirectlyWithoutCompile() {
-        PageDefinition published = draftView("page-2", "leave-query", "{\"searchFields\":[],\"rule\":[]}");
-        published.setStatus("PUBLISHED");
-        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
-                .thenReturn(Optional.of(published));
-
-        PageDefinition result = service.getPreviewByKey("leave-query");
-
-        assertEquals("PUBLISHED", result.getStatus());
-        verify(compiler, never()).compile(any(), anyList());
     }
 
     @Test

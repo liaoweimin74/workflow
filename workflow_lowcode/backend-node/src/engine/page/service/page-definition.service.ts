@@ -5,7 +5,6 @@ import { BusinessException } from '../../../common/exception/business-exception'
 import { assertPageSize, blankToNull } from '../../../framework/http/query-params'
 import { getTenantId } from '../../../framework/tenant/tenant-context'
 import { PageValidator } from '../page-validator'
-import { ViewCompiler } from '../view-compiler'
 import {
   PageDefinitionRepository,
   type PageDefinitionRow,
@@ -85,10 +84,8 @@ function toEntityVO(row: PageDefinitionRow): PageDefinitionEntityVO {
 /**
  * schema 语义比较（对齐 Java `PageDefinitionService.schemaEquals`）。
  *
- * 三步：空/空白 → `{}`；剔除**顶层**编译产物 `rule` / `option`；再做结构化比较。
+ * 空/空白 → `{}`；再做结构化比较。
  *
- * ⚠️ 剔除是关键：发布时编译产物会被合并进 schema，直接比较会把"同一份声明"
- *    误判成"已变化"。
  * ⚠️ 比较必须**忽略对象键顺序**（Jackson 的 `ObjectNode.equals` 比较的是底层 map，
  *    与书写顺序无关），但**数组顺序敏感**。所以走 canonical 序列化而不是 `===`。
  * ⚠️ 已知微小偏差：Jackson 里 `1` 与 `1.0` 是**不同**的节点（`IntNode` vs `DoubleNode`），
@@ -104,71 +101,7 @@ export function schemaEquals(a: string | null, b: string | null): boolean {
   } catch {
     return false
   }
-  return canonicalize(stripCompiled(na)) === canonicalize(stripCompiled(nb))
-}
-
-/**
- * schema 是否已含编译产物（对齐 Java `schemaHasCompiled`）：解析成功且是对象且**有 `rule` 键**。
- *
- * ⚠️ 解析失败 → false（不抛错）：库里的 schema 坏掉时应当退回「重新编译」，
- *    而不是让预览直接 500。
- */
-function schemaHasCompiled(schema: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(schema.trim() === '' ? '{}' : schema)
-    return (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      !Array.isArray(parsed) &&
-      'rule' in (parsed as Record<string, unknown>)
-    )
-  } catch {
-    return false
-  }
-}
-
-/** 移除 schema 顶层的编译产物键（`rule` / `option`），仅保留用户声明内容。 */
-function stripCompiled(node: unknown): unknown {
-  if (node === null || typeof node !== 'object' || Array.isArray(node)) return node
-  const copy: Record<string, unknown> = { ...(node as Record<string, unknown>) }
-  delete copy.rule
-  delete copy.option
-  return copy
-}
-
-/**
- * 把编译产物 `{rule, option, display}` 合并进声明 schema（对齐 Java `mergeCompiled`）。
- *
- * ⚠️ 结果是**字符串**，而字符串是逐字比对的 ⇒ 这里的键顺序就是契约：
- *    - 原 schema 的键**保持原位置原顺序**；
- *    - `rule` / `option` 若已存在 → **原地替换**；不存在 → **追加到末尾**；
- *    - `display` 同理（`compile` 总是带它，所以它通常出现在最后）。
- *    JS 对象对「已存在键赋值」保持位置、对新键追加到末尾，与 Jackson 的 `ObjectNode.set/put`
- *    语义一致 —— 这正是可以直接用赋值实现的原因。
- */
-function mergeCompiled(schema: string | null, compiled: string): string {
-  let root: Record<string, unknown>
-  try {
-    const parsed: unknown = JSON.parse(schema === null || schema.trim() === '' ? '{}' : schema)
-    root =
-      parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {}
-  } catch {
-    throw new BusinessException(400, '视图编译产物合并失败')
-  }
-
-  let compiledNode: Record<string, unknown>
-  try {
-    compiledNode = JSON.parse(compiled) as Record<string, unknown>
-  } catch {
-    throw new BusinessException(400, '视图编译产物合并失败')
-  }
-
-  if ('rule' in compiledNode) root.rule = compiledNode.rule
-  if ('option' in compiledNode) root.option = compiledNode.option
-  if ('display' in compiledNode) root.display = compiledNode.display
-  return JSON.stringify(root)
+  return canonicalize(na) === canonicalize(nb)
 }
 
 /** 对象键排序后的规范 JSON（数组保持原序）——用来做"忽略键顺序"的深度比较。 */
@@ -193,8 +126,8 @@ function canonicalize(value: unknown): string {
  * ⚠️ `getByKey` / `getVersions` / `getPublishedVersion` 三个方法**没有任何端点调用**，
  *    因此不实现。**澄清两件容易被误读的事**（2026-09-18 核实）：
  *    - 页面**预览**（`GET /pages/{key}/definition?preview=true`）**已实现**，
- *      它就是 `getByKey` 那条端点的 preview 分支（预览时编译但不落库，契约场景
- *      「VIEW 页面编译与取数」覆盖）—— 与这里的 `getVersions` 无关；
+ *      它就是 `getPreviewByKey`（返回租户内该 key 的最新定义，不落库）
+ *      —— 与这里的 `getVersions` 无关；
  *    - **版本列表端点在 Java 侧根本不存在**（`endpoints.generated.json` 里 `/pages` 只有
  *      list/getById/definition/menus/data 等 12 条），所以不是"尚未迁移"，而是"本来就没有"。
  */
@@ -203,7 +136,6 @@ export class PageDefinitionService {
   constructor(
     private readonly repository: PageDefinitionRepository,
     private readonly validator: PageValidator,
-    private readonly compiler: ViewCompiler,
   ) {}
 
   /**
@@ -259,16 +191,7 @@ export class PageDefinitionService {
   }
 
   /**
-   * 预览：按 key 取最新定义，**未发布的 DRAFT 视图动态编译**（对齐 Java `getPreviewByKey`）。
-   *
-   * 与 `publish` 的唯一区别：编译结果**不落库**（不调 save），只返回内存里合并后的 schema，
-   * 好让设计器的预览效果与发布后一致。
-   *
-   * 四个分支的顺序照抄 Java：
-   *   ① 非 VIEW → 原样返回（PAGE 不做编译）；
-   *   ② schema 里**已经有 `rule`**（发布过或残留）→ 原样返回，不重复编译；
-   *   ③ 校验（`validateForPublish`）+ 取绑定列 → 编译；
-   *   ④ 合并进 schema 后返回（**不持久化**）。
+   * 预览：按 key 取**最新**定义（对齐 Java `getPreviewByKey`）。
    *
    * ⚠️ 调用方（控制器）在 `preview=true` 时**不做页面访问校验** —— 预览正是给还没挂菜单的
    *    DRAFT 页面用的（Java 的 `/definition` 端点就是这么分流的）。
@@ -278,22 +201,14 @@ export class PageDefinitionService {
     if (row === null) {
       throw new BusinessException(404, `页面不存在: ${key}`)
     }
-    if (row.type !== 'VIEW') return toDetailVO(row)
-    if (row.schema !== null && schemaHasCompiled(row.schema)) return toDetailVO(row)
-
-    await this.validator.validateForPublish(row)
-    const bindColumns = await this.validator.resolveBindColumns(row)
-    const compiled = this.compiler.compile(row, bindColumns)
-    // ⚠️ 只改副本，**不写库** —— 预览不产生副作用（golden 用「预览之后再读详情，
-    //    schema 里仍然没有 rule」钉住了这一点）。
-    return toDetailVO({ ...row, schema: mergeCompiled(row.schema, compiled) })
+    return toDetailVO(row)
   }
 
   // ==================== 写路径 ====================
   /**
    * 创建页面定义（`POST /pages`，默认 `status=DRAFT`、`version=1`）。
    *
-   * ⚠️ `type` 缺省/空白 → **VIEW**（Java 的三元表达式）。
+   * ⚠️ `type` 缺省/空白 → **PAGE**（Java 的三元表达式）。
    * ⚠️ key 唯一性用 `existsByTenantIdAndKey`，它**不过滤 status** ——
    *    软删除（ARCHIVED）的行照样占着 key。
    * ⚠️ 返回的是**实体**（含 `schema`、`tenantId`），不是列表 DTO；
@@ -318,7 +233,7 @@ export class PageDefinitionService {
       tenant_id: tenantId,
       name: request.name === null ? '' : request.name,
       key,
-      type: request.type === null || request.type.trim() === '' ? 'VIEW' : request.type,
+      type: request.type === null || request.type.trim() === '' ? 'PAGE' : request.type,
       form_key: request.formKey,
       data_source_id: request.dataSourceId,
       schema: null,
@@ -387,13 +302,8 @@ export class PageDefinitionService {
    *
    * 流程（顺序照抄 Java）：
    *   行锁取行（404）→ ARCHIVED 拒绝 → **内容未变化**拒绝（同 key 排除自身的最新 PUBLISHED
-   *   做「剔除编译产物后」的语义比较）→ 校验（PAGE 走基础校验）→ 旧 PUBLISHED 降 ARCHIVED
+   *   做语义比较）→ 校验（PAGE 走基础校验）→ 旧 PUBLISHED 降 ARCHIVED
    *   → 当前置 PUBLISHED 并写 `publishedVersion`。
-   *
-   * ⚠️ `type=VIEW` 会编译视图（`resolveBindColumns` + `ViewCompiler.compile`）把编译产物
-   *    `{rule, option}` 合并进 schema（**已迁移**，见下方 `current.type === 'VIEW'` 分支；
-   *    契约场景「VIEW 页面编译与取数」24 步钉住，规格 U32 关闭）。
-   *    顺序与 Java 一致：**校验之后、写库之前**编译 —— 这样非法 schema 的报错仍与 Java 相同。
    *
    * ⚠️ Java 用 `synchronized(publishLocks.computeIfAbsent(...))` 做**按 key 的进程内串行化**，
    *    因为 `findByIdForUpdate` 只锁单行、挡不住「同 key 不同 id」的并发发布。
@@ -417,11 +327,6 @@ export class PageDefinitionService {
     }
 
     await this.validator.validateForPublish(current)
-    if (current.type === 'VIEW') {
-      const bindColumns = await this.validator.resolveBindColumns(current)
-      const compiled = this.compiler.compile(current, bindColumns)
-      current.schema = mergeCompiled(current.schema, compiled)
-    }
 
     if (oldPublished !== null) {
       await this.repository.save({ ...oldPublished, status: 'ARCHIVED' }, new Date())

@@ -11,7 +11,6 @@ import { PageAccessGuard } from '../page-access.guard'
 import type { PageMenuRow } from '../repository/page-menu.repository'
 import { PageMenuRepository } from '../repository/page-menu.repository'
 import { DataSourceService } from '../../datasource/service/data-source.service'
-import { BizDataService } from '../../form/bizdata/biz-data.service'
 import {
   PageDefinitionService,
   type PageDefinitionDetailVO,
@@ -36,7 +35,6 @@ export class PageDefinitionController {
     private readonly accessGuard: PageAccessGuard,
     private readonly menuRepository: PageMenuRepository,
     private readonly dataSourceService: DataSourceService,
-    private readonly bizDataService: BizDataService,
   ) {}
 
   /** 分页查询页面定义列表（status/name/type 可选过滤）。 */
@@ -62,8 +60,7 @@ export class PageDefinitionController {
   /**
    * 按 key 取页面定义（渲染页加载）。
    *
-   * `preview=true` 取最新定义（含动态编译），默认取**已发布**版本并经页面权限校验。
-   * ⚠️ preview 分支需要视图编译器（P4 后续增量），当前**显式拒绝**而不是返回未编译的 schema。
+   * `preview=true` 取最新定义，默认取**已发布**版本并经页面权限校验。
    */
   @Get(':key/definition')
   async getByKey(
@@ -105,65 +102,6 @@ export class PageDefinitionController {
     })
   }
 
-  /**
-   * 视图数据分页查询（对齐 Java `PageQueryController.query`）。
-   *
-   * 校验链顺序必须与 Java 一致，否则错误码会分叉：
-   *   权限校验 → 取已发布页面 → 类型必须是 VIEW → 必须绑定数据源
-   * → filter/sort 白名单 → 取数（dataSourceId 走数据源 SPI，否则走业务表单）。
-   *
-   * ⚠️ 白名单来源是**页面 schema 的声明**，不是数据源 metadata：
-   *    `searchFields[].key` ∪ `filter.conditions[].column`（静态筛选列也要放行），
-   *    而 `sort` 只有在 schema 声明了 `sortableFields` 时才受限（未声明 = 不限制）。
-   */
-  @Get(':pageKey/data')
-  async pageData(
-    @CurrentUser() user: LoginUser,
-    @Param('pageKey') pageKey: string,
-    @Query('filter') filter?: string,
-    @Query('keyword') keyword?: string,
-    @Query('keywordColumn') keywordColumn?: string,
-    @Query('sort') sort?: string,
-    @Query('order') order?: string,
-    @Query('params') params?: string,
-    @Query('page') page?: string,
-    @Query('size') size?: string,
-  ): Promise<R<BizDataPageVO>> {
-    await this.accessGuard.assertPageAccess(pageKey, user)
-    const definition = await this.service.getPublishedByKey(pageKey)
-    if (definition.type !== 'VIEW') {
-      throw new BusinessException(400, `页面 ${pageKey} 不是视图类型，不支持数据查询`)
-    }
-    const hasDataSourceId =
-      definition.dataSourceId !== null && definition.dataSourceId.trim() !== ''
-    const hasFormKey = definition.formKey !== null && definition.formKey.trim() !== ''
-    if (!hasDataSourceId && !hasFormKey) {
-      throw new BusinessException(400, `页面 ${pageKey} 未绑定数据源`)
-    }
-
-    const sortValue = blankToNull(sort ?? null)
-    const sortable = sortableFieldKeys(definition.schema)
-    if (sortValue !== null && sortable.size > 0 && !sortable.has(sortValue)) {
-      throw new BusinessException(400, `排序字段不在页面声明的可排序字段中: ${sortValue}`)
-    }
-
-    const request = {
-      filter: whitelistFilter(filter, searchFieldKeys(definition.schema)),
-      keyword: blankToNull(keyword),
-      keywordColumn: blankToNull(keywordColumn),
-      sort: sortValue,
-      order: blankToNull(order),
-      params: blankToNull(params),
-      // 绑定对象字段（形态 B）：非法值 → HTTP 200 + body code 400
-      page: bindIntProperty(page, 'page', 1),
-      size: bindIntProperty(size, 'size', 20),
-    }
-    if (hasDataSourceId) {
-      return R.ok(await this.dataSourceService.queryData(String(definition.dataSourceId), request))
-    }
-    return R.ok(await this.bizDataService.query(String(definition.formKey), request))
-  }
-
   /** 按 id 取页面定义详情（含 schema）。 */
   @Get(':id')
   async getById(@Param('id') id: string): Promise<R<PageDefinitionDetailVO>> {
@@ -175,7 +113,7 @@ export class PageDefinitionController {
   /**
    * 创建页面定义（对齐 Java `PageDefinitionController.create`）。
    *
-   * ⚠️ 返回的是**实体**（含 `schema` 与 `tenantId`）；`type` 缺省 → VIEW。
+   * ⚠️ 返回的是**实体**（含 `schema` 与 `tenantId`）；`type` 缺省 → PAGE。
    */
   @Post()
   async create(@Body() body: PageSaveRequest | null): Promise<R<PageDefinitionEntityVO>> {
@@ -214,7 +152,7 @@ export class PageDefinitionController {
     return R.ok()
   }
 
-  /** 发布页面（PAGE 走基础校验；VIEW 需要视图编译器，见规格 U32）。 */
+  /** 发布页面（走自定义页面基础校验）。 */
   @Post(':id/publish')
   async publish(@Param('id') id: string): Promise<R<PageDefinitionEntityVO>> {
     return R.ok(await this.service.publish(id))
@@ -371,44 +309,6 @@ function pageDataSourceSearchFields(schema: string | null, dataSourceId: string)
   return keys
 }
 
-/**
- * VIEW 页面的 filter 白名单来源（对齐 Java `searchFieldKeys`）。
- *
- * ⚠️ 两个来源**都要**收：`searchFields[].key` 与 `filter.conditions[].column` ——
- *    后者是"静态筛选列"，页面自己声明并按它过滤，必须放行，否则静态筛选会被
- *    自己的白名单拒掉（Java 注释里写明的原因）。
- */
-function searchFieldKeys(schema: string | null): Set<string> {
-  const keys = new Set<string>()
-  const root = parseSchemaObject(schema)
-  const searchFields = root.searchFields
-  if (Array.isArray(searchFields)) {
-    for (const field of searchFields) keys.add(textOf(pathOf(field, 'key')))
-  }
-  const filter = root.filter
-  if (filter !== null && typeof filter === 'object' && !Array.isArray(filter)) {
-    const conditions = (filter as Record<string, unknown>).conditions
-    if (Array.isArray(conditions)) {
-      for (const condition of conditions) {
-        const column = textOf(pathOf(condition, 'column'))
-        if (column.trim() !== '') keys.add(column)
-      }
-    }
-  }
-  return keys
-}
-
-/** VIEW 页面的排序白名单（对齐 Java `sortableFieldKeys`；未声明 → 空 = 不限制）。 */
-function sortableFieldKeys(schema: string | null): Set<string> {
-  const keys = new Set<string>()
-  const root = parseSchemaObject(schema)
-  const fields = root.sortableFields
-  if (Array.isArray(fields)) {
-    for (const field of fields) keys.add(textOf(field))
-  }
-  return keys
-}
-
 /** 解析 schema 为对象（非法 JSON → 400「页面 schema 解析失败」，对齐 Java）。 */
 function parseSchemaObject(schema: string | null): Record<string, unknown> {
   let parsed: unknown
@@ -419,12 +319,6 @@ function parseSchemaObject(schema: string | null): Record<string, unknown> {
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
   return parsed as Record<string, unknown>
-}
-
-/** 取属性（非对象 → undefined）。 */
-function pathOf(node: unknown, field: string): unknown {
-  if (node === null || typeof node !== 'object' || Array.isArray(node)) return undefined
-  return (node as Record<string, unknown>)[field]
 }
 
 /** 解析 PAGE schema 的 `dataSources` 数组（schema 非法 → 400，对齐 Java）。 */

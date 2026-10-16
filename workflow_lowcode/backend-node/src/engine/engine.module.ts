@@ -32,7 +32,6 @@ import { FormDefinitionRepository } from './form/repository/form-definition.repo
 import { FormDefinitionService } from './form/service/form-definition.service'
 import { PageAccessGuard } from './page/page-access.guard'
 import { PageValidator } from './page/page-validator'
-import { ViewCompiler } from './page/view-compiler'
 import { PageDefinitionController } from './page/controller/page-definition.controller'
 import { PageDefinitionRepository } from './page/repository/page-definition.repository'
 import { PageMenuRepository } from './page/repository/page-menu.repository'
@@ -104,7 +103,6 @@ import { TaskService } from './task/task.service'
     PageDefinitionRepository,
     PageMenuRepository,
     PageValidator,
-    ViewCompiler,
     PageDefinitionService,
     PageAccessGuard,
     FormDefinitionRepository,

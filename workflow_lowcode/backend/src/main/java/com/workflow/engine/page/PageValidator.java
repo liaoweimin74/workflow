@@ -3,7 +3,6 @@ package com.workflow.engine.page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
@@ -22,13 +21,9 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 页面发布校验器。
- * 校验 VIEW 页面发布前的绑定正确性：
- * - 绑定表单存在、已发布且为 BUSINESS 类型
- * - searchFields/columns 引用的列存在于绑定表单 column_config
- * - searchFields/columns 不得引用隐藏列；searchFields 不得引用 JSON/TEXT 列
- * PAGE 自定义页面（阶段二）：
- * - dataSources 条目 id 唯一、refId 指向存在且 ENABLED 的全局数据源
+ * 页面发布校验器（VIEW 视图编译已废弃，仅校验自定义页面 PAGE）。
+ * PAGE 自定义页面：
+ * - rule 可解析、dataSources 条目 id 唯一、refId 指向存在且 ENABLED 的全局数据源
  * - rule 中数据组件 dataSourceId 命中 dataSources[].id
  * - actions set-filter 字段命中目标数据源 searchFields 白名单
  */
@@ -39,9 +34,6 @@ public class PageValidator {
     private final ObjectMapper objectMapper;
     private final TenantProvider tenantProvider;
     private final DataSourceDefinitionService dsService;
-
-    /** 不可作为查询条件的列类型（大字段） */
-    private static final Set<String> NON_FILTERABLE_TYPES = Set.of("JSON", "TEXT", "LONGTEXT");
 
     /** 可声明数据源绑定的数据组件类型 */
     private static final Set<String> DATA_COMPONENT_TYPES = Set.of("page-table", "page-tree");
@@ -57,129 +49,17 @@ public class PageValidator {
     }
 
     /**
-     * 校验页面可发布。
+     * 校验页面可发布（VIEW 视图编译已废弃，统一走自定义页面 PAGE 校验）。
      *
-     * <p>VIEW 绑定协议：dataSourceId（新协议，经 SPI metadata 取列）优先；
-     * dataSourceId 为空且 formKey 非空（迁移被跳过的页）走遗留校验逻辑兜底。
-     *
-     * @param page 待发布页面（type=VIEW 或 PAGE）
+     * @param page 待发布页面
      * @throws BusinessException 各类校验失败（错误码 400）
      */
     public void validateForPublish(PageDefinition page) {
-        if ("PAGE".equals(page.getType())) {
-            validateForPublishPage(page);
-            return;
-        }
-
-        String tenantId = tenantProvider.getTenantId();
-        String dataSourceId = page.getDataSourceId();
-        String formKey = page.getFormKey();
-        boolean hasDataSource = dataSourceId != null && !dataSourceId.isBlank();
-        boolean hasFormKey = formKey != null && !formKey.isBlank();
-
-        // 1. 绑定来源校验：数据源与遗留 formKey 至少其一
-        if (!hasDataSource && !hasFormKey) {
-            throw new BusinessException(400, "请选择数据源");
-        }
-
-        // 2. 取列并构建合法列 / 隐藏列 / 不可筛选列集合
-        List<ColumnConfig> columns;
-        if (hasDataSource) {
-            // 新协议：数据源 metadata 取列（定义不存在/未启用 → dsService.metadata 抛 400/404）
-            DataSourceMetadata meta = dsService.metadata(dataSourceId);
-            columns = meta.getColumns() == null ? List.of() : meta.getColumns();
-        } else {
-            // 兼容兜底：formKey 遗留协议（绑定表单存在、已发布、BUSINESS 类型）
-            Optional<FormDefinition> boundFormOpt = formDefRepository
-                    .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, formKey, "PUBLISHED");
-            if (boundFormOpt.isEmpty()) {
-                throw new BusinessException(400, "绑定表单不存在或未发布: " + formKey);
-            }
-            FormDefinition boundForm = boundFormOpt.get();
-            if (!"BUSINESS".equals(boundForm.getType())) {
-                throw new BusinessException(400, "绑定表单 " + formKey + " 不是业务表单");
-            }
-            columns = parseColumnConfig(boundForm.getColumnConfig());
-        }
-
-        Set<String> validKeys = new HashSet<>();
-        Set<String> hiddenKeys = new HashSet<>();
-        Set<String> nonFilterableKeys = new HashSet<>();
-        for (ColumnConfig c : columns) {
-            validKeys.add(c.getKey());
-            if (c.isHidden()) {
-                hiddenKeys.add(c.getKey());
-            }
-            if (NON_FILTERABLE_TYPES.contains(c.getColumnType())) {
-                nonFilterableKeys.add(c.getKey());
-            }
-        }
-
-        // 3. 解析页面 schema
-        JsonNode root = parseSchema(page.getSchema());
-        JsonNode searchFields = root.path("searchFields");
-        JsonNode pageColumns = root.path("columns");
-
-        // 4. searchFields：引用列必须存在、非隐藏、非 JSON/TEXT
-        if (searchFields.isArray()) {
-            for (JsonNode field : searchFields) {
-                String key = field.path("key").asText();
-                if (!validKeys.contains(key)) {
-                    throw new BusinessException(400, "查询字段引用列不存在: " + key);
-                }
-                if (hiddenKeys.contains(key)) {
-                    throw new BusinessException(400, "查询字段不能引用隐藏列: " + key);
-                }
-                if (nonFilterableKeys.contains(key)) {
-                    throw new BusinessException(400, "查询字段不能引用大字段列（JSON/TEXT）: " + key);
-                }
-            }
-        }
-
-        // 5. columns：引用列必须存在、非隐藏（自定义列 custom=true 跳过数据源字段校验）
-        if (pageColumns.isArray()) {
-            for (JsonNode column : pageColumns) {
-                String key = column.path("key").asText();
-                boolean isCustom = column.path("custom").asBoolean(false);
-                if (!isCustom && !validKeys.contains(key)) {
-                    throw new BusinessException(400, "展示列引用列不存在: " + key);
-                }
-                if (hiddenKeys.contains(key)) {
-                    throw new BusinessException(400, "展示列不能引用隐藏列: " + key);
-                }
-            }
-        }
+        validateForPublishPage(page);
     }
 
     private void validateSchemaJson(String schema) {
         parseSchema(schema);
-    }
-
-    /**
-     * 解析发布时编译视图所需的列（供 ViewCompiler 使用）。
-     * 调用前提：validateForPublish 已通过。
-     * dataSourceId 非空 → 数据源 metadata 列；否则 → 遗留 formKey 表单 column_config。
-     *
-     * @param page 待发布页面（type=VIEW）
-     * @return 列定义列表
-     * @throws BusinessException 数据源不可用或绑定表单不存在/未发布
-     */
-    public List<ColumnConfig> resolveBindColumns(PageDefinition page) {
-        String dataSourceId = page.getDataSourceId();
-        if (dataSourceId != null && !dataSourceId.isBlank()) {
-            DataSourceMetadata meta = dsService.metadata(dataSourceId);
-            return meta.getColumns() == null ? List.of() : meta.getColumns();
-        }
-        String tenantId = tenantProvider.getTenantId();
-        if (page.getFormKey() == null || page.getFormKey().isBlank()) {
-            throw new BusinessException(400, "视图必须绑定业务表单");
-        }
-        Optional<FormDefinition> boundFormOpt = formDefRepository
-                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, page.getFormKey(), "PUBLISHED");
-        if (boundFormOpt.isEmpty()) {
-            throw new BusinessException(400, "绑定表单不存在或未发布: " + page.getFormKey());
-        }
-        return parseColumnConfig(boundFormOpt.get().getColumnConfig());
     }
 
     private JsonNode parseSchema(String schema) throws BusinessException {

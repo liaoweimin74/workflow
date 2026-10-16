@@ -32,25 +32,6 @@ export interface PageDefinitionSaveRequest {
   schema?: string
 }
 
-/** 视图数据查询参数（对齐后端 BizDataQueryRequest） */
-export interface PageQueryParams {
-  filter?: string
-  keyword?: string
-  keywordColumn?: string
-  sort?: string
-  order?: string
-  page?: number
-  size?: number
-}
-
-/** 视图数据分页结果（对齐后端 BizDataPageVO：records/total/page/size） */
-export interface BizDataPageVO {
-  records: Record<string, any>[]
-  total: number
-  page: number
-  size: number
-}
-
 /** 页面挂接的菜单项（对齐后端 PageMenuResponse.MenuItem） */
 export interface PageMenuItem {
   menuId: number
@@ -109,14 +90,9 @@ export const pageApi = {
     return http.delete(`/v1/pages/${id}`)
   },
 
-  /** 发布页面定义（编译视图配置，不建表） */
+  /** 发布页面定义 */
   publishPage(id: string): Promise<R<PageDefinitionDTO>> {
     return http.post(`/v1/pages/${id}/publish`)
-  },
-
-  /** 视图数据分页查询（filter 仅保留页面声明白名单字段） */
-  queryPageData(pageKey: string, params: PageQueryParams): Promise<R<BizDataPageVO>> {
-    return http.get(`/v1/pages/${pageKey}/data`, { params })
   },
 
   /** 挂接菜单（每次调用为已发布页面创建一条新菜单，支持多挂接） */
@@ -252,7 +228,7 @@ export async function exportPageData(
 
 /**
  * 导入 Excel（multipart：file 必须 + mapping 可选 JSON 字符串 {"表头":"字段key"}）。
- * 仅 formKey 绑定的 VIEW 页面可用（纯数据源视图后端 400）；code≠200 由 http 拦截器
+ * 仅自定义页面（PAGE）可用（后端校验页面类型为 PAGE，否则 400）；code≠200 由 http 拦截器
  * 统一 toast msg 并 reject，调用方只需 catch。
  */
 export function importPageData(pageKey: string, formData: FormData): Promise<R<PageDataImportResult>> {

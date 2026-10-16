@@ -34,10 +34,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 页面数据视图 Excel 导入导出 Controller。
+ * 自定义页面（PAGE）数据视图 Excel 导入导出 Controller。
  *
- * <p>导出：POST /api/v1/pages/{pageKey}/data/export —— 入参与分页查询接口
- * {@link PageQueryController#query} 同构（filter/sort 同白名单），返回 xlsx 二进制流。
+ * <p>导出：POST /api/v1/pages/{pageKey}/data/export —— 入参与页面数据源查询接口
+ * {@link PageQueryController#queryPageDataSource} 同构（filter/sort 同白名单），返回 xlsx 二进制流。
  * <p>导入：POST /api/v1/pages/{pageKey}/data/import —— multipart 上传 .xlsx +
  * 可选表头映射，逐行复用 DATA_INSERT 同款通用写入（{@link com.workflow.engine.form.bizdata.BizDataService#create}
  * ：必填校验 / JSON 列 / 日期归一 / 租户注入），单行失败收集不中断。
@@ -88,33 +88,14 @@ public class PageDataExcelController {
         PageDefinition page = resolveExportablePage(pageKey);
 
         BizDataQueryRequest query = new BizDataQueryRequest();
-        if ("PAGE".equals(page.getType())) {
-            // PAGE：page-table 组件级绑定 —— 列声明取 rule.props.columns，白名单与查询接口同源（ds 条目 searchFields）
-            PageTableBinding binding = pageTableBinding(page.getSchema());
-            String refId = querySupport.resolveDataSourceRefId(page.getSchema(), binding.dataSourceId());
-            Set<String> whitelist = querySupport.pageDataSourceSearchFields(page.getSchema(), binding.dataSourceId());
-            query.setFilter(querySupport.whitelistFilter(req.getFilter(), whitelist));
-            if (req.getSort() != null && !req.getSort().isBlank()
-                    && !binding.sortableFields().isEmpty() && !binding.sortableFields().contains(req.getSort())) {
-                throw new BusinessException(400, "排序字段不在组件声明的可排序字段中: " + req.getSort());
-            }
-            query.setKeyword(req.getKeyword());
-            query.setKeywordColumn(req.getKeywordColumn());
-            query.setSort(req.getSort());
-            query.setOrder(req.getOrder());
-            query.setParams(req.getParams());
-
-            PageDataExcelService.ExportResult result =
-                    excelService.exportPageDataSource(refId, binding.columns(), query, req.getColumns());
-            return xlsxResponse(result, sanitizeFilename(req.getFilename(), page.getName()));
-        }
-
-        Set<String> whitelist = querySupport.searchFieldKeys(page.getSchema());
+        // PAGE：page-table 组件级绑定 —— 列声明取 rule.props.columns，白名单与查询接口同源（ds 条目 searchFields）
+        PageTableBinding binding = pageTableBinding(page.getSchema());
+        String refId = querySupport.resolveDataSourceRefId(page.getSchema(), binding.dataSourceId());
+        Set<String> whitelist = querySupport.pageDataSourceSearchFields(page.getSchema(), binding.dataSourceId());
         query.setFilter(querySupport.whitelistFilter(req.getFilter(), whitelist));
-        Set<String> sortable = querySupport.sortableFieldKeys(page.getSchema());
         if (req.getSort() != null && !req.getSort().isBlank()
-                && !sortable.isEmpty() && !sortable.contains(req.getSort())) {
-            throw new BusinessException(400, "排序字段不在页面声明的可排序字段中: " + req.getSort());
+                && !binding.sortableFields().isEmpty() && !binding.sortableFields().contains(req.getSort())) {
+            throw new BusinessException(400, "排序字段不在组件声明的可排序字段中: " + req.getSort());
         }
         query.setKeyword(req.getKeyword());
         query.setKeywordColumn(req.getKeywordColumn());
@@ -122,11 +103,12 @@ public class PageDataExcelController {
         query.setOrder(req.getOrder());
         query.setParams(req.getParams());
 
-        PageDataExcelService.ExportResult result = excelService.export(page, query, req.getColumns());
+        PageDataExcelService.ExportResult result =
+                excelService.exportPageDataSource(refId, binding.columns(), query, req.getColumns());
         return xlsxResponse(result, sanitizeFilename(req.getFilename(), page.getName()));
     }
 
-    /** 导出响应组装（xlsx 头 + 截断标记）——VIEW/PAGE 两路径共用 */
+    /** 导出响应组装（xlsx 头 + 截断标记） */
     private ResponseEntity<byte[]> xlsxResponse(PageDataExcelService.ExportResult result, String filename) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(XLSX_MEDIA_TYPE);
@@ -148,21 +130,13 @@ public class PageDataExcelController {
                                                  @RequestParam("file") MultipartFile file,
                                                  @RequestParam(value = "mapping", required = false) String mappingJson) {
         PageDefinition page = resolveExportablePage(pageKey);
-        String formKey;
-        if ("PAGE".equals(page.getType())) {
-            // PAGE：页面内数据源 → 全局数据源 → 表单 key（仅表单型数据源可写）
-            PageTableBinding binding = pageTableBinding(page.getSchema());
-            String refId = querySupport.resolveDataSourceRefId(page.getSchema(), binding.dataSourceId());
-            DataSourceDefinition ds = dsService.getById(refId);
-            formKey = ds == null ? null : ds.getFormKey();
-            if (formKey == null || formKey.isBlank()) {
-                throw new BusinessException(400, "页面绑定的数据源非表单型，无法导入");
-            }
-        } else {
-            formKey = page.getFormKey();
-            if (formKey == null || formKey.isBlank()) {
-                throw new BusinessException(400, "页面未绑定业务表单，无法导入（仅支持业务表单视图）");
-            }
+        // PAGE：页面内数据源 → 全局数据源 → 表单 key（仅表单型数据源可写）
+        PageTableBinding binding = pageTableBinding(page.getSchema());
+        String refId = querySupport.resolveDataSourceRefId(page.getSchema(), binding.dataSourceId());
+        DataSourceDefinition ds = dsService.getById(refId);
+        String formKey = ds == null ? null : ds.getFormKey();
+        if (formKey == null || formKey.isBlank()) {
+            throw new BusinessException(400, "页面绑定的数据源非表单型，无法导入");
         }
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "未上传文件");
@@ -178,20 +152,12 @@ public class PageDataExcelController {
         return R.ok(excelService.importRows(formKey, parseMapping(mappingJson), inputStreamOf(file)));
     }
 
-    /** 公共前置：页面访问权限 → 已发布 → VIEW/PAGE 类型 → 已绑定数据源（导入导出入口共用） */
+    /** 公共前置：页面访问权限 → 已发布 → 自定义页面（PAGE）类型（导入导出入口共用） */
     private PageDefinition resolveExportablePage(String pageKey) {
         pageAccessGuard.assertPageAccess(pageKey);
         PageDefinition page = pageDefService.getPublishedByKey(pageKey);
-        String type = page.getType();
-        if (!"VIEW".equals(type) && !"PAGE".equals(type)) {
-            throw new BusinessException(400, "页面 " + pageKey + " 类型不支持数据导入导出（仅视图/自定义页面）");
-        }
-        if ("VIEW".equals(type)) {
-            boolean hasDataSourceId = page.getDataSourceId() != null && !page.getDataSourceId().isBlank();
-            boolean hasFormKey = page.getFormKey() != null && !page.getFormKey().isBlank();
-            if (!hasDataSourceId && !hasFormKey) {
-                throw new BusinessException(400, "页面 " + pageKey + " 未绑定数据源");
-            }
+        if (!"PAGE".equals(page.getType())) {
+            throw new BusinessException(400, "页面 " + pageKey + " 类型不支持数据导入导出（仅自定义页面）");
         }
         return page;
     }

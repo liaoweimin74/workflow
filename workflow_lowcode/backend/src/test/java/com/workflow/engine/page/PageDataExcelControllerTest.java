@@ -10,6 +10,7 @@ import com.workflow.api.dto.PageDataExportRequest;
 import com.workflow.api.dto.PageDataImportResultVO;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.bizdata.BizDataContext;
 import com.workflow.engine.form.bizdata.BizDataSupport;
 import com.workflow.engine.form.bizdata.BizDataService;
@@ -34,7 +35,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +45,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -56,6 +57,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * PageDataExcelController / PageDataExcelService 单元测试（纯 Mockito + 真实 POI）。
+ * VIEW 视图导入导出路径已废弃，仅覆盖自定义页面（PAGE）page-table 数据源导入导出。
  *
  * <p>覆盖：导出成功（响应头 + 内容非空 + 分页拉全量 + 列白名单）、导出超限截断、
  * 导入成功（内存构造 xlsx，断言插入数据与统计）、导入部分失败（类型错/单行失败收集不中断）、
@@ -63,13 +65,22 @@ import static org.mockito.Mockito.when;
  */
 class PageDataExcelControllerTest {
 
-    private static final String VIEW_SCHEMA = """
-            {"searchFields":[{"key":"name","label":"姓名","matchType":"like"}],
-             "columns":[{"key":"name","label":"姓名"},{"key":"age","label":"年龄"},
-                        {"key":"hidden_col","label":"隐藏列","hidden":true},
-                        {"key":"calc","label":"计算列","custom":true}],
-             "sortableFields":["name"]}
+    /** PAGE schema：page-table 绑定 ds-main→ds_ref_1，列含 hidden/custom，组件 sortableFields=[name] */
+    private static final String PAGE_SCHEMA = """
+            {"rule":[{"type":"page-table","field":"t1","props":{
+                "dataSourceId":"ds-main",
+                "columns":[
+                  {"prop":"name","label":"姓名"},
+                  {"prop":"age","label":"年龄"},
+                  {"prop":"hidden_col","label":"隐藏列","hidden":true},
+                  {"prop":"calc","label":"计算列","custom":true}],
+                "sortableFields":["name"]}}],
+             "option":{},
+             "dataSources":[{"id":"ds-main","refId":"ds_ref_1","searchFields":["name"]}],
+             "actions":[]}
             """;
+
+    private static final String REF_ID = "ds_ref_1";
 
     private PageDefinitionService pageDefService;
     private BizDataService bizDataService;
@@ -90,7 +101,9 @@ class PageDataExcelControllerTest {
         controller = new PageDataExcelController(pageDefService, pageAccessGuard,
                 new PageViewQuerySupport(new ObjectMapper()), service, dsService, new ObjectMapper());
 
-        when(pageDefService.getPublishedByKey("emp_view")).thenReturn(viewPage());
+        when(pageDefService.getPublishedByKey("emp_page")).thenReturn(page());
+        // 导入：ds-main 解析出的全局数据源为表单型（formKey=emp_profile）
+        when(dsService.getById(REF_ID)).thenReturn(dsOf("emp_profile"));
         // 导入目标业务表上下文（列白名单）
         when(bizDataSupport.loadContext("emp_profile")).thenReturn(new BizDataContext(
                 "wf_biz_emp_profile", "emp_profile",
@@ -99,13 +112,30 @@ class PageDataExcelControllerTest {
                 List.of("name", "age", "salary", "joined_at"), Map.of()));
     }
 
-    private static PageDefinition viewPage() {
+    private static PageDefinition page() {
         PageDefinition page = new PageDefinition();
-        page.setType("VIEW");
-        page.setFormKey("emp_profile");
-        page.setSchema(VIEW_SCHEMA);
-        page.setName("员工视图");
+        page.setType("PAGE");
+        page.setSchema(PAGE_SCHEMA);
+        page.setName("员工页面");
         return page;
+    }
+
+    private static DataSourceDefinition dsOf(String formKey) {
+        DataSourceDefinition ds = new DataSourceDefinition();
+        ds.setId(REF_ID);
+        ds.setType("FORM");
+        ds.setFormKey(formKey);
+        ds.setStatus("ENABLED");
+        return ds;
+    }
+
+    /** page-table 列声明（与 PAGE_SCHEMA.props.columns 对齐） */
+    private static List<PageDataExcelService.ColumnDecl> decls() {
+        return List.of(
+                new PageDataExcelService.ColumnDecl("name", "姓名", false, false),
+                new PageDataExcelService.ColumnDecl("age", "年龄", false, false),
+                new PageDataExcelService.ColumnDecl("hidden_col", "隐藏列", true, false),
+                new PageDataExcelService.ColumnDecl("calc", "计算列", false, true));
     }
 
     private static ColumnConfig col(String key, String label, String columnType, boolean required) {
@@ -151,14 +181,14 @@ class PageDataExcelControllerTest {
     void export_returnsXlsxWithHeadersAndBody() {
         byte[] bytes = "fake-xlsx-bytes".getBytes(StandardCharsets.UTF_8);
         PageDataExcelService spyService = mock(PageDataExcelService.class);
-        when(spyService.export(any(), any(), any()))
+        when(spyService.exportPageDataSource(anyString(), anyList(), any(), any()))
                 .thenReturn(new PageDataExcelService.ExportResult(bytes, 3, false));
         PageDataExcelController withSpy = new PageDataExcelController(pageDefService, pageAccessGuard,
                 new PageViewQuerySupport(new ObjectMapper()), spyService, dsService, new ObjectMapper());
 
         PageDataExportRequest req = new PageDataExportRequest();
         req.setFilename("员工/名单"); // 含非法路径字符 → 清洗
-        ResponseEntity<byte[]> resp = withSpy.export("emp_view", req);
+        ResponseEntity<byte[]> resp = withSpy.export("emp_page", req);
 
         assertThat(resp.getStatusCode().value()).isEqualTo(200);
         HttpHeaders headers = resp.getHeaders();
@@ -170,17 +200,18 @@ class PageDataExcelControllerTest {
         assertThat(disposition.getFilename()).isEqualTo("员工_名单.xlsx");
         assertThat(resp.getBody()).isNotEmpty().isSameAs(bytes);
         assertThat(headers.get("X-Export-Truncated")).isNull();
+        verify(spyService).exportPageDataSource(eq(REF_ID), anyList(), any(), any());
     }
 
     @Test
     void export_truncated_setsWarningHeader() {
         PageDataExcelService spyService = mock(PageDataExcelService.class);
-        when(spyService.export(any(), any(), any()))
+        when(spyService.exportPageDataSource(anyString(), anyList(), any(), any()))
                 .thenReturn(new PageDataExcelService.ExportResult(new byte[]{1}, 10000, true));
         PageDataExcelController withSpy = new PageDataExcelController(pageDefService, pageAccessGuard,
                 new PageViewQuerySupport(new ObjectMapper()), spyService, dsService, new ObjectMapper());
 
-        ResponseEntity<byte[]> resp = withSpy.export("emp_view", new PageDataExportRequest());
+        ResponseEntity<byte[]> resp = withSpy.export("emp_page", new PageDataExportRequest());
 
         assertThat(resp.getHeaders().getFirst("X-Export-Truncated")).isEqualTo("true");
     }
@@ -198,15 +229,19 @@ class PageDataExcelControllerTest {
     }
 
     @Test
-    void export_onPageWithoutBinding_rejected400() {
+    void export_unknownDataSource_rejected400() {
+        // page-table 引用未在 dataSources 声明的 dataSourceId → 解析 refId 失败
         PageDefinition page = new PageDefinition();
-        page.setType("VIEW");
-        page.setSchema(VIEW_SCHEMA);
-        when(pageDefService.getPublishedByKey("naked_view")).thenReturn(page);
+        page.setType("PAGE");
+        page.setSchema("""
+                {"rule":[{"type":"page-table","field":"t1","props":{"dataSourceId":"ds-ghost","columns":[{"prop":"a","label":"A"}]}}],
+                 "dataSources":[{"id":"ds-main","refId":"ds_ref_1"}],"actions":[]}
+                """);
+        when(pageDefService.getPublishedByKey("ghost_page")).thenReturn(page);
 
-        assertThatThrownBy(() -> controller.export("naked_view", new PageDataExportRequest()))
+        assertThatThrownBy(() -> controller.export("ghost_page", new PageDataExportRequest()))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("未绑定数据源");
+                .hasMessageContaining("未声明数据源");
     }
 
     @Test
@@ -214,19 +249,19 @@ class PageDataExcelControllerTest {
         PageDataExportRequest req = new PageDataExportRequest();
         req.setFilter("{\"hack\":\"x\"}");
 
-        assertThatThrownBy(() -> controller.export("emp_view", req))
+        assertThatThrownBy(() -> controller.export("emp_page", req))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("筛选字段不在页面声明白名单: hack");
     }
 
     @Test
-    void export_sortOutsideWhitelist_rejected400() {
+    void export_sortOutsideComponentSortableFields_rejected400() {
         PageDataExportRequest req = new PageDataExportRequest();
         req.setSort("salary");
 
-        assertThatThrownBy(() -> controller.export("emp_view", req))
+        assertThatThrownBy(() -> controller.export("emp_page", req))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("排序字段不在页面声明的可排序字段中: salary");
+                .hasMessageContaining("排序字段不在组件声明的可排序字段中: salary");
     }
 
     // ==================== 导出：Service ====================
@@ -235,7 +270,7 @@ class PageDataExcelControllerTest {
     void exportService_pullsAllPages_writesWorkbookWithDeclaredColumns() throws IOException {
         List<Integer> pages = new ArrayList<>();
         List<Integer> sizes = new ArrayList<>();
-        when(bizDataService.query(anyString(), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
+        when(dsService.queryData(eq(REF_ID), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
             BizDataQueryRequest q = inv.getArgument(1);
             pages.add(q.getPage());
             sizes.add(q.getSize());
@@ -254,12 +289,9 @@ class PageDataExcelControllerTest {
         });
 
         PageDataExcelService.ExportResult result =
-                service.export(viewPage(), new BizDataQueryRequest(), null);
+                service.exportPageDataSource(REF_ID, decls(), new BizDataQueryRequest(), null);
 
         // 分页拉全量：page 1 → 2（size=500；请求对象被循环复用，以应答内记录为准）
-        verify(dsService, never()).queryData(anyString(), any());
-        org.mockito.Mockito.verify(bizDataService, org.mockito.Mockito.times(2))
-                .query(eq("emp_profile"), any(BizDataQueryRequest.class));
         assertThat(pages).containsExactly(1, 2);
         assertThat(sizes).containsExactly(PageDataExcelService.EXPORT_PAGE_SIZE, PageDataExcelService.EXPORT_PAGE_SIZE);
 
@@ -279,7 +311,7 @@ class PageDataExcelControllerTest {
 
     @Test
     void exportService_requestedColumnSubset_includesHiddenDeclaredColumn() throws IOException {
-        when(bizDataService.query(anyString(), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
+        when(dsService.queryData(eq(REF_ID), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
             BizDataPageVO vo = new BizDataPageVO();
             vo.setTotal(1);
             vo.setRecords(List.of(bizRow("name", "张三", "hidden_col", "secret")));
@@ -287,7 +319,7 @@ class PageDataExcelControllerTest {
         });
 
         PageDataExcelService.ExportResult result =
-                service.export(viewPage(), new BizDataQueryRequest(), List.of("hidden_col", "name"));
+                service.exportPageDataSource(REF_ID, decls(), new BizDataQueryRequest(), List.of("hidden_col", "name"));
 
         try (Workbook wb = WorkbookFactory.create(new ByteArrayInputStream(result.xlsx()))) {
             Sheet sheet = wb.getSheetAt(0);
@@ -299,32 +331,14 @@ class PageDataExcelControllerTest {
 
     @Test
     void exportService_unknownRequestedColumn_rejected400() {
-        assertThatThrownBy(() -> service.export(viewPage(), new BizDataQueryRequest(), List.of("evil_col")))
+        assertThatThrownBy(() -> service.exportPageDataSource(REF_ID, decls(), new BizDataQueryRequest(), List.of("evil_col")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("导出列不在页面声明的展示列中: evil_col");
     }
 
     @Test
-    void exportService_dataSourceBoundView_usesDataSourceSpi() {
-        PageDefinition page = viewPage();
-        page.setDataSourceId("ds_workflow_001");
-        when(dsService.queryData(eq("ds_workflow_001"), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
-            BizDataPageVO vo = new BizDataPageVO();
-            vo.setTotal(1);
-            vo.setRecords(List.of(bizRow("name", "张三", "age", 30)));
-            return vo;
-        });
-
-        PageDataExcelService.ExportResult result = service.export(page, new BizDataQueryRequest(), null);
-
-        assertThat(result.rows()).isEqualTo(1);
-        verify(dsService).queryData(eq("ds_workflow_001"), any(BizDataQueryRequest.class));
-        verify(bizDataService, never()).query(anyString(), any());
-    }
-
-    @Test
     void exportService_exceedsMaxRows_truncated() throws IOException {
-        when(bizDataService.query(anyString(), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
+        when(dsService.queryData(eq(REF_ID), any(BizDataQueryRequest.class))).thenAnswer(inv -> {
             BizDataQueryRequest q = inv.getArgument(1);
             BizDataPageVO vo = new BizDataPageVO();
             vo.setTotal(PageDataExcelService.MAX_EXPORT_ROWS + 1L);
@@ -339,7 +353,7 @@ class PageDataExcelControllerTest {
         });
 
         PageDataExcelService.ExportResult result =
-                service.export(viewPage(), new BizDataQueryRequest(), null);
+                service.exportPageDataSource(REF_ID, decls(), new BizDataQueryRequest(), null);
 
         assertThat(result.rows()).isEqualTo(PageDataExcelService.MAX_EXPORT_ROWS);
         assertThat(result.truncated()).isTrue();
@@ -364,7 +378,7 @@ class PageDataExcelControllerTest {
                     r2.createCell(1).setCellValue(28);
                 }));
 
-        PageDataImportResultVO result = controller.importExcel("emp_view", file, null).getData();
+        PageDataImportResultVO result = controller.importExcel("emp_page", file, null).getData();
 
         assertThat(result.getTotal()).isEqualTo(2);
         assertThat(result.getSuccess()).isEqualTo(2);
@@ -383,24 +397,21 @@ class PageDataExcelControllerTest {
     }
 
     @Test
-    void import_onViewWithoutFormKey_rejected400() {
-        PageDefinition page = new PageDefinition();
-        page.setType("VIEW");
-        page.setDataSourceId("ds_workflow_001");
-        page.setSchema(VIEW_SCHEMA);
-        when(pageDefService.getPublishedByKey("ds_view")).thenReturn(page);
+    void import_onNonFormDataSource_rejected400() {
+        // 绑定的全局数据源非表单型（formKey 空）→ 无法导入
+        when(dsService.getById(REF_ID)).thenReturn(dsOf(null));
         MockMultipartFile file = new MockMultipartFile("file", "a.xlsx", null, new byte[]{1});
 
-        assertThatThrownBy(() -> controller.importExcel("ds_view", file, null))
+        assertThatThrownBy(() -> controller.importExcel("emp_page", file, null))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("页面未绑定业务表单，无法导入");
+                .hasMessageContaining("数据源非表单型");
     }
 
     @Test
     void import_rejectsEmptyFile() {
         MockMultipartFile file = new MockMultipartFile("file", "a.xlsx", null, new byte[0]);
 
-        assertThatThrownBy(() -> controller.importExcel("emp_view", file, null))
+        assertThatThrownBy(() -> controller.importExcel("emp_page", file, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("未上传文件");
     }
@@ -409,7 +420,7 @@ class PageDataExcelControllerTest {
     void import_rejectsNonXlsxExtension() {
         MockMultipartFile file = new MockMultipartFile("file", "a.csv", null, new byte[]{1, 2});
 
-        assertThatThrownBy(() -> controller.importExcel("emp_view", file, null))
+        assertThatThrownBy(() -> controller.importExcel("emp_page", file, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("仅支持 .xlsx");
     }
@@ -423,7 +434,7 @@ class PageDataExcelControllerTest {
             }
         };
 
-        assertThatThrownBy(() -> controller.importExcel("emp_view", file, null))
+        assertThatThrownBy(() -> controller.importExcel("emp_page", file, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("20MB");
     }
@@ -432,7 +443,7 @@ class PageDataExcelControllerTest {
     void import_invalidMappingJson_rejected400() {
         MockMultipartFile file = new MockMultipartFile("file", "a.xlsx", null, new byte[]{1});
 
-        assertThatThrownBy(() -> controller.importExcel("emp_view", file, "not-json"))
+        assertThatThrownBy(() -> controller.importExcel("emp_page", file, "not-json"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("mapping 参数非法");
     }
@@ -563,6 +574,7 @@ class PageDataExcelControllerTest {
         assertThat(result.getErrors()).hasSize(1);
         assertThat(result.getErrors().get(0).getRow()).isEqualTo(2);
         assertThat(result.getErrors().get(0).getMessage()).contains("必填字段不能为空");
+        assertThat(n.get()).isEqualTo(1);
     }
 
     @Test

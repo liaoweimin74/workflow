@@ -7,25 +7,18 @@ import { FormDefinitionRepository } from '../form/repository/form-definition.rep
 import { DataSourceService } from '../datasource/service/data-source.service'
 import type { PageDefinitionRow } from './repository/page-definition.repository'
 
-/** 不可作为查询条件的列类型（大字段），对齐 Java `NON_FILTERABLE_TYPES`。 */
-const NON_FILTERABLE_TYPES = new Set(['JSON', 'TEXT', 'LONGTEXT'])
-
 /** 可声明数据源绑定的数据组件类型，对齐 Java `DATA_COMPONENT_TYPES`。 */
 const DATA_COMPONENT_TYPES = new Set(['page-table', 'page-tree'])
 
 /**
- * 页面发布校验器（对齐 Java `PageValidator`，331 行）。
+ * 页面发布校验器（对齐 Java `PageValidator`）。
  *
- * 两套互不相交的规则，按 `type` 分派：
- * - **VIEW**：绑定来源（dataSourceId 优先，formKey 兜底）→ 取列 → schema 里的
- *   `searchFields` / `columns` 逐个比对列白名单（存在、非隐藏、非大字段）；
- * - **PAGE**：`{rule, option, dataSources, actions}` 结构 → `dataSources[].refId`
- *   指向**存在且 ENABLED** 的全局数据源 → `rule` 里数据组件的 `dataSourceId` 已声明
- *   → `actions` 的 `set-filter` 字段命中该数据源的 `searchFields` 白名单。
+ * 页面统一为 PAGE：`{rule, option, dataSources, actions}` 结构 → `dataSources[].refId`
+ * 指向**存在且 ENABLED** 的全局数据源 → `rule` 里数据组件的 `dataSourceId` 已声明
+ * → `actions` 的 `set-filter` 字段命中该数据源的 `searchFields` 白名单。
  *
  * ⚠️ 校验项**逐条照抄**是本文件的全部价值：漏一条的后果是"非法 schema 被存进库"，
  *    而它要到很久以后（渲染或取数）才炸，那时已经很难定位来源。
- *    Java 侧 14 处 `BusinessException` 的消息文本在这里逐字复刻。
  *
  * ⚠️ `parseColumnConfig` 用**已有的** `parseBusinessColumnConfig`，不另写一份：
  *    它内部从 `newColumnConfig()` 起步补齐默认值（Jackson 语义）。
@@ -42,123 +35,10 @@ export class PageValidator {
   /**
    * 校验页面可发布（对齐 Java `validateForPublish`）。
    *
-   * `PAGE` 类型走另一条完全独立的规则集。
+   * 页面统一为 PAGE，走自定义页面规则集。
    */
   async validateForPublish(page: PageDefinitionRow): Promise<void> {
-    if (page.type === 'PAGE') {
-      await this.validateForPublishPage(page)
-      return
-    }
-
-    const tenantId = getTenantId()
-    const hasDataSource = page.data_source_id !== null && page.data_source_id.trim() !== ''
-    const hasFormKey = page.form_key !== null && page.form_key.trim() !== ''
-
-    // 1. 绑定来源校验：数据源与遗留 formKey 至少其一
-    if (!hasDataSource && !hasFormKey) {
-      throw new BusinessException(400, '请选择数据源')
-    }
-
-    // 2. 取列并构建合法列 / 隐藏列 / 不可筛选列集合
-    const columns = await this.resolveColumns(
-      tenantId,
-      page.data_source_id,
-      page.form_key,
-      '绑定表单不存在或未发布: ',
-    )
-
-    const validKeys = new Set<string>()
-    const hiddenKeys = new Set<string>()
-    const nonFilterableKeys = new Set<string>()
-    for (const column of columns) {
-      const key = String(column.key)
-      validKeys.add(key)
-      if (column.hidden) hiddenKeys.add(key)
-      if (NON_FILTERABLE_TYPES.has(String(column.columnType))) nonFilterableKeys.add(key)
-    }
-
-    // 3. 解析页面 schema
-    const root = parseSchema(page.schema)
-    const searchFields = pathOf(root, 'searchFields')
-    const pageColumns = pathOf(root, 'columns')
-
-    // 4. searchFields：引用列必须存在、非隐藏、非 JSON/TEXT
-    if (Array.isArray(searchFields)) {
-      for (const field of searchFields) {
-        const key = textAt(field, 'key')
-        if (!validKeys.has(key)) {
-          throw new BusinessException(400, `查询字段引用列不存在: ${key}`)
-        }
-        if (hiddenKeys.has(key)) {
-          throw new BusinessException(400, `查询字段不能引用隐藏列: ${key}`)
-        }
-        if (nonFilterableKeys.has(key)) {
-          throw new BusinessException(400, `查询字段不能引用大字段列（JSON/TEXT）: ${key}`)
-        }
-      }
-    }
-
-    // 5. columns：引用列必须存在、非隐藏（自定义列 custom=true 跳过数据源字段校验）
-    if (Array.isArray(pageColumns)) {
-      for (const column of pageColumns) {
-        const key = textAt(column, 'key')
-        const isCustom = boolAt(column, 'custom')
-        if (!isCustom && !validKeys.has(key)) {
-          throw new BusinessException(400, `展示列引用列不存在: ${key}`)
-        }
-        if (hiddenKeys.has(key)) {
-          throw new BusinessException(400, `展示列不能引用隐藏列: ${key}`)
-        }
-      }
-    }
-  }
-
-  /**
-   * 解析发布时编译视图所需的列（对齐 Java `resolveBindColumns`）。
-   * 调用前提：`validateForPublish` 已通过。
-   *
-   * ⚠️ 仅供 VIEW 编译用；本批**没有**迁移 `ViewCompiler`（规格 U32），
-   *    所以这个方法的调用方目前只有 `publish` 的显式拒绝分支。
-   */
-  async resolveBindColumns(page: PageDefinitionRow): Promise<ColumnConfig[]> {
-    if (page.data_source_id !== null && page.data_source_id.trim() !== '') {
-      const meta = await this.dataSourceService.metadata(page.data_source_id)
-      return meta.columns ?? []
-    }
-    if (page.form_key === null || page.form_key.trim() === '') {
-      throw new BusinessException(400, '视图必须绑定业务表单')
-    }
-    return this.resolveColumns(
-      getTenantId(),
-      null,
-      page.form_key,
-      '绑定表单不存在或未发布: ',
-    )
-  }
-
-  /** 取列：数据源 metadata 优先，其次遗留 formKey 的 column_config。 */
-  private async resolveColumns(
-    tenantId: string,
-    dataSourceId: string | null,
-    formKey: string | null,
-    missingFormMessage: string,
-  ): Promise<ColumnConfig[]> {
-    if (dataSourceId !== null && dataSourceId.trim() !== '') {
-      // 新协议：数据源 metadata 取列（定义不存在/未启用 → dsService 自带 404/400）
-      const meta = await this.dataSourceService.metadata(dataSourceId)
-      return meta.columns ?? []
-    }
-    const boundForm = await this.formDefRepository.findLatestPublishedByKey(
-      String(formKey),
-      tenantId,
-    )
-    if (boundForm === null) {
-      throw new BusinessException(400, `${missingFormMessage}${String(formKey)}`)
-    }
-    if (boundForm.type !== 'BUSINESS') {
-      throw new BusinessException(400, `绑定表单 ${String(formKey)} 不是业务表单`)
-    }
-    return parseColumnConfig(boundForm.column_config)
+    await this.validateForPublishPage(page)
   }
 
   /**
@@ -296,9 +176,8 @@ function parseSchema(schema: string | null): Record<string, unknown> {
  *    非法列名 / 保留列 / 未知列类型也会抛 `BusinessException`，而 Java 的
  *    `objectMapper.readValue(..., ColumnConfig.class)` 只关心**反序列化**，这类
  *    语义问题它根本不看（要么留给下游，要么永远不报）。这里把两者统一映射成
- *    Java 那条消息，代价是「非法列名」这类情形在 VIEW 发布时会变成
+ *    Java 那条消息，代价是「非法列名」这类情形在发布时会变成
  *    「绑定表单列映射配置非法」而不是照常通过。
- *    该分支（VIEW + 只有 formKey 的遗留页）当前没有 golden 覆盖、且被 U32 挡在后面，
  *    属规格 §9 的开放项 —— **不要在没有 golden 的情况下擅自选择其中一种语义**。
  */
 function parseColumnConfig(columnConfig: string | null): ColumnConfig[] {
@@ -323,11 +202,6 @@ function textAt(node: unknown, field: string): string {
   const value = pathOf(node, field)
   if (value === null || value === undefined) return ''
   return String(value)
-}
-
-/** 对齐 Jackson 的 `path(x).asBoolean(default)`：仅真正布尔为 true。 */
-function boolAt(node: unknown, field: string): boolean {
-  return pathOf(node, field) === true
 }
 
 /** 非对象 → 空对象（后续 `pathOf` 会返回 undefined，与 Jackson 语义一致）。 */

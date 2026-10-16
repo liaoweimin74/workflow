@@ -8172,3 +8172,20 @@ Work Log:
 
 Stage Summary:
 - 重供给 #29 单轮内恢复（~2 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 13
+
+---
+Task ID: r77
+Agent: main
+Task: 2026-10-16 22:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #30）
+- 冷启动自动 recover 正跑 mvn 必败路径（classworlds RSS 364MB 在场）→ 接管：pkill recover/maven/占位
+- checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，22s done，零 mvn 第 14 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261016-1407 推送成功
+
+Stage Summary:
+- 重供给 #30 单轮内恢复（~2 分钟）；内存 3.51GB，oom_kill=0；零 mvn 计数 14
+- mvn 空耗接管第 5 次（累计 r60/r63/r65/r72/r77）

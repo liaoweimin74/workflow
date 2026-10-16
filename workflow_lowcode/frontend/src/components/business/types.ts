@@ -183,6 +183,8 @@ export interface FormConfig<T = any> {
   dialogWidth?: string
   /** 表单弹窗内容区高度（如 600px），配置后固定高度、超出滚动 */
   dialogHeight?: string
+  /** 表单打开方式：popup 弹窗（默认，兼容既有）/ inline 页内嵌入覆盖层（业务表单数据管理默认） */
+  formMode?: 'popup' | 'inline'
   dialogTitle?: { create?: string; edit?: string }
   createPermission?: string
   editPermission?: string

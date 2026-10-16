@@ -327,6 +327,8 @@ const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
   actions: schemaActions.value,
   dataSources: schemaDataSources.value,
   dialogWidth: '640px',
+  // 业务表单数据管理：默认以嵌入方式（页内覆盖层）打开表单，关闭后恢复列表
+  formMode: 'inline',
   dialogTitle: { create: '新增数据', edit: '编辑数据' },
   createPermission: 'form:edit',
   editPermission: 'form:edit',

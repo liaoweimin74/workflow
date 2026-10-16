@@ -22,8 +22,8 @@ export default defineComponent({
 ._fd-table-form {
     min-height: 130px;
     width: 100%;
-    border: 1px solid #ECECEC;
-    background: #fff;
+    border: 1px solid var(--el-border-color-lighter);
+    background: var(--el-bg-color);
 }
 
 ._fc-child-empty {

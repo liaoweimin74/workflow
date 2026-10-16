@@ -71,14 +71,14 @@ export default defineComponent({
 
 ._fd-tf-title {
     height: 40px;
-    border-bottom: 1px solid #ebeef5;
+    border-bottom: 1px solid var(--el-border-color-lighter);
     margin-bottom: 0px;
     padding: 0 5px;
     box-sizing: border-box;
 }
 
 ._fd-tf-required {
-    color: #f56c6c;
+    color: var(--el-color-danger);
     margin-right: 4px;
 }
 

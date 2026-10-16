@@ -11,7 +11,7 @@ import java.util.Map;
 public record BizDataContext(String tableName, String formKey, List<ColumnConfig> columns,
                              List<String> columnKeys, Map<String, SubTableDef> subTables) {
 
-    /** 子表定义（独立物理表 wf_biz_&lt;formKey&gt;_&lt;field&gt;） */
+    /** 子表定义（独立物理表 wf_biz_&lt;formKey&gt;_&lt;field&gt;；formKey 供子行 dataPicker 冗余文本反查绑定用） */
     public record SubTableDef(String tableName, String subMode,
-                              List<ColumnConfig> subColumns, List<String> subKeys) {}
+                              List<ColumnConfig> subColumns, List<String> subKeys, String formKey) {}
 }

@@ -36,6 +36,9 @@ export const BUSINESS_FORM_ALLOWED_TYPES: ReadonlySet<string> = new Set([
   'page-list-cards',
   'page-table',
   'LookupPicker',
+  'RelationCard',
+  // ===== 计算公式（Task 144）：结果恒为数值，列映射 DECIMAL(18, precision) =====
+  'FormulaField',
   // ===== 子表（发布流程建独立物理表） =====
   'group',
   'tableForm',

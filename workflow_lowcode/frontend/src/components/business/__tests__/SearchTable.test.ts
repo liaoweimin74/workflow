@@ -843,3 +843,69 @@ describe('onFormOpen 回调（表单打开前延迟加载）', () => {
     wrapper.unmount()
   })
 })
+
+// ============================================================
+// formMode=inline：嵌入式表单（业务表单数据管理默认打开方式）
+// ============================================================
+describe('SearchTable — formMode=inline 嵌入式表单', () => {
+  it('formMode=inline 时新增打开页内覆盖层而非弹窗', async () => {
+    const wrapper = createWrapper({
+      formConfig: { rule: testRule, formMode: 'inline', dialogTitle: { create: '新增数据' }, createApi: vi.fn().mockResolvedValue({}) },
+    })
+    await nextTick(); await nextTick()
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新增'))
+    expect(createBtn).toBeTruthy()
+    await createBtn!.trigger('click')
+    await nextTick(); await nextTick()
+    expect(wrapper.find('.st-inline-overlay').exists()).toBe(true)
+    expect(wrapper.find('.st-inline-overlay .form-renderer-stub').exists()).toBe(true)
+    expect(wrapper.find('.el-dialog').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('inline 覆盖层标题取 dialogTitle.create，确认后提交并关闭', async () => {
+    const createApi = vi.fn().mockResolvedValue({})
+    const wrapper = createWrapper({
+      formConfig: { rule: testRule, formMode: 'inline', dialogTitle: { create: '新增数据' }, createApi },
+    })
+    await nextTick(); await nextTick()
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新增'))
+    await createBtn!.trigger('click')
+    await nextTick(); await nextTick()
+    expect(wrapper.find('.st-inline-title').text()).toBe('新增数据')
+    const okBtn = wrapper.find('.st-inline-footer .el-button--primary')
+    await okBtn.trigger('click')
+    await flushPromises()
+    expect(createApi).toHaveBeenCalled()
+    expect(wrapper.find('.st-inline-overlay').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('inline 覆盖层取消关闭且不调用 createApi', async () => {
+    const createApi = vi.fn().mockResolvedValue({})
+    const wrapper = createWrapper({
+      formConfig: { rule: testRule, formMode: 'inline', dialogTitle: { create: '新增数据' }, createApi },
+    })
+    await nextTick(); await nextTick()
+    await wrapper.findAll('button').find((b) => b.text().includes('新增'))!.trigger('click')
+    await nextTick(); await nextTick()
+    const cancelBtn = wrapper.findAll('.st-inline-footer .el-button').find((b) => b.text().includes('取消'))
+    await cancelBtn!.trigger('click')
+    await nextTick()
+    expect(wrapper.find('.st-inline-overlay').exists()).toBe(false)
+    expect(createApi).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('默认 formMode=popup 保持既有弹窗行为', async () => {
+    const wrapper = createWrapper({
+      formConfig: { rule: testRule, dialogTitle: { create: '新增数据' }, createApi: vi.fn().mockResolvedValue({}) },
+    })
+    await nextTick(); await nextTick()
+    await wrapper.findAll('button').find((b) => b.text().includes('新增'))!.trigger('click')
+    await nextTick(); await nextTick()
+    expect(wrapper.find('.el-dialog').exists()).toBe(true)
+    expect(wrapper.find('.st-inline-overlay').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

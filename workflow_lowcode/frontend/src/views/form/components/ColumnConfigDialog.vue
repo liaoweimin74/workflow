@@ -179,6 +179,8 @@ export interface ColumnConfigItem {
   existingType?: string
   /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供业务数据列表定制渲染） */
   componentType?: string
+  /** 组件配置（form-create rule 的 props JSON，已剔除 rule/columns 子规则；供按字段生成组件还原配置） */
+  componentProps?: string
   /** 子表列映射（非空表示该 key 为子表字段，映射独立物理表 wf_biz_<formKey>_<key>） */
   subColumns?: ColumnConfigItem[]
   /** 子表传输方式：embedded（默认，内嵌 JSON 随主表往返）/ dedicated（独立子表 CRUD 接口） */
@@ -365,6 +367,17 @@ function isLayoutContainer(rule: any): boolean {
   return !rule?.field && Array.isArray(rule?.children)
 }
 
+/** 提取组件配置（rule.props 的 JSON 文本，剔除 rule/columns 子规则树；空对象返回 undefined，与后端 extractComponentProps 对齐） */
+function extractPropsJson(rule: any): string | undefined {
+  const p = rule?.props
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return undefined
+  const copy = { ...p }
+  delete copy.rule
+  delete copy.columns
+  if (Object.keys(copy).length === 0) return undefined
+  return JSON.stringify(copy)
+}
+
 /**
  * 提取子表组件的直接子规则：
  * - 布局容器（group 的 props.rule 或 tableForm 的 props.columns[].rule 内嵌 fcRow/col）：字段在 children
@@ -416,9 +429,11 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
         columnType: 'TEXT',
         length: null,
         scale: null,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
+        componentType: 'dataPicker',
+        componentProps: extractPropsJson(rule),
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
           /** dataSourceId 模式（引用数据源，后端 resolvePickerText 按它解析显示文本；与 sourceFormKey 二选一） */
@@ -439,6 +454,7 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
         unique: false,
         indexed: false,
         hidden: true,
+        componentType: 'dataPickerText',
         existingType: existingText?.columnType,
       })
       continue
@@ -452,9 +468,11 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
         columnType: 'VARCHAR',
         length: 255,
         scale: null,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
+        componentType: 'LookupPicker',
+        componentProps: extractPropsJson(rule),
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
           displayField: propsMap.displayField,
@@ -476,15 +494,19 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
       continue
     }
+    // 已发布列回显优先：类型/长度/精度/必填取 existing（否则已发布 TEXT 字段每次打开
+    // 都回退为组件默认 VARCHAR(255)，提交时被后端跨类变更校验拒绝 → 发布失败）
     out.push({
       key: field,
       label,
-      columnType: mapped.columnType,
-      length: mapped.length,
-      scale: mapped.scale,
-      required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+      columnType: existing?.columnType ?? mapped.columnType,
+      length: existing && existing.length !== undefined ? existing.length : mapped.length,
+      scale: existing && existing.scale !== undefined ? existing.scale : mapped.scale,
+      required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
+      componentType: type,
+      componentProps: extractPropsJson(rule),
       existingType: existing?.columnType,
     })
   }
@@ -523,6 +545,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         required: false,
         unique: false,
         indexed: false,
+        componentType: type,
+        componentProps: extractPropsJson(rule),
         subColumns: subItems,
         subMode: existing?.subMode ?? 'embedded',
         // 无子列时视为不可映射，阻止发布
@@ -539,10 +563,12 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         columnType: 'JSON',
         length: null,
         scale: null,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: false,
         indexed: false,
         hidden: true,
+        componentType: 'subForm',
+        componentProps: extractPropsJson(rule),
         existingType: existing?.columnType,
       })
       continue
@@ -559,10 +585,11 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         columnType: 'TEXT',
         length: null,
         scale: null,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
         componentType: 'dataPicker',
+        componentProps: extractPropsJson(rule),
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
           /** dataSourceId 模式（引用数据源，后端 resolvePickerText 按它解析显示文本；与 sourceFormKey 二选一） */
@@ -598,10 +625,11 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         columnType: 'VARCHAR',
         length: 255,
         scale: null,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
         componentType: 'LookupPicker',
+        componentProps: extractPropsJson(rule),
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey || inferSourceFormKey(propsMap),
           displayField: propsMap.displayField,
@@ -632,17 +660,18 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
 
     if (isTextColumnNeeded) {
       // 数组值组件：生成双列
-      // 主列：JSON 存储数组值
+      // 主列：JSON 存储数组值（已发布列回显优先，理由同下方通用路径）
       out.push({
         key: field,
         label,
-        columnType: mapped.columnType,
-        length: mapped.length,
-        scale: mapped.scale,
-        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        columnType: existing?.columnType ?? mapped.columnType,
+        length: existing && existing.length !== undefined ? existing.length : mapped.length,
+        scale: existing && existing.scale !== undefined ? existing.scale : mapped.scale,
+        required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
         componentType: type,
+        componentProps: extractPropsJson(rule),
         // 表单设计器中字段设为隐藏（rule.hidden）时，主列同步标记隐藏
         ...(rule?.hidden ? { hidden: true } : {}),
         existingType: existing?.columnType,
@@ -664,16 +693,19 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       continue
     }
 
+    // 已发布列回显优先：类型/长度/精度/必填取 existing（否则已发布 TEXT 字段每次打开
+    // 都回退为组件默认 VARCHAR(255)，提交时被后端跨类变更校验拒绝 → 发布失败）
     out.push({
       key: field,
       label,
-      columnType: mapped.columnType,
-      length: mapped.length,
-      scale: mapped.scale,
-      required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+      columnType: existing?.columnType ?? mapped.columnType,
+      length: existing && existing.length !== undefined ? existing.length : mapped.length,
+      scale: existing && existing.scale !== undefined ? existing.scale : mapped.scale,
+      required: existing?.required ?? Boolean(rule?.validate?.some?.((v: any) => v.required)),
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
       componentType: type,
+      componentProps: extractPropsJson(rule),
       // 隐藏列：子表单/富文本/签名等组件类型，或表单设计器中设为隐藏（rule.hidden）的字段
       // 不进列表/筛选（仅参与 CRUD 写入），数据源字段元数据同步标记 hidden
       ...(HIDDEN_COMPONENT_TYPES.includes(type) || rule?.hidden ? { hidden: true } : {}),

@@ -123,6 +123,98 @@ class BizDataServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(404));
     }
 
+    /** 主表基础列（name/dept），供子表测试组装列集合 */
+    private List<ColumnConfig> baseColumnsWithSub(ColumnConfig items) {
+        ColumnConfig name = new ColumnConfig();
+        name.setKey("name");
+        name.setColumnType("VARCHAR");
+        name.setLength(255);
+        name.setRequired(true);
+        ColumnConfig dept = new ColumnConfig();
+        dept.setKey("dept");
+        dept.setColumnType("VARCHAR");
+        dept.setLength(64);
+        return List.of(name, dept, items);
+    }
+
+    @Test
+    void create_subRowNonStringValues_serializedToJsonString() {
+        // 子表 items：product（TEXT，dataPicker 数组值组件）+ qty（INT）
+        ColumnConfig product = new ColumnConfig();
+        product.setKey("product");
+        product.setColumnType("TEXT");
+        ColumnConfig qty = new ColumnConfig();
+        qty.setKey("qty");
+        qty.setColumnType("INT");
+        ColumnConfig items = new ColumnConfig();
+        items.setKey("items");
+        items.setSubColumns(List.of(product, qty));
+        lenient().when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(baseColumnsWithSub(items));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "dept", "研发部",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        bizDataService.create("biz_leave", Map.of(
+                "name", "张三", "dept", "研发部",
+                "items", List.of(Map.of("product", List.of("p1"), "qty", 1))));
+
+        // 主表 + 子表各一次 INSERT；子表行参数：rowId, bizId, tenantId, sortNo, version, product, qty
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate, times(2)).update(contains("INSERT INTO"), captor.capture());
+        Object[] subParams = captor.getAllValues().get(1);
+        assertThat(subParams).hasSize(7);
+        // 数组值必须序列化为 JSON 字符串入库（否则 JDBC 绑定 Java 对象触发序列化字节写入 TEXT 列报错）；
+        // 非字符串标量（数字等）与主表 serializeJsonColumns 口径一致 → JSON 文本（DB 按列型收敛）
+        assertThat(subParams[5]).isEqualTo("[\"p1\"]");
+        assertThat(subParams[6]).isEqualTo("1");
+    }
+
+    @Test
+    void updateSubRow_nonStringValues_serializedToJsonString() {
+        ColumnConfig product = new ColumnConfig();
+        product.setKey("product");
+        product.setColumnType("TEXT");
+        ColumnConfig qty = new ColumnConfig();
+        qty.setKey("qty");
+        qty.setColumnType("INT");
+        ColumnConfig items = new ColumnConfig();
+        items.setKey("items");
+        items.setSubColumns(List.of(product, qty));
+        lenient().when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(baseColumnsWithSub(items));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        // addSubRow 依次查询：requireMainRow→主行、readSubRows→现有行（空）、返回值 readSubRows→新行
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "row-1", "tenant_id", TENANT_ID, "name", "张三",
+                                "version", 1,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))),
+                        List.of(),
+                        List.of(Map.of("id", "sub-1", "product", "[\"p2\"]", "qty", "2",
+                                "sort_no", 0, "version", 1)));
+
+        bizDataService.addSubRow("biz_leave", "row-1", "items",
+                Map.of("product", List.of("p2"), "qty", 2));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave_items"), captor.capture());
+        Object[] subParams = captor.getValue();
+        // rowId, bizId, tenantId, sortNo, version, product, qty
+        assertThat(subParams).hasSize(7);
+        assertThat(subParams[5]).isEqualTo("[\"p2\"]");
+        assertThat(subParams[6]).isEqualTo("2");
+    }
+
     @Test
     void getById_notFound_throws404() {
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
@@ -235,6 +327,44 @@ class BizDataServiceTest {
         c.setLength(1024);
         c.setHidden(true);
         return c;
+    }
+
+    @Test
+    void create_dataPickerDataSourceMode_resolvesViaDataSourceLookup() {
+        // 数据源模式（设计器标准产物）：pickerConfig 无 sourceFormKey、有 dataSourceId
+        ColumnConfig c = new ColumnConfig();
+        c.setKey("warehouse");
+        c.setColumnType("TEXT");
+        c.setComponentType("dataPicker");
+        c.setPickerConfig("{\"dataSourceId\":\"ds-1\",\"displayField\":\"name\",\"maxCount\":1,\"pickerType\":\"dataPicker\"}");
+        FormDefinition def = new FormDefinition();
+        def.setSchema("{\"dataSources\":[{\"id\":\"ds-1\",\"refId\":\"global-ds-1\"}]}");
+        lenient().when(formDefService.getByKey("biz_leave")).thenReturn(def);
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(c, hiddenTextColumn("warehouse_text")));
+        // 依次：wf_data_source 反查 form_key → wf_biz_warehouse_profile 解析显示文本 → findById
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(
+                        List.of(Map.of("form_key", "warehouse_profile")),
+                        List.of(Map.of("id", "t1", "name", "光谷中心仓")),
+                        List.of(Map.of(
+                                "id", "row-1",
+                                "tenant_id", TENANT_ID,
+                                "warehouse", "[\"t1\"]",
+                                "warehouse_text", "[\"光谷中心仓\"]",
+                                "version", 1,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("warehouse", "[\"t1\"]"));
+
+        assertThat(vo.getData()).containsEntry("warehouse_text", "[\"光谷中心仓\"]");
+        // 数据源反查 + 目标表解析两条 SQL 都发生
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, atLeastOnce()).queryForList(sql.capture(), any(Object[].class));
+        assertThat(sql.getAllValues()).anyMatch(s -> s.contains("wf_data_source"));
+        assertThat(sql.getAllValues()).anyMatch(s -> s.contains("wf_biz_warehouse_profile"));
     }
 
     @Test
@@ -633,11 +763,151 @@ class BizDataServiceTest {
         ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
         verify(jdbcTemplate, times(2)).update(contains("INSERT INTO wf_biz_biz_leave_items"), captor.capture());
         List<Object[]> all = captor.getAllValues();
-        // params: [rowId, bizId, tenantId, sortNo, name, amount]
-        assertThat(all.get(0)).contains("t1", 0, "差旅", 1200);
-        assertThat(all.get(1)).contains("t1", 1, "办公", 450);
+        // params: [rowId, bizId, tenantId, sortNo, name, amount]；非字符串值经 serializeJsonColumns → JSON 文本
+        assertThat(all.get(0)).contains("t1", 0, "差旅", "1200");
+        assertThat(all.get(1)).contains("t1", 1, "办公", "450");
         // 两行同属一个主行 biz_id
         assertThat(all.get(0)[1]).isEqualTo(all.get(1)[1]);
+    }
+
+    @Test
+    void addSubRow_dataPickerColumn_resolvesRedundantText() {
+        // 子表行内 dataPicker（sourceFormKey 模式）→ 插入时自动解析 <key>_text 冗余文本
+        ColumnConfig product = new ColumnConfig();
+        product.setKey("product");
+        product.setColumnType("TEXT");
+        product.setPickerConfig("{\"sourceFormKey\":\"product_catalog\",\"displayField\":\"product_name\",\"pickerType\":\"dataPicker\"}");
+        ColumnConfig productText = hiddenTextColumn("product_text");
+        ColumnConfig qty = simpleColumn("qty", "INT", null);
+        ColumnConfig items = subtableColumn("items", List.of(product, productText, qty), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name2(), items));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        // addSubRow 依次：requireMainRow(主行) → toVO 附加子行(空) → 现有子行(空) → 文本解析 → 返回读取(空)
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "row-1", "tenant_id", TENANT_ID, "name", "张三",
+                                "version", 1,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))),
+                        List.of(),
+                        List.of(),
+                        List.of(Map.of("id", "p1", "product_name", "工业传感器")),
+                        List.of());
+
+        bizDataService.addSubRow("biz_leave", "row-1", "items",
+                Map.of("product", "[\"p1\"]", "qty", 3));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave_items"), captor.capture());
+        // rowId, bizId, tenantId, sortNo, version, product, product_text, qty
+        assertThat(captor.getValue()).contains("[\"工业传感器\"]");
+    }
+
+    private ColumnConfig name2() {
+        ColumnConfig n = new ColumnConfig();
+        n.setKey("name");
+        n.setColumnType("VARCHAR");
+        n.setLength(255);
+        return n;
+    }
+
+    @Test
+    void create_subRowDateColumn_normalizesIsoValue() {
+        // 子表行 DATE 列收到前端 DatePicker 的 ISO 带时区字符串（东八区 2026-10-20 00:00）
+        // → 与主表 normalizeDateTimeColumns 同口径归一为 'yyyy-MM-dd'，否则 MariaDB 严格模式
+        //   报 Incorrect date value（销售订单交付计划 plan_date 现场缺陷）
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig planDate = simpleColumn("plan_date", "DATE", null);
+        ColumnConfig plan = subtableColumn("delivery_plan", List.of(planDate), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, plan));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        // create 流程仅 findById 一次查询（子表插入无查询）
+        Map<String, Object> mainRow = Map.of(
+                "id", "row-1",
+                "tenant_id", TENANT_ID,
+                "name", "张三",
+                "version", 1,
+                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(mainRow));
+
+        bizDataService.create("biz_leave", Map.of(
+                "name", "张三",
+                "delivery_plan", List.of(Map.of("plan_date", "2026-10-19T16:00:00.000Z"))));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate, times(2)).update(contains("INSERT INTO"), captor.capture());
+        Object[] subParams = captor.getAllValues().get(1);
+        // rowId, bizId, tenantId, sortNo, version, plan_date
+        assertThat(subParams).hasSize(6);
+        assertThat(subParams[5]).isEqualTo("2026-10-20");
+    }
+
+    @Test
+    void create_dateColumns_returnPlainDateStrings() {
+        // 读侧：DATE 列（主表/子表行）以 java.sql.Date 返回，Jackson 默认序列化为 UTC ISO
+        // （'2026-10-19T16:00:00.000Z'），前端 valueFormat='YYYY-MM-DD' 回显错乱（子表行直接串值）。
+        // 正确行为：DATE 列读回应为 'yyyy-MM-dd' 纯日期字符串。
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig workDate = simpleColumn("work_date", "DATE", null);
+        ColumnConfig planDate = simpleColumn("plan_date", "DATE", null);
+        ColumnConfig plan = subtableColumn("delivery_plan", List.of(planDate), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, workDate, plan));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        Map<String, Object> mainRow = new LinkedHashMap<>();
+        mainRow.put("id", "row-1");
+        mainRow.put("tenant_id", TENANT_ID);
+        mainRow.put("name", "张三");
+        mainRow.put("work_date", java.sql.Date.valueOf("2026-10-20"));
+        mainRow.put("version", 1);
+        mainRow.put("created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)));
+        mainRow.put("updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)));
+        Map<String, Object> subRow = new LinkedHashMap<>();
+        subRow.put("plan_date", java.sql.Date.valueOf("2026-10-20"));
+        subRow.put("sort_no", 0);
+        // 按 SQL 目标表分发：主表行 → 主表查询；子表 → 子行
+        when(jdbcTemplate.queryForList(contains("wf_biz_biz_leave_delivery_plan"), any(Object[].class)))
+                .thenReturn(new ArrayList<>(List.of(subRow)));
+        when(jdbcTemplate.queryForList(argThat((String s) -> s != null && !s.contains("delivery_plan")), any(Object[].class)))
+                .thenReturn(new ArrayList<>(List.of(mainRow)));
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of(
+                "name", "张三",
+                "work_date", "2026-10-20",
+                "delivery_plan", List.of(Map.of("plan_date", "2026-10-20"))));
+
+        assertThat(vo.getData().get("work_date")).isEqualTo("2026-10-20");
+        assertThat(vo.getData().get("work_date").toString()).doesNotContain("T");
+        Object plan0 = ((List<?>) vo.getData().get("delivery_plan")).get(0);
+        assertThat(((Map<?, ?>) plan0).get("plan_date")).isEqualTo("2026-10-20");
+    }
+
+    @Test
+    void create_subRowJsonColumn_deserializedOnRead() {
+        // 子表 delivery_plan：stage（JSON 列，select 值以 JSON 文本存储）→ 读回应还原为裸值
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig stage = simpleColumn("stage", "JSON", null);
+        ColumnConfig plan = subtableColumn("delivery_plan", List.of(stage), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, plan));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        // readSubRows 会就地反序列化 JSON 列 → 用可变容器模拟 JdbcTemplate 结果
+        Map<String, Object> subRow = new LinkedHashMap<>();
+        subRow.put("stage", "\"PRODUCE\"");
+        subRow.put("sort_no", 0);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(mainRow()),
+                        new ArrayList<>(List.of(subRow)));
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of(
+                "name", "报销单",
+                "delivery_plan", List.of(Map.of("stage", "PRODUCE"))));
+
+        assertThat(vo.getData()).containsKey("delivery_plan");
+        Object plan0 = ((List<?>) vo.getData().get("delivery_plan")).get(0);
+        assertThat(((Map<?, ?>) plan0).get("stage")).isEqualTo("PRODUCE");
     }
 
     @Test

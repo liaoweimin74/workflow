@@ -5,6 +5,7 @@ import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasou
 import { withArrayLabels } from '@/views/form/arrayValueLabel'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { FormConfig, DataSourceBindingContext } from '@/components/business/types'
+import { walkRules, type RuleLike } from '@/views/form/formRuleWalk'
 
 /**
  * 数据源 CRUD 共享逻辑：元数据（列定义/writable/formKey）加载 + CRUD 弹窗表单配置组装。
@@ -37,6 +38,128 @@ function inputTypeOf(columnType?: string): string {
   return 'input'
 }
 
+/** 数据源列定义（元数据/字段清单）的通用结构，递归支持子表列 */
+export interface DataSourceColumnLike {
+  key: string
+  label?: string
+  columnType?: string
+  componentType?: string
+  componentProps?: string | null
+  required?: boolean
+  scale?: number
+  hidden?: boolean
+  /** 子表字段清单（tableForm/group 子表列；subForm 除外） */
+  subColumns?: DataSourceColumnLike[]
+  /** 子表传输方式：embedded（内嵌随主表）/ dedicated（独立子表 CRUD 接口） */
+  subMode?: string
+}
+
+/**
+ * 按数据源列定义生成一条 form-create 字段 rule（field=列英文 key）。
+ * 组件类型优先取列元数据的 componentType（即源表单的 rule.type，如数据引用 dataPicker、
+ * 查找带回 lookupPicker、自动编号 AutoNumber），缺失时按 columnType 推断；
+ * 组件配置优先取 componentProps（源表单 rule.props 的 JSON，后端已剔除 rule/columns 子规则），
+ * 覆盖默认推断的 props；「xxxText」冗余展示列（数据引用/查找带回的文本回显列）无录入组件，回退 input。
+ * 子表列（tableForm/group，columnType 为空 + subColumns 非空）自动填充子列：
+ * tableForm → props.columns[].rule，group/subForm → props.rule；hidden 冗余列（xxxText）不进子表 UI。
+ */
+export function buildFieldRule(col: DataSourceColumnLike): Record<string, any> {
+  let type = inputTypeOf(col.columnType)
+  const ct = (col.componentType || '').trim()
+  if (ct) {
+    type = ct.endsWith('Text') ? 'input' : ct
+  }
+  const props: Record<string, any> = {}
+  if (type === 'inputNumber' && col.columnType === 'DECIMAL') props.precision = col.scale || 2
+  if (col.componentProps) {
+    try {
+      const saved = JSON.parse(col.componentProps)
+      if (saved && typeof saved === 'object') {
+        delete saved.rule
+        delete saved.columns
+        Object.assign(props, saved)
+      }
+    } catch { /* componentProps 非法 JSON 时忽略，保留推断 props */ }
+  }
+  // 子表容器：按元数据 subColumns 自动生成子列配置（hidden 冗余列跳过）
+  const subs = (col.subColumns || []).filter((s) => !s.hidden)
+  if (subs.length && (col.componentType === 'group' || col.componentType === 'subForm')) {
+    props.rule = subs.map((s) => buildFieldRule(s))
+  } else if (subs.length && col.componentType === 'tableForm') {
+    props.columns = subs.map((s) => ({
+      label: s.label || s.key,
+      required: Boolean(s.required),
+      hidden: false,
+      style: {},
+      rule: [buildFieldRule(s)],
+    }))
+  }
+  return {
+    type,
+    field: col.key,
+    title: col.label || col.key,
+    props,
+    validate: col.required ? [{ required: true, message: `${col.label || col.key}不能为空` }] : [],
+  }
+}
+
+/** 收集 rule 子树内全部字段 key（含 children / props.rule / 子表列内，见 walkRules） */
+function collectSubtreeFieldKeys(rules: unknown): Set<string> {
+  const keys = new Set<string>()
+  walkRules(rules as RuleLike[] | undefined, (rule) => {
+    if (rule.field) keys.add(rule.field)
+  })
+  return keys
+}
+
+/** 在解析后的 rule 树中按 _fc_id 查找规则节点（穿透 children 与 props.rule） */
+function findRuleByFcid(rules: unknown[], fcid: string): Record<string, any> | null {
+  for (const rule of rules as Record<string, any>[]) {
+    if (!rule || typeof rule !== 'object') continue
+    if (rule._fc_id === fcid) return rule
+    const nested: unknown[] = [
+      ...(Array.isArray(rule.children) ? rule.children : []),
+      ...(Array.isArray(rule.props?.rule) ? rule.props.rule : []),
+    ]
+    const found = findRuleByFcid(nested, fcid)
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * 数据容器「按字段生成组件」：在 getRule() 解析树中把勾选列生成的 rule 追加进目标容器的
+ * 子规则列表（解析态 formContainer 的 props.rule），再 setRule() 重建画布 —— 重建会让
+ * 全部规则经 vendor loadRule/makeRule 重新包装（DragTool/_fc_id/_menu），保证生成组件
+ * 与拖拽产物一样可选中、可配置。同名字段（容器子树内任意位置）已存在则跳过。
+ *
+ * @param designer     FcDesigner 组件实例（需暴露 getRule/setRule）
+ * @param containerFcid 画布当前选中数据容器的 _fc_id
+ */
+export function appendGeneratedRules(
+  designer: { getRule?: () => unknown[]; setRule?: (rules: unknown[]) => void } | null | undefined,
+  containerFcid: string | undefined,
+  columns: Array<{ key: string; label?: string; columnType?: string; componentType?: string; required?: boolean; scale?: number }>,
+): { added: number; skipped: number } {
+  if (!designer || typeof designer.getRule !== 'function' || typeof designer.setRule !== 'function') return { added: 0, skipped: 0 }
+  if (columns.length === 0 || !containerFcid) return { added: 0, skipped: 0 }
+  const rules = (designer.getRule() || []) as Record<string, any>[]
+  const container = findRuleByFcid(rules, containerFcid)
+  if (!container) return { added: 0, skipped: 0 }
+  // 解析态：formContainer 子规则存于 props.rule；其他容器（FcRow 等兜底形态）存于 children
+  const children = Array.isArray(container.props?.rule)
+    ? container.props.rule
+    : Array.isArray(container.children) ? container.children : (container.props = { ...(container.props || {}), rule: [] }).rule
+  const existing = collectSubtreeFieldKeys(children)
+  const gen = columns.map(buildFieldRule).filter((r) => !existing.has(r.field))
+  const skipped = columns.length - gen.length
+  if (gen.length > 0) {
+    children.push(...gen)
+    designer.setRule(rules)
+  }
+  return { added: gen.length, skipped }
+}
+
 export function useDataSourceCrud(refId: Ref<string> | string, options: UseDataSourceCrudOptions = {}) {
   // 统一为响应式 id：字符串传入时包装为静态 computed（refId 变化时 formConfig 的 Api 目标随之更新）
   const idRef = computed(() => (typeof refId === 'string' ? refId : refId.value))
@@ -51,13 +174,7 @@ export function useDataSourceCrud(refId: Ref<string> | string, options: UseDataS
   const formDataSources = ref<DataSourceBindingContext[]>([])
 
   function buildFormRule() {
-    return metaColumns.value.map((c) => ({
-      type: inputTypeOf(c.columnType),
-      field: c.key,
-      title: c.label,
-      props: c.columnType === 'DECIMAL' ? { precision: c.scale || 2 } : {},
-      validate: c.required ? [{ required: true, message: `${c.label}不能为空` }] : [],
-    }))
+    return metaColumns.value.map(buildFieldRule)
   }
 
   async function loadFormSchema() {

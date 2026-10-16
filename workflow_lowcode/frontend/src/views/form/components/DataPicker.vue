@@ -279,6 +279,17 @@ watch(() => props.sourceFormKey, (formKey) => {
   if (!props.dataSourceId) effectiveFormKey.value = formKey || ''
 })
 
+/** 数据源绑定异步解析完成后补一次回显解析：
+ * group/tableForm 行内 dataPicker 的 <field>_text 在行数据内、无法经 injectPickerDisplayTexts
+ * 顶层注入，回显依赖内部 resolveDisplay；而其首次执行常早于 effectiveFormKey（getDataSource
+ * 异步）解析完成而提前 return，此前不会重试 → 子表引用字段保存后重开显示 id。
+ * displayText 已注入（顶层字段回显路径）或文本已解析成功时跳过，避免重复请求。 */
+watch(effectiveFormKey, (fk) => {
+  if (fk && props.modelValue && !props.displayText && !resolvedDisplayText.value) {
+    void resolveDisplay(props.modelValue)
+  }
+})
+
 const dialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const viewDialogVisible = ref(false)

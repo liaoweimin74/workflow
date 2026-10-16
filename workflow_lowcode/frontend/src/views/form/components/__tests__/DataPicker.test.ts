@@ -53,8 +53,19 @@ vi.mock('@/api/form', () => ({
   },
 }))
 
+const { getDataSourceMock } = vi.hoisted(() => ({ getDataSourceMock: vi.fn() }))
+
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getDataSource: getDataSourceMock,
+    getMetadata: vi.fn().mockResolvedValue({ data: { columns: [] } }),
+    queryData: vi.fn().mockResolvedValue({ data: { records: [], total: 0 } }),
+  },
+}))
+
 import { bizDataApi } from '@/api/bizData'
 import { formApi } from '@/api/form'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 /** DataPickerCreateDialog 桩：验证"新增"入口交互 */
 const CreateDialogStub = defineComponent({
@@ -796,6 +807,13 @@ describe('DataPicker — 查看已选列表', () => {
 })
 
 describe('DataPicker — 级联与回显', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    getDataSourceMock.mockReset()
+    vi.mocked(bizDataApi.resolve).mockClear()
+    activeDsBindings.value = []
+  })
+
   it('dependOnValue 存在时列表查询带 filter', async () => {
     const wrapper = createWrapper({
       dependOn: { field: 'dept_field', sourceColumn: 'dept' },
@@ -821,6 +839,48 @@ describe('DataPicker — 级联与回显', () => {
     await flushPromises()
     expect(bizDataApi.resolve).toHaveBeenCalledWith('emp_profile', ['t1'], 'name')
     expect(tagTexts(wrapper)).toEqual(['张三'])
+    wrapper.unmount()
+  })
+
+  it('dataSourceId 模式：effectiveFormKey 异步就绪后补解析回显（子表行内显示 id 缺陷）', async () => {
+    // 背景：group/tableForm 行内 dataPicker 的 <field>_text 在行数据内、无法经
+    // injectPickerDisplayTexts 顶层注入 → 回显依赖内部 resolveDisplay；
+    // 而其首次执行早于 effectiveFormKey（getDataSource 异步）解析完成 → 提前 return，
+    // 且此前不会重试 → 子表引用字段保存后重开显示 id。
+    let resolveDs!: (v: any) => void
+    getDataSourceMock.mockImplementation(() => new Promise((r) => { resolveDs = r }))
+    activeDsBindings.value = [{ id: 'ds1', refId: 'REF_PRODUCT' } as any]
+    const wrapper = createWrapper({
+      modelValue: '["t1"]',
+      dataSourceId: 'ds1',
+      sourceFormKey: '',
+      displayField: 'name',
+    })
+    await flushPromises()
+    // getDataSource 已发起但未返回 → effectiveFormKey 未就绪 → resolve 不应被误调
+    expect(getDataSourceMock).toHaveBeenCalledWith('REF_PRODUCT')
+    expect(bizDataApi.resolve).not.toHaveBeenCalled()
+    // 绑定解析完成 → 补一次 resolve 回显（修复点：此前不会重试）
+    resolveDs({ data: { formKey: 'product_catalog' } })
+    await flushPromises()
+    expect(bizDataApi.resolve).toHaveBeenCalledWith('product_catalog', ['t1'], 'name')
+    expect(tagTexts(wrapper)).toEqual(['张三'])
+    wrapper.unmount()
+  })
+
+  it('displayText 已注入时不重复 resolve（顶层字段回显路径不受影响）', async () => {
+    getDataSourceMock.mockResolvedValue({ data: { formKey: 'product_catalog' } })
+    activeDsBindings.value = [{ id: 'ds1', refId: 'REF_PRODUCT' } as any]
+    const wrapper = createWrapper({
+      modelValue: '["t1"]',
+      dataSourceId: 'ds1',
+      sourceFormKey: '',
+      displayField: 'name',
+      displayText: '["工业传感器"]',
+    })
+    await flushPromises()
+    expect(bizDataApi.resolve).not.toHaveBeenCalled()
+    expect(tagTexts(wrapper)).toEqual(['工业传感器'])
     wrapper.unmount()
   })
 })

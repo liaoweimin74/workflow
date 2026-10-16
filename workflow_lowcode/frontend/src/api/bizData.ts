@@ -17,6 +17,8 @@ export interface ColumnConfigItem {
   pickerConfig?: string | null
   /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供列表定制渲染） */
   componentType?: string | null
+  /** 组件配置（form-create rule 的 props JSON，已剔除 rule/columns 子规则；供按字段生成组件还原配置） */
+  componentProps?: string | null
   /** 是否可排序（数据源 metadata 声明；缺省 undefined=未推导，前端按列类型兜底） */
   sortable?: boolean
   /** 是否可筛选（数据源 metadata 声明；缺省 undefined=未推导） */

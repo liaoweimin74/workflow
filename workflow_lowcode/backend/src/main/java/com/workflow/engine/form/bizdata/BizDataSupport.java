@@ -1,6 +1,7 @@
 package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.AggregateRequest;
 import com.workflow.api.dto.AggregateResultVO;
@@ -95,7 +96,7 @@ public class BizDataSupport {
                 String mode = c.getSubMode() == null || c.getSubMode().isBlank() ? "embedded" : c.getSubMode();
                 List<String> subKeys = c.getSubColumns().stream().map(ColumnConfig::getKey).toList();
                 subTables.put(c.getKey(), new BizDataContext.SubTableDef(
-                        "wf_biz_" + formKey + "_" + c.getKey(), mode, c.getSubColumns(), subKeys));
+                        "wf_biz_" + formKey + "_" + c.getKey(), mode, c.getSubColumns(), subKeys, formKey));
             }
         }
         return new BizDataContext(tableName, formKey, columns, keys, subTables);
@@ -158,7 +159,7 @@ public class BizDataSupport {
             }
             String key = col.getKey();
             Object raw = data.get(key);
-            String text = resolvePickerText(ctx, col, raw);
+            String text = resolvePickerText(ctx.formKey(), col, raw);
             extra.put(key + "_text", text);
         }
         return extra;
@@ -699,6 +700,10 @@ public class BizDataSupport {
         if (safe.isEmpty()) {
             throw new BusinessException(400, "更新内容不能为空: " + field);
         }
+        // 与 insertOneSubRow 同口径：数组/对象值组件（dataPicker/select 多选）序列化为 JSON 字符串
+        safe = serializeJsonColumns(safe, def.subColumns());
+        normalizeDateTimeColumns(safe, def.subColumns());
+        resolveSubRowPickerTexts(def, safe);
 
         StringBuilder set = new StringBuilder();
         List<Object> params = new ArrayList<>();
@@ -782,13 +787,22 @@ public class BizDataSupport {
         }
     }
 
+    /** 解析 dataPicker 引用列显示文本；formKey 为当前表单 key（数据源模式下反查绑定用，可为 null） */
     @SuppressWarnings("unchecked")
-    private String resolvePickerText(BizDataContext ctx, ColumnConfig col, Object raw) {
+    private String resolvePickerText(String formKey, ColumnConfig col, Object raw) {
         try {
             Map<String, Object> picker = objectMapper.readValue(col.getPickerConfig(), Map.class);
             String sourceFormKey = picker.get("sourceFormKey") == null ? null : String.valueOf(picker.get("sourceFormKey"));
             String displayField = picker.get("displayField") == null ? null : String.valueOf(picker.get("displayField"));
             Object maxCountObj = picker.get("maxCount");
+            // 数据源模式（设计器 ColumnConfigDialog 标准产物）：sourceFormKey 为空时按
+            // dataSourceId（表单内绑定 id 或全局数据源 id）反查 formKey
+            if (sourceFormKey == null || sourceFormKey.isBlank()) {
+                String dataSourceId = picker.get("dataSourceId") == null ? null : String.valueOf(picker.get("dataSourceId"));
+                if (dataSourceId != null && !dataSourceId.isBlank()) {
+                    sourceFormKey = resolveFormKeyByDataSourceId(formKey, dataSourceId);
+                }
+            }
 
             if (raw == null || String.valueOf(raw).isBlank()) {
                 return "";
@@ -821,6 +835,7 @@ public class BizDataSupport {
             }
 
             Map<String, String> texts = resolveDisplayTexts(sourceFormKey, ids, displayField);
+            // 供 resolveSubRowPickerTexts 数据源模式反查绑定用（见 resolveSubRowPickerTexts）
             List<String> ordered = new ArrayList<>();
             for (String id : ids) {
                 String t = texts.get(id);
@@ -834,6 +849,76 @@ public class BizDataSupport {
         } catch (JsonProcessingException e) {
             throw new BusinessException(400, "data-picker 配置或引用值非法: " + col.getKey());
         }
+    }
+
+    /**
+     * 子表行 dataPicker 冗余文本解析（与主表 {@code resolvePickerValues} 同口径；
+     * 仅 dataPicker 引用列生成 &lt;key&gt;_text，LookupPicker 值即显示文本不生成）。
+     */
+    private void resolveSubRowPickerTexts(BizDataContext.SubTableDef def, Map<String, Object> row) {
+        for (ColumnConfig col : def.subColumns()) {
+            String pc = col.getPickerConfig();
+            if (pc == null || pc.isBlank() || !isSubRowDataPicker(col)) {
+                continue;
+            }
+            String key = col.getKey();
+            Object raw = row.get(key);
+            if (raw == null || String.valueOf(raw).isBlank()) {
+                continue;
+            }
+            row.put(key + "_text", resolvePickerText(def.formKey(), col, raw));
+        }
+    }
+
+    /** 子列是否为 dataPicker 引用列（子表配置固定带 pickerType，无需主表列上下文） */
+    private boolean isSubRowDataPicker(ColumnConfig col) {
+        try {
+            Map<String, Object> picker = objectMapper.readValue(col.getPickerConfig(), Map.class);
+            return "dataPicker".equals(String.valueOf(picker.get("pickerType")));
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 数据源引用 → 业务表单 key。
+     *
+     * 设计器标准产物的 pickerConfig.dataSourceId 是**表单内绑定 id**（schema.dataSources
+     * 的 binding.id），须经绑定映射解析为全局数据源 refId 后再查 wf_data_source；
+     * 兼容旧配置直接写全局数据源 id 的形态（绑定时查不到 → 退化为按 id 直查）。
+     */
+    private String resolveFormKeyByDataSourceId(String formKey, String dataSourceId) {
+        String lookupId = dataSourceId;
+        try {
+            FormDefinition def = formDefService.getByKey(formKey);
+            if (def != null && def.getSchema() != null) {
+                JsonNode bindings = objectMapper.readTree(def.getSchema()).path("dataSources");
+                if (bindings.isArray()) {
+                    for (JsonNode b : bindings) {
+                        if (dataSourceId.equals(b.path("id").asText())) {
+                            String refId = b.path("refId").asText();
+                            if (!refId.isBlank()) {
+                                lookupId = refId;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (JsonProcessingException ignored) {
+            // schema 非法时退化为按 dataSourceId 直查全局数据源
+        }
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT form_key FROM wf_data_source WHERE id = ? AND tenant_id = ?",
+                lookupId, tenantProvider.getTenantId());
+        if (rows.isEmpty()) {
+            throw new BusinessException(400, "数据源不存在: " + dataSourceId);
+        }
+        Object formKeyOfDs = rows.get(0).get("form_key");
+        if (formKeyOfDs == null || String.valueOf(formKeyOfDs).isBlank()) {
+            throw new BusinessException(400, "数据源未绑定业务表单: " + dataSourceId);
+        }
+        return String.valueOf(formKeyOfDs);
     }
 
     /** 解析单个表单 column_config 中的 dataPicker 引用列，聚合到 result */
@@ -875,7 +960,7 @@ public class BizDataSupport {
         for (ColumnConfig c : ctx.columns()) {
             Object v = row.get(c.getKey());
             if (v != null) {
-                data.put(c.getKey(), "JSON".equals(c.getColumnType()) ? deserializeJsonValue(v) : v);
+                data.put(c.getKey(), "JSON".equals(c.getColumnType()) ? deserializeJsonValue(v) : toDateStringValue(v));
             }
         }
         // embedded 模式：附加子表行（按 sort_no 升序），保留 id 供前端 diff
@@ -1135,7 +1220,10 @@ public class BizDataSupport {
         Set<String> keepIds = new HashSet<>();
         int sortNo = 0;
         for (Object row : rows) {
-            Map<String, Object> m = toRowMap(row, def.tableName());
+            // 与 insertOneSubRow 同口径：先序列化（更新分支直接用序列化值比对与写入；新行走 insertOneSubRow 内部序列化）
+            Map<String, Object> m = serializeJsonColumns(toRowMap(row, def.tableName()), def.subColumns());
+            normalizeDateTimeColumns(m, def.subColumns());
+            resolveSubRowPickerTexts(def, m);
             Object rawId = m.get("id");
             String rowId = rawId == null ? null : String.valueOf(rawId);
             if (rowId != null && existingById.containsKey(rowId)) {
@@ -1189,15 +1277,68 @@ public class BizDataSupport {
 
     /**
      * 查询子表行（按 sort_no 升序，租户范围限定）。
+     *
+     * JSON 列值随读反序列化（与主表 {@code toVO} 的 {@code deserializeJsonValue} 同口径）：
+     * 子表行内的 select 等数组值组件值以 JSON 文本存储（如 "\"PRODUCE\""），回显需还原。
      */
     private List<Map<String, Object>> readSubRows(BizDataContext.SubTableDef def, String bizId) {
-        return jdbcTemplate.queryForList("SELECT * FROM " + def.tableName()
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT * FROM " + def.tableName()
                         + " WHERE tenant_id = ? AND biz_id = ? ORDER BY sort_no",
                 tenantProvider.getTenantId(), bizId);
+        Set<String> jsonKeys = def.subColumns().stream()
+                .filter(c -> c.getColumnType() != null && "JSON".equalsIgnoreCase(c.getColumnType()))
+                .map(ColumnConfig::getKey)
+                .collect(Collectors.toSet());
+        Set<String> dateKeys = def.subColumns().stream()
+                .filter(c -> {
+                    String t = c.getColumnType() == null ? "" : c.getColumnType().toUpperCase();
+                    return "DATE".equals(t) || "DATETIME".equals(t) || "TIMESTAMP".equals(t);
+                })
+                .map(ColumnConfig::getKey)
+                .collect(Collectors.toSet());
+        if (jsonKeys.isEmpty() && dateKeys.isEmpty()) {
+            return rows;
+        }
+        for (Map<String, Object> row : rows) {
+            for (String k : jsonKeys) {
+                Object v = row.get(k);
+                if (v != null) {
+                    row.put(k, deserializeJsonValue(v));
+                }
+            }
+            // DATE/DATETIME 列：java.sql.Date/Timestamp → 'yyyy-MM-dd'/'yyyy-MM-dd HH:mm:ss'
+            // （Jackson 默认把日期对象序列化为 UTC ISO 串，前端 valueFormat='YYYY-MM-DD' 回显错乱）
+            for (String k : dateKeys) {
+                Object v = row.get(k);
+                if (v != null) {
+                    row.put(k, toDateStringValue(v));
+                }
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * 日期 JDBC 对象 → 前端契约字符串（会话时区语义，与写入侧 normalizeDateTimeColumns 反向对齐）：
+     * java.sql.Date → 'yyyy-MM-dd'；java.sql.Timestamp → 'yyyy-MM-dd HH:mm:ss'；其余原样。
+     */
+    private Object toDateStringValue(Object v) {
+        if (v instanceof java.sql.Date d) {
+            return d.toLocalDate().toString();
+        }
+        if (v instanceof java.sql.Timestamp t) {
+            return t.toLocalDateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        }
+        return v;
     }
 
     /**
      * 插入单行子表数据（id/biz_id/tenant_id/sort_no/version + 子业务列）。
+     *
+     * ⚠️ 子列值在绑定前必须走 {@link #serializeJsonColumns}：子表行内含数组/对象值组件
+     *    （dataPicker 值=id 数组、select 多选等）时，裸 List/Map 直接 setObject 会触发
+     *    Java 序列化字节写入 TEXT/JSON 列（报 Incorrect string value '\xAC\xED...'）。
+     *    主表路径在 createGeneric/updateGeneric 已序列化，子表路径此前遗漏。
      */
     private Map<String, Object> insertOneSubRow(BizDataContext.SubTableDef def, String bizId,
                                                 Map<String, Object> m, int sortNo) {
@@ -1209,12 +1350,17 @@ public class BizDataSupport {
         params.add(sortNo);
         params.add(1); // version
 
+        Map<String, Object> row = serializeJsonColumns(m, def.subColumns());
+        // 与主表同口径：DATE/DATETIME 列的 ISO 带时区值按业务时区归一（serializeJsonColumns
+        // 先把 Date 对象写成 ISO 字符串，此处再收敛为 'yyyy-MM-dd'/'yyyy-MM-dd HH:mm:ss'）
+        normalizeDateTimeColumns(row, def.subColumns());
+        resolveSubRowPickerTexts(def, row);
         StringBuilder cols = new StringBuilder("id, biz_id, tenant_id, sort_no, version");
         StringBuilder vals = new StringBuilder("?, ?, ?, ?, ?");
         for (String k : def.subKeys()) {
             cols.append(", ").append(k);
             vals.append(", ?");
-            params.add(m.get(k));
+            params.add(row.get(k));
         }
         jdbcTemplate.update("INSERT INTO " + def.tableName() + " (" + cols + ") VALUES (" + vals + ")",
                 params.toArray());

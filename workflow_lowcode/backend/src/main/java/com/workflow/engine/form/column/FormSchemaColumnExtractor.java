@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -21,9 +22,13 @@ import java.util.regex.Pattern;
 public class FormSchemaColumnExtractor {
 
     private static final Pattern COL_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
+    /**
+     * 不生成列的组件类型（纯布局/展示组件）。
+     * 其余带 field 的组件（含子表单类 group/subForm/tableForm、人员/部门选择 userPicker/deptPicker）
+     * 均生成列定义：数据存储类（子表单容器、人员/部门数组）推断为 JSON 列，并填写 componentType。
+     */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
-            "userPicker", "deptPicker", "divider", "groupContainer", "dataTable",
-            "group", "tableForm", "subForm", "formContainer");
+            "divider", "groupContainer", "dataTable");
 
     private final ObjectMapper objectMapper;
 
@@ -108,6 +113,8 @@ public class FormSchemaColumnExtractor {
                     if (type != null && !type.isBlank()) {
                         c.setComponentType(type);
                     }
+                    // 组件配置：rule.props 整体 JSON 存储（剔除 rule/columns 子规则，避免重复存储内嵌规则树）
+                    c.setComponentProps(extractComponentProps(rule));
                     // 表单设计器中字段设为隐藏（rule.hidden=true）时，列定义同步标记 hidden
                     if (rule.path("hidden").asBoolean(false)) {
                         c.setHidden(true);
@@ -156,7 +163,32 @@ public class FormSchemaColumnExtractor {
             case "datePicker", "timePicker",
                  "date", "datetime", "time", "dateRange", "dateTimeRange" -> "DATETIME";
             case "switch", "checkbox" -> "TINYINT";
+            // 子表单容器（group/subForm/tableForm）与人员/部门选择（userPicker/deptPicker）：整体 JSON 存储
+            case "group", "subForm", "tableForm", "userPicker", "deptPicker" -> "JSON";
             default -> "VARCHAR";
         };
+    }
+
+    /**
+     * 提取组件配置（rule.props 的 JSON 文本），剔除 rule/columns 两个子规则键
+     * （group/subForm 的 props.rule、tableForm 的 props.columns 为内嵌规则树，已由递归平铺提取，避免重复存储）。
+     */
+    private String extractComponentProps(JsonNode rule) {
+        JsonNode props = rule.path("props");
+        if (!props.isObject() || props.isEmpty()) {
+            return null;
+        }
+        // copy 后剔除，避免修改原树
+        ObjectNode copy = props.deepCopy();
+        copy.remove("rule");
+        copy.remove("columns");
+        if (copy.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(copy);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 }

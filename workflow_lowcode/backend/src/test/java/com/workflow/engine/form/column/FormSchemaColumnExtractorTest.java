@@ -8,6 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -104,13 +105,17 @@ class FormSchemaColumnExtractorTest {
     }
 
     @Test
-    void schema跳过不支持的组件类型() {
+    void schema跳过纯布局组件_其余带字段组件生成列() {
+        // divider 为纯布局组件不生成列；userPicker 等带字段组件生成 JSON 列并填写 componentType
         String schema = "[{\"field\":\"reason\",\"title\":\"事由\",\"type\":\"input\"},"
                 + "{\"field\":\"picker\",\"title\":\"选择器\",\"type\":\"userPicker\"},"
                 + "{\"field\":\"divider\",\"type\":\"divider\"}]";
         List<ColumnConfig> cols = extractor.extractFromSchema(schema);
-        assertEquals(1, cols.size());
+        assertEquals(2, cols.size());
         assertEquals("reason", cols.get(0).getKey());
+        assertEquals("picker", cols.get(1).getKey());
+        assertEquals("JSON", cols.get(1).getColumnType());
+        assertEquals("userPicker", cols.get(1).getComponentType());
     }
 
     @Test
@@ -166,26 +171,33 @@ class FormSchemaColumnExtractorTest {
     }
 
     @Test
-    void schema子表单组件_递归提取props_rule字段() {
-        // 子表单组件（group/subForm）内部字段在 props.rule 中
+    void schema子表单组件_容器生成JSON列并递归提取props_rule字段() {
+        // 子表单组件（group/subForm）容器本身生成 JSON 列（componentProps 剔除内嵌 rule），内部字段在 props.rule 中平铺提取
         String schema = "{\"rule\":["
                 + "{\"field\":\"items\",\"title\":\"明细\",\"type\":\"group\","
-                + " \"props\":{\"rule\":["
+                + " \"props\":{\"title\":\"明细配置\",\"rule\":["
                 + "   {\"field\":\"itemName\",\"title\":\"项目名称\",\"type\":\"input\"},"
                 + "   {\"field\":\"quantity\",\"title\":\"数量\",\"type\":\"inputNumber\"}"
                 + "]}}"
                 + "]}";
         List<ColumnConfig> cols = extractor.extractFromSchema(schema);
-        assertEquals(2, cols.size());
-        assertEquals("itemName", cols.get(0).getKey());
-        assertEquals("项目名称", cols.get(0).getLabel());
-        assertEquals("quantity", cols.get(1).getKey());
-        assertEquals("数量", cols.get(1).getLabel());
+        assertEquals(3, cols.size());
+        assertEquals("items", cols.get(0).getKey());
+        assertEquals("JSON", cols.get(0).getColumnType());
+        assertEquals("group", cols.get(0).getComponentType());
+        // componentProps 保留普通配置、剔除内嵌 rule
+        assertNotNull(cols.get(0).getComponentProps());
+        assertTrue(cols.get(0).getComponentProps().contains("明细配置"));
+        assertFalse(cols.get(0).getComponentProps().contains("itemName"));
+        assertEquals("itemName", cols.get(1).getKey());
+        assertEquals("项目名称", cols.get(1).getLabel());
+        assertEquals("quantity", cols.get(2).getKey());
+        assertEquals("数量", cols.get(2).getLabel());
     }
 
     @Test
-    void schema子表组件_递归提取props_columns_rule字段() {
-        // 子表组件（tableForm）内部字段在 props.columns[].rule 中
+    void schema子表组件_容器生成JSON列并递归提取props_columns_rule字段() {
+        // 子表组件（tableForm）容器本身生成 JSON 列，内部字段在 props.columns[].rule 中平铺提取
         String schema = "{\"rule\":["
                 + "{\"field\":\"table\",\"title\":\"表格\",\"type\":\"tableForm\","
                 + " \"props\":{\"columns\":["
@@ -194,11 +206,16 @@ class FormSchemaColumnExtractorTest {
                 + "]}}"
                 + "]}";
         List<ColumnConfig> cols = extractor.extractFromSchema(schema);
-        assertEquals(2, cols.size());
-        assertEquals("col1", cols.get(0).getKey());
-        assertEquals("列1", cols.get(0).getLabel());
-        assertEquals("col2", cols.get(1).getKey());
-        assertEquals("列2", cols.get(1).getLabel());
+        assertEquals(3, cols.size());
+        assertEquals("table", cols.get(0).getKey());
+        assertEquals("JSON", cols.get(0).getColumnType());
+        assertEquals("tableForm", cols.get(0).getComponentType());
+        // props 仅剩 columns 时剔除后为空，componentProps 为 null
+        assertNull(cols.get(0).getComponentProps());
+        assertEquals("col1", cols.get(1).getKey());
+        assertEquals("列1", cols.get(1).getLabel());
+        assertEquals("col2", cols.get(2).getKey());
+        assertEquals("列2", cols.get(2).getLabel());
     }
 
     @Test

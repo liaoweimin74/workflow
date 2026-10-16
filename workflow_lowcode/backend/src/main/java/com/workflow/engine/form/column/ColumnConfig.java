@@ -47,6 +47,9 @@ public class ColumnConfig {
     /** 组件类型（form-create rule 的 type，如 colorPicker/elTransfer；供前端按组件定制渲染） */
     private String componentType;
 
+    /** 组件配置（form-create rule 的 props JSON，已剔除 rule/columns 子规则；供前端按字段生成组件时还原配置） */
+    private String componentProps;
+
     /** 是否可排序（缺省 null=未推导，由 SortableResolver 填充；数据源 metadata 声明） */
     private Boolean sortable;
 
@@ -99,6 +102,9 @@ public class ColumnConfig {
 
     public String getComponentType() { return componentType; }
     public void setComponentType(String componentType) { this.componentType = componentType; }
+
+    public String getComponentProps() { return componentProps; }
+    public void setComponentProps(String componentProps) { this.componentProps = componentProps; }
 
     public Boolean getSortable() { return sortable; }
     public void setSortable(Boolean sortable) { this.sortable = sortable; }

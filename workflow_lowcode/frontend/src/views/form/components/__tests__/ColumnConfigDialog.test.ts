@@ -127,6 +127,61 @@ describe('ColumnConfigDialog — 长文本列类型（VARCHAR 255 上限规避�
   })
 })
 
+describe('ColumnConfigDialog — 已发布列映射回显（existing-columns 初始化）', () => {
+  /**
+   * 缺陷背景：草案行的 columnType/length/scale 恒用组件默认映射值初始化，
+   * existing-columns 仅用于锁定切换。已发布为 TEXT 的字段（如客户档案 address）
+   * 每次打开发布界面都回显 VARCHAR(255)，确认后原样提交 → 后端跨类变更拒绝 → 发布失败。
+   * 正确行为：已发布的类型/长度/精度/必填应作为草案初值。
+   */
+  it('已发布 TEXT 的 input 字段回显 TEXT（而非组件默认 VARCHAR 255）', async () => {
+    const wrapper = createWrapper({
+      existingColumns: [{ key: 'reason', label: '请假原因', columnType: 'TEXT', length: null, scale: null, required: true, unique: false, indexed: true }],
+    })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'reason')
+    expect(col?.columnType).toBe('TEXT')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('已发布列的长度/精度/索引/唯一/必填一并回显', async () => {
+    const wrapper = createWrapper({
+      existingColumns: [{ key: 'reason', label: '请假原因', columnType: 'VARCHAR', length: 128, scale: null, required: true, unique: true, indexed: true }],
+    })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'reason')
+    expect(col?.columnType).toBe('VARCHAR')
+    expect(col?.length).toBe(128)
+    expect(col?.required).toBe(true)
+    expect(col?.unique).toBe(true)
+    expect(col?.indexed).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('已发布 DECIMAL(18,2) 的 inputNumber 字段回显 DECIMAL/长度/精度', async () => {
+    const wrapper = createWrapper({
+      schema: [{ type: 'inputNumber', field: 'amount', title: '金额', props: {} }],
+      existingColumns: [{ key: 'amount', label: '金额', columnType: 'DECIMAL', length: 18, scale: 2, required: false, unique: false, indexed: false }],
+    })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'amount')
+    expect(col?.columnType).toBe('DECIMAL')
+    expect(col?.length).toBe(18)
+    expect(col?.scale).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('无 existing-columns 时保持组件默认映射（VARCHAR 255）', async () => {
+    const wrapper = createWrapper()
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'reason')
+    expect(col?.columnType).toBe('VARCHAR')
+    expect(col?.length).toBe(255)
+    wrapper.unmount()
+  })
+})
+
 describe('ColumnConfigDialog — LookupPicker（查找带回）列映射', () => {
   it('LookupPicker 单选映射为 VARCHAR(255)，不被标记 unsupported', async () => {
     const wrapper = createWrapper({ schema: lookupSchema })
@@ -608,6 +663,40 @@ describe('ColumnConfigDialog — 子表组件（group/tableForm）子列穿透',
     expect(keys).toContain('item_name')
     expect(keys).toContain('amount')
     expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    wrapper.unmount()
+  })
+
+  it('子表/subForm/普通列均携带 componentType 与 componentProps（数据源组件类型来源）', async () => {
+    // 子表列（group/tableForm）与 subForm 列必须带 componentType，否则数据源元数据组件类型为空
+    const schema = [
+      ...tableFormSubtableSchema,
+      {
+        type: 'subForm',
+        field: 'extra_sub',
+        title: '附加子表单',
+        props: { title: '附加配置', rule: [{ type: 'input', field: 'extra_in', title: '内字段' }] },
+      },
+      { type: 'input', field: 'remark', title: '备注', props: { placeholder: '请输入备注' } },
+    ]
+    const wrapper = createWrapper({ schema })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const sub = items.find(i => i.key === 'table_items')
+    expect(sub?.componentType).toBe('tableForm')
+    // 子表子列也带 componentType
+    const amount = sub?.subColumns?.find((c: any) => c.key === 'amount')
+    expect(amount?.componentType).toBe('inputNumber')
+    // subForm 列：componentType=subForm，componentProps 剔除内嵌 rule 保留普通配置
+    const subForm = items.find(i => i.key === 'extra_sub')
+    expect(subForm?.componentType).toBe('subForm')
+    expect(subForm?.hidden).toBe(true)
+    const subProps = JSON.parse(subForm?.componentProps || '{}')
+    expect(subProps.title).toBe('附加配置')
+    expect(subProps.rule).toBeUndefined()
+    // 普通列：componentType + componentProps（placeholder 等）透传
+    const remark = items.find(i => i.key === 'remark')
+    expect(remark?.componentType).toBe('input')
+    expect(JSON.parse(remark?.componentProps || '{}').placeholder).toBe('请输入备注')
     wrapper.unmount()
   })
 

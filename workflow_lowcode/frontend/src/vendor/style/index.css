@@ -1044,3 +1044,91 @@
 ._fc-designer ._fc-r-tools-close {
     color: var(--el-text-color-secondary);
 }
+
+/* ============================================================
+ * 子表单（group）运行态主题适配（亮色/暗色）
+ * 根因：@form-create/element-ui 以 <style> 注入的 _fc-group-* 规则
+ * 全部为硬编码亮色（#d9d9d9 虚线边/#fff 卡面/#fafafa 头部/#eee 序号等），
+ * 暗色下出现亮块。用 Element 语义变量覆盖：
+ * - html 前缀（+1 元素特异性）压过包内同形选择器（包内样式后注入，平特异性会输）；
+ * - 亮色值与原硬编码几乎一致（#dcdfe6≈#d9d9d9/#fafafa 等量替换），观感不变；
+ * - 暗色随 html.dark 的 EP 变量自动适配。
+ * ============================================================ */
+
+/* 默认模式：虚线容器/序号气泡/操作手柄 */
+html ._fc-group-container {
+    border-color: var(--el-border-color);
+}
+html ._fc-group-handle {
+    border-color: var(--el-border-color);
+    background-color: var(--el-bg-color);
+}
+html ._fc-group-idx {
+    background: var(--el-fill-color);
+    color: var(--el-text-color-regular);
+}
+html ._fc-group-arrow:before {
+    border-color: var(--el-text-color-secondary);
+}
+html ._fc-group-plus-minus:before,
+html ._fc-group-plus-minus:after {
+    background-color: var(--el-color-primary);
+}
+html ._fc-group-plus-minus._fc-group-minus:after {
+    background-color: var(--el-color-danger);
+}
+html ._fc-group-add {
+    border-color: var(--el-color-primary-light-5);
+}
+
+/* 卡片模式（type=card）：卡面/头部/序号/标题/操作按钮 */
+html ._fc-group._fc-group-card ._fc-group-container {
+    background: var(--el-bg-color);
+    border-color: var(--el-border-color-lighter);
+}
+html ._fc-group._fc-group-card ._fc-group-header {
+    border-bottom-color: var(--el-border-color-lighter);
+    background: var(--el-fill-color-lighter);
+}
+html ._fc-group._fc-group-card ._fc-group-idx {
+    background: var(--el-fill-color);
+    color: var(--el-text-color-regular);
+    border-color: var(--el-border-color);
+}
+html ._fc-group._fc-group-card ._fc-group-title {
+    color: var(--el-text-color-primary);
+}
+html ._fc-group._fc-group-card ._fc-group-btn {
+    border-color: var(--el-border-color);
+    background: var(--el-bg-color);
+    color: var(--el-text-color-secondary);
+}
+html ._fc-group._fc-group-card ._fc-group-btn:hover {
+    color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+}
+html ._fc-group._fc-group-card ._fc-group-btn:active {
+    color: var(--el-color-primary-dark-2);
+    border-color: var(--el-color-primary-dark-2);
+    background: var(--el-color-primary-light-8);
+}
+
+/* ============================================================
+ * 表格表单（tableForm）设计器画布容器适配
+ * TableFormView.vue 硬编码 #ECECEC 边框 + #fff 底 → 语义变量（随暗色翻转）
+ * ============================================================ */
+html ._fd-table-form {
+    border-color: var(--el-border-color-lighter);
+    background: var(--el-bg-color);
+}
+
+/* 设计器拖拽占位（drag-holder）：#f5f5f5 硬编码 → 洗底变量 */
+html.dark ._fd-draggable-drag.drag-holder,
+html.dark ._fd-tableFormColumn-drag.drag-holder,
+html.dark ._fd-group-drag.drag-holder,
+html.dark ._fd-subForm-drag.drag-holder,
+html.dark ._fd-elCard-drag.drag-holder,
+html.dark ._fd-elCollapseItem-drag.drag-holder {
+    background: var(--el-fill-color);
+}

@@ -352,7 +352,7 @@ export default {
 <style>
 ._fc-table-form {
     width: 100%;
-    color: #666666;
+    color: var(--el-text-color-regular);
 }
 ._fc-table-form .form-create,
 ._fc-table-form .form-create-m {
@@ -407,13 +407,13 @@ export default {
     height: 100%;
     overflow: hidden;
     table-layout: fixed;
-    border: 1px solid #ebeef5;
+    border: 1px solid var(--el-border-color-lighter);
     border-bottom: 0 none;
 }
 
 ._fc-table-form ._fc-tf-table > thead > tr > th {
     border: 0 none;
-    border-bottom: 1px solid #ebeef5;
+    border-bottom: 1px solid var(--el-border-color-lighter);
     height: 40px;
     font-weight: 500;
     padding: 0 5px;
@@ -421,7 +421,7 @@ export default {
 }
 
 ._fc-table-form ._fc-tf-table > thead > tr > th + th {
-    border-left: 1px solid #ebeef5;
+    border-left: 1px solid var(--el-border-color-lighter);
 }
 
 ._fc-table-form tr {
@@ -443,11 +443,11 @@ export default {
     /*white-space: nowrap;*/
     overflow: hidden;
     border: 0 none;
-    border-bottom: 1px solid #ebeef5;
+    border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 ._fc-table-form td + td {
-    border-left: 1px solid #ebeef5;
+    border-left: 1px solid var(--el-border-color-lighter);
 }
 
 ._fc-tf-table .el-input-number,
@@ -460,7 +460,7 @@ export default {
 
 ._fc-tf-head-required:before {
     content: '*';
-    color: #f56c6c;
+    color: var(--el-color-danger);
     margin-right: 4px;
 }
 

@@ -462,10 +462,41 @@
                       :image-size="64"
                     />
                   </template>
+                  <el-table-column type="expand" width="32">
+                    <template #default="{ row }">
+                      <div v-if="row.subColumns?.length" class="subtable-meta">
+                        <div class="subtable-meta-title">
+                          子表字段清单（{{ row.subColumns.length }}）
+                          <el-tag size="small" style="margin-left: 8px">
+                            {{ row.subMode === 'dedicated' ? '独立子表接口' : '内嵌主表' }}
+                          </el-tag>
+                        </div>
+                        <el-table :data="row.subColumns" border size="small" style="width: 100%">
+                          <el-table-column prop="label" label="字段名" min-width="130" show-overflow-tooltip />
+                          <el-table-column prop="key" label="标识" min-width="120" show-overflow-tooltip />
+                          <el-table-column prop="componentType" label="组件" min-width="90" />
+                          <el-table-column prop="columnType" label="DB类型" min-width="80" />
+                          <el-table-column label="必填" width="60" align="center">
+                            <template #default="{ row: sub }">
+                              <span :style="boolIconStyle(sub.required)">{{ sub.required ? '✓' : '✗' }}</span>
+                            </template>
+                          </el-table-column>
+                          <el-table-column label="隐藏" width="60" align="center">
+                            <template #default="{ row: sub }">
+                              <span :style="boolIconStyle(sub.hidden)">{{ sub.hidden ? '✓' : '✗' }}</span>
+                            </template>
+                          </el-table-column>
+                        </el-table>
+                      </div>
+                      <span v-else class="subtable-meta-empty">—</span>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="label" label="字段名" min-width="150" show-overflow-tooltip />
                   <el-table-column prop="key" label="标识" min-width="140" show-overflow-tooltip />
                   <el-table-column prop="componentType" label="组件" min-width="90" />
-                  <el-table-column prop="columnType" label="DB类型" min-width="80" />
+                  <el-table-column label="DB类型" min-width="80">
+                    <template #default="{ row }">{{ row.subColumns?.length ? '子表' : row.columnType }}</template>
+                  </el-table-column>
                   <el-table-column label="长度" width="60" align="center">
                     <template #default="{ row }">{{ row.length ?? '—' }}</template>
                   </el-table-column>
@@ -1927,5 +1958,18 @@ onMounted(async () => {
   border-top: 1px solid var(--el-border-color-lighter);
   margin-top: 16px;
   flex-shrink: 0;
+}
+/* 字段元数据：子表字段清单展开区 */
+.subtable-meta {
+  padding: 4px 12px 8px;
+}
+.subtable-meta-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--el-text-color-primary);
+}
+.subtable-meta-empty {
+  color: var(--el-text-color-placeholder);
+  padding: 0 12px;
 }
 </style>

@@ -89,6 +89,7 @@
       :current-fields="currentFieldKeys"
       :binding-props="currentContainerProps"
       :form-data-sources="formDataSources"
+      :container-fields="containerFieldKeys"
       @confirm="handleContainerConfirm"
     />
     <DsBindingConfigDialog
@@ -152,6 +153,7 @@ import type { DataSourceBinding } from '@/components/business/DataSourceConfigPa
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { appendGeneratedRules } from '@/composables/useDataSourceCrud'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
@@ -818,9 +820,9 @@ async function handlePublish() {
   }
 
   if (formType.value === 'BUSINESS') {
-    // 业务表单：先弹出列映射确认，确认后保存 column_config 再发布
-    designerRef.value?.getRule() || []
-    columnConfig.value = []
+    // 业务表单：先弹出列映射确认，确认后保存 column_config 再发布。
+    // ⚠️ 不可清空 columnConfig：它是对话框 existing-columns（已发布列型/长度/索引）的唯一来源，
+    // 清空会让已发布 TEXT 列回退为组件默认 VARCHAR(255)，发布时被跨类变更校验拒绝。
     columnDialogVisible.value = true
     return
   }
@@ -925,9 +927,24 @@ function openContainerConfig() {
 }
 function handleContainerConfirm(newProps: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
+  const generateColumns = newProps.generateColumns
+  delete newProps.generateColumns
   if (active?.props) Object.assign(active.props, newProps)
+  if (generateColumns?.length > 0 && active) {
+    // 按字段生成组件：getRule→追加→setRule 重建画布（经 vendor makeRule 包装，生成组件可选中配置）
+    const { added, skipped } = appendGeneratedRules(designerRef.value as any, active?._fc_id, generateColumns)
+    ElMessage.success(skipped > 0 ? `数据容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `数据容器配置已保存，已生成 ${added} 个字段组件`)
+    return
+  }
   ElMessage.success('数据容器配置已保存')
 }
+
+/** 当前选中数据容器子树内已存在的字段 key（配置弹窗禁选判定） */
+const containerFieldKeys = computed<string[]>(() => {
+  const active = designerRef.value?.activeRule as any
+  if (!active || (active.type !== 'formContainer' && active.type !== 'FcRow')) return []
+  return collectFieldKeys((active.children || []) as any[])
+})
 
 // ===== 数据表格（page-table）数据源配置 =====
 const tableDsDialogVisible = ref(false)

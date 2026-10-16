@@ -115,6 +115,7 @@
       :binding-props="currentFormContainerProps"
       :form-data-sources="schema.dataSources"
       :enabled-data-sources="enabledDataSources"
+      :container-fields="containerFieldKeys"
       @confirm="handleFormContainerConfirm"
     />
 
@@ -239,6 +240,7 @@ import {
 } from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
+import { appendGeneratedRules } from '@/composables/useDataSourceCrud'
 import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -656,10 +658,25 @@ function openFormContainerDsConfig() {
 function handleFormContainerConfirm(newProps: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
   if (isContainerRule(active) && active.props) {
+    const generateColumns = newProps.generateColumns
+    delete newProps.generateColumns
     Object.assign(active.props, newProps)
+    if (generateColumns?.length > 0) {
+      // 按字段生成组件：getRule→追加→setRule 重建画布（经 vendor makeRule 包装，生成组件可选中配置）
+      const { added, skipped } = appendGeneratedRules(designerRef.value as any, active?._fc_id, generateColumns)
+      ElMessage.success(skipped > 0 ? `数据表单容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `数据表单容器配置已保存，已生成 ${added} 个字段组件`)
+      return
+    }
   }
   ElMessage.success('数据表单容器配置已保存')
 }
+
+/** 当前选中数据容器子树内已存在的字段 key（配置弹窗禁选判定） */
+const containerFieldKeys = computed<string[]>(() => {
+  const active = designerRef.value?.activeRule as any
+  if (!isContainerRule(active)) return []
+  return collectFieldKeys((active.children || []) as any[])
+})
 
 /** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"按钮（动态读取页面绑定层） */
 function registerPageComponents() {

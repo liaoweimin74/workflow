@@ -260,9 +260,9 @@
       </div>
     </el-card>
 
-    <!-- 表单弹窗 -->
+    <!-- 表单弹窗（formMode=popup，默认） -->
     <el-dialog
-      v-if="formConfig"
+      v-if="formConfig && formMode !== 'inline'"
       v-model="dialogVisible"
       :title="dialogTitle"
       :width="formConfig.dialogWidth || '500px'"
@@ -286,12 +286,38 @@
         <el-button type="primary" :loading="formLoading" @click="handleDialogSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 嵌入式表单（formMode=inline）：覆盖组件内容区，关闭后恢复列表 -->
+    <div v-if="formConfig && formMode === 'inline' && inlineVisible" class="st-inline-overlay">
+      <div class="st-inline-container">
+        <div class="st-inline-header">
+          <span class="st-inline-title">{{ dialogTitle }}</span>
+          <el-button text :icon="Close" @click="closeForm()" />
+        </div>
+        <div class="st-inline-body">
+          <FormRenderer
+            :key="dialogFormKey"
+            ref="formRendererRef"
+            :rule="formConfig.rule"
+            :option="dialogFormOption"
+            :initial-values="dialogInitialValues"
+            :actions="formConfig.actions"
+            :data-sources="formConfig.dataSources"
+            @open-new-tab="(key: string, rid: string) => $emit('open-new-tab', key, rid)"
+          />
+        </div>
+        <div class="st-inline-footer">
+          <el-button @click="closeForm()">取消</el-button>
+          <el-button type="primary" :loading="formLoading" @click="handleDialogSubmit">确定</el-button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, defineComponent, h, type PropType } from 'vue'
-import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
+import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
 import { resolveStyleRules } from '@/utils/fieldStyle'
@@ -402,7 +428,9 @@ const initialQuery = ref<Record<string, any>>({})
 /** 当前排序状态（服务器端排序；与 query 并列由组件内部自管，重置时清空） */
 const sortState = ref<{ prop: string; order: string } | null>(null)
 
-// 表单弹窗状态
+// 表单弹窗状态（formMode=popup 默认弹窗；inline 时由 inlineVisible 驱动页内覆盖层）
+const formMode = computed(() => props.formConfig?.formMode || 'popup')
+const inlineVisible = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
@@ -562,7 +590,22 @@ async function handleCreate(initialValues?: Record<string, any>) {
   dialogInitialValues.value = { ...configInitialValues, ...(initialValues || {}) }
   dialogTitle.value = props.formConfig?.dialogTitle?.create || '新增'
   dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
-  dialogVisible.value = true
+  openForm()
+}
+
+/** 按 formMode 打开表单（popup→弹窗 / inline→页内覆盖层） */
+function openForm() {
+  if (formMode.value === 'inline') {
+    inlineVisible.value = true
+  } else {
+    dialogVisible.value = true
+  }
+}
+
+/** 关闭表单（两种模式通吃） */
+function closeForm() {
+  dialogVisible.value = false
+  inlineVisible.value = false
 }
 
 async function handleEdit(row: any) {
@@ -588,7 +631,7 @@ async function handleEdit(row: any) {
     dialogInitialValues.value = { ...row }
   }
   dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
-  dialogVisible.value = true
+  openForm()
 }
 
 async function handleDelete(row: any) {
@@ -625,7 +668,7 @@ async function handleDialogSubmit() {
       props.formConfig?.afterCreate?.(formData)
     }
     ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
-    dialogVisible.value = false
+    closeForm()
     fetchList()
   } finally {
     formLoading.value = false
@@ -665,7 +708,7 @@ function getQuery(): Record<string, any> {
   return { ...query, page: query.page, size: query.size, total: total.value }
 }
 function dialogState() {
-  return { visible: dialogVisible.value, isEdit: isEdit.value, title: dialogTitle.value }
+  return { visible: dialogVisible.value || inlineVisible.value, isEdit: isEdit.value, title: dialogTitle.value, formMode: formMode.value }
 }
 function setFormField(field: string, value: unknown) {
   formRendererRef.value?.setFormData?.({ [field]: value })
@@ -695,6 +738,7 @@ function getFormValues(): Record<string, any> | null {
 
 <style scoped>
 .search-table {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -716,6 +760,51 @@ function getFormValues(): Record<string, any> | null {
   flex-shrink: 0;
   /* 与视图 PageRenderer 查询栏一致；!important 防 form-create/画布等外部环境覆盖 */
   margin-bottom: 16px !important;
+}
+
+/* ============ 嵌入式表单（formMode=inline） ============ */
+/* 覆盖组件内容区（锚为 .search-table 根容器），关闭后恢复列表；语义变量随亮/暗主题 */
+.st-inline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: var(--el-bg-color);
+  display: flex;
+  flex-direction: column;
+}
+.st-inline-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+  overflow: hidden;
+}
+.st-inline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.st-inline-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.st-inline-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.st-inline-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
 }
 /* 查询栏内表单字段间距：恢复 element-plus 默认（form-create 全局样式会把 el-form-item margin-bottom 覆盖为 0，
    导致 PAGE 页面（form-create 渲染）里查询栏输入框贴底；视图页面不受影响） */

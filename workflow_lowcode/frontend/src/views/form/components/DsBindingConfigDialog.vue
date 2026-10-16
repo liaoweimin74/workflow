@@ -216,6 +216,32 @@
           </el-select>
         </el-form-item>
 
+        <!-- 按字段生成组件：勾选数据源字段，确定后在容器内自动生成对应表单组件（已存在的禁选） -->
+        <template v-if="form.dataSourceId">
+          <el-divider content-position="left">
+            <span class="label-with-tip">
+              按字段生成组件
+              <el-tooltip content="勾选字段后点「确定」，容器内将自动生成与字段英文名对应的组件；容器中已存在的字段不可勾选" placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+          </el-divider>
+          <el-checkbox-group v-if="dsColumns.length > 0" v-model="genSelectedKeys" class="gen-field-list">
+            <el-checkbox
+              v-for="col in dsColumns"
+              :key="col.key"
+              :value="col.key"
+              :disabled="containerFieldSet.has(col.key)"
+            >
+              <span>{{ col.label || col.key }}</span>
+              <span class="gen-field-key">（{{ col.key }}）</span>
+              <el-tag v-if="containerFieldSet.has(col.key)" size="small" type="info" effect="plain" class="gen-field-tag">已存在</el-tag>
+              <el-tag v-else-if="col.columnType" size="small" effect="plain" class="gen-field-tag">{{ col.columnType }}</el-tag>
+            </el-checkbox>
+          </el-checkbox-group>
+          <el-empty v-else description="该数据源暂无字段" :image-size="48" />
+        </template>
+
         <!-- 按钮配置 -->
         <el-divider content-position="left">按钮</el-divider>
         <div class="container-button-grid">
@@ -285,8 +311,11 @@ const props = withDefaults(defineProps<{
   tableMode?: boolean
   /** 列表展示模式：table / card；缺省且未开 tableMode 时为 form-container 模式 */
   listMode?: 'table' | 'card'
+  /** 容器内已存在的字段 key 集合（form-container 模式：禁选 + 「已存在」标记） */
+  containerFields?: string[]
 }>(), {
   tableMode: false,
+  containerFields: () => [],
 })
 
 const emit = defineEmits<{
@@ -365,7 +394,7 @@ function handleUnifiedColumns(cols: ColumnConfigItem[]) {
   dsColumns.value = cols
   if (isListMode.value && form.dataSourceId && form.dataSourceId !== lastBoundDsId.value) {
     lastBoundDsId.value = form.dataSourceId
-    loadTableCandidates().then(() => initTableData())
+    loadTableCandidates().then(() => initTableData(true))
   }
 }
 
@@ -378,6 +407,12 @@ const container = reactive({
   showCopyButton: false,
   customButtonsText: '',
 })
+
+// ==================== 按字段生成组件（formContainer 模式） ====================
+/** 容器内已存在字段集合（禁选判定） */
+const containerFieldSet = computed(() => new Set(props.containerFields || []))
+/** 勾选的待生成字段 key（切换数据源/打开弹窗时清空） */
+const genSelectedKeys = ref<string[]>([])
 
 /** 从 bindingProps 回填容器按钮配置 */
 function initContainerConfig(bp: Record<string, any>) {
@@ -415,10 +450,11 @@ async function loadDsColumns() {
 
 async function handleDataSourceChange() {
   form.filterRows = []
+  genSelectedKeys.value = []
   await loadDsColumns()
   if (isListMode.value) {
     await loadTableCandidates()
-    initTableData()
+    initTableData(true)
   }
 }
 
@@ -496,13 +532,15 @@ async function loadTableCandidates() {
   }
 }
 
-/** 初始化表格配置数据（从 bindingProps 读取） */
-function initTableData() {
+/** 初始化表格配置数据（从 bindingProps 读取）。
+ *  switchDs=true 表示切换数据源路径：字段相关配置（显示列/查询字段/排序字段/分组字段）
+ *  随新数据源候选重新生成，不从旧 bindingProps 回填，避免字段停留在上一个数据源。 */
+function initTableData(switchDs = false) {
   const bp = props.bindingProps || {}
   tableData.showSearch = bp.showSearch === true
   tableData.stretch = bp.stretch === true
-  tableData.searchFields = bp.searchFields || []
-  const srcColumns = (bp.columns && bp.columns.length > 0)
+  tableData.searchFields = switchDs ? [] : (bp.searchFields || [])
+  const srcColumns = (!switchDs && bp.columns && bp.columns.length > 0)
     ? bp.columns
     : tableCandidates.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
   tableData.columns = srcColumns.map((c: any) => ({
@@ -510,8 +548,8 @@ function initTableData() {
     key: c.prop ?? c.key,
     label: c.label || c.prop || c.key,
   }))
-  // 可排序字段：回填已声明配置；未声明（新组件）默认跟随数据源全部可排字段
-  tableData.sortableFields = Array.isArray(bp.sortableFields)
+  // 可排序字段：回填已声明配置；未声明（新组件）或切换数据源时默认跟随当前数据源全部可排字段
+  tableData.sortableFields = (!switchDs && Array.isArray(bp.sortableFields))
     ? [...bp.sortableFields]
     : tableCandidates.value.filter((c: any) => c.sortable).map((c: any) => c.key)
   // 分页配置：回填已声明配置；未声明使用默认（显示分页 / 20 条 / [10,20,50]）
@@ -524,7 +562,7 @@ function initTableData() {
   ], permissions: '' }
   tableData.detail = bp.viewDetail || { width: '800px', type: 'form' }
   tableData.events = bp.viewEvents || []
-  tableData.groupBy = bp.groupBy || ''
+  tableData.groupBy = switchDs ? '' : (bp.groupBy || '')
   tableData.cardMinWidth = Number(bp.cardMinWidth) > 0 ? Number(bp.cardMinWidth) : 280
   tableData.collapsibleGroups = bp.collapsibleGroups === true
   const placement = bp.actionsPlacement
@@ -546,6 +584,7 @@ function initTableData() {
 watch(() => props.modelValue, async (val) => {
   if (!val) return
   activeTab.value = 'binding'
+  genSelectedKeys.value = []
   const bp = props.bindingProps || {}
   // 回填数据源 + 组件级数据筛选
   form.dataSourceId = bp.dataSourceId || ''
@@ -644,6 +683,11 @@ function handleConfirm() {
     result.showDeleteButton = container.showDeleteButton
     result.showCopyButton = container.showCopyButton
     result.customButtons = parseCustomButtons()
+    // 按字段生成组件：勾选且未禁用的列随 confirm 输出（父设计器负责生成 rule 并追加进容器）
+    const genColumns = dsColumns.value.filter(
+      (c) => genSelectedKeys.value.includes(c.key) && !containerFieldSet.value.has(c.key),
+    )
+    if (genColumns.length > 0) result.generateColumns = genColumns
   }
   emit('confirm', result)
   visible.value = false
@@ -695,6 +739,39 @@ function handleConfirm() {
 .card-quick-row .el-form-item__content {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* 按字段生成组件（formContainer 模式）：字段勾选列表 + 辅助文案 */
+.gen-field-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+}
+.gen-field-list .el-checkbox {
+  margin-right: 0;
+  height: 24px;
+}
+.gen-field-key {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.gen-field-tag {
+  margin-left: 6px;
+}
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tip-icon {
+  color: var(--el-text-color-secondary);
+  cursor: help;
 }
 /* 表格增强配置区（Task UI-fix）：3 列网格两行排列，替代原 6 项 nowrap 单行拥挤布局
    第一行：表头筛选 / 批量操作 / 批量删除；第二行：Excel 导出 / Excel 导入 / 汇总行

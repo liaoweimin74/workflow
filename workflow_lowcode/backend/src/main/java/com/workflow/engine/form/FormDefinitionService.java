@@ -64,6 +64,8 @@ public class FormDefinitionService {
             // RelationCard（v4 实时展示）数据经数据源实时查询显示、自身值恒空——
             // 其 JSON 列为 v1 被动模式遗留，发布列映射已不再生成（存量列按禁 DROP 保留但恒空）
             "dataPicker", "page-list-cards", "page-table", "LookupPicker", "RelationCard",
+            // 计算公式（Task 144）：结果恒为数值，列映射 DECIMAL(18, precision)
+            "FormulaField",
             // 子表（发布流程建独立物理表）
             "group", "tableForm", "subForm",
             // 布局/辅助（无 field，纯渲染）

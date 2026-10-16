@@ -8093,3 +8093,20 @@ Work Log:
 
 Stage Summary:
 - 重供给 #24 单轮内恢复（~2 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 8
+
+---
+Task ID: r72
+Agent: main
+Task: 2026-10-16 17:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #25）
+- 冷启动 start-services.sh 已自动触发 recover，但环境无 backups/jar，正在跑 mvn 必败路径（classworlds 进程在场）
+- 接管：pkill recover/maven(classworlds)/bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，23s done，零 mvn 第 9 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261016-0907 推送成功
+
+Stage Summary:
+- 重供给 #25 单轮内恢复（~2 分钟）；内存 3.46GB，oom_kill=0；零 mvn 计数 9
+- 再次印证：冷启动 recover 无 jar 备份必走 mvn 空耗，需人工接管分卷恢复（第 4 次）

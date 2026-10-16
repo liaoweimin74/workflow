@@ -7994,3 +7994,17 @@ Work Log:
 
 Stage Summary:
 - 全绿 200×4 真绿；后台 recover 可靠性存疑（连续两轮后台模式异常退出，前台模式虽超时截断但 java 均成功拉起）——后续轮次优先前台+timeout 保护
+
+---
+Task ID: r65
+Agent: main
+Task: r65 巡检（2026-10-16 10:05）
+
+Work Log:
+- 第 19 次重供给：假绿；冷启动 recover 走 mvn 必败路径（第 3 次空耗）
+- 接管：kill mvn/recover → 重组 jar（md5 通过）→ 前台 recover（580s 截断但 java 已拉起 pid 1539）→ 真绿
+- 确认 recover 从 backups/jar 秒复 jar（target jar=121300861 字节）；四链路 200×4
+- 收口 dump 20261016-021649 推送成功（06a4ddd1..6a0c075e）；内存 3.36GB，oom_kill=0
+
+Stage Summary:
+- 全绿 200×4 真绿；零 mvn 恢复（第 3 次）；重供给频率 ~1 次/小时，冷启动 mvn 空耗 8 分钟问题持续，仍建议授权 recover 前置 jar 分卷恢复

@@ -8293,3 +8293,31 @@ Work Log:
 
 Stage Summary:
 - 重供给 #37 单轮内恢复（~2 分钟）；内存 3.25GB，oom_kill=0；零 mvn 计数 21
+
+---
+Task ID: r85
+Agent: main
+Task: 2026-10-17 06:05 cron 巡检（轻量运维）
+
+Work Log:
+- 重供给 #38：假绿 + mariadbd 不在场（dump 3306 不在线跳过）
+- 杀占位 → jar 分卷重拼 md5 e369839b 通过 → 前台 recover rc=0（8080=200 3306=ok 真绿，零 mvn 第 22 次）
+- 恢复后复探/收口因 Bash 工具连续 3 次故障（broken session 403）未完成，告知用户重启
+
+Stage Summary:
+- 重供给 #38 恢复成功但收口未完成；零 mvn 计数 22；Bash 工具网关故障一次（r59 后第二次）
+
+---
+Task ID: r86
+Agent: main
+Task: 2026-10-17 07:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #39）
+- pkill bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，28s done，零 mvn 第 23 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261016-2306 推送成功（含 r85 未完成部分的 catchup 记录）
+
+Stage Summary:
+- 重供给 #39 单轮内恢复（~2 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 23

@@ -8077,3 +8077,19 @@ Work Log:
 
 Stage Summary:
 - 环境重供给 #23 单轮内恢复（~2 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 7
+
+---
+Task ID: r71
+Agent: main
+Task: 2026-10-16 16:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #24）
+- 首轮 dump RC=0（workflow=260K v6=128K，mariadb 数据目录幸存）
+- pkill bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0（mariadb 无需重建），38s done，零 mvn 第 8 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261016-0807 推送成功
+
+Stage Summary:
+- 重供给 #24 单轮内恢复（~2 分钟）；内存 3.50GB，oom_kill=0；零 mvn 计数 8

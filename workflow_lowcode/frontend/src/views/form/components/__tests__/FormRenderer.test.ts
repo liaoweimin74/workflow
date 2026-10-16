@@ -917,3 +917,43 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(false)
   })
 })
+
+describe('FormRenderer - 组件级容器动作委托（bus.runStep）', () => {
+  const containerRule: Rule[] = [
+    {
+      type: 'formContainer',
+      field: 'fc_a',
+      title: '数据表单容器',
+      props: { dataSourceId: 'ds_1', recordLocator: { type: 'current-record' } },
+      children: [{ type: 'input', field: 'name', title: '名称', value: '' } as Rule],
+    } as unknown as Rule,
+  ]
+
+  it('provide 暴露 runStep：表格按钮可执行容器步骤（无需表单级动作链）', async () => {
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1' })
+    await nextTick()
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { runStep?: (step: any, eventData: any) => boolean }
+      | undefined
+    expect(bus).toBeTruthy()
+    expect(typeof bus!.runStep).toBe('function')
+
+    ;(dataSourceApi.getData as any).mockResolvedValueOnce({
+      data: { id: 'rec_9', version: 1, data: { name: '王五' } },
+    })
+    // {row.id} 由宿主解析：组件侧可传总线语法模板，也可传已解析值
+    const consumed = bus!.runStep!({ op: 'load-record', target: 'ds_1', recordId: '{row.id}' }, { row: { id: 'rec_9' } })
+    await nextTick()
+
+    expect(consumed).toBe(true)
+    expect(dataSourceApi.getData).toHaveBeenCalled()
+  })
+
+  it('runStep 对非容器动作返回 false（不消费）', async () => {
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1' })
+    await nextTick()
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as { runStep?: (step: any, eventData: any) => boolean }
+    expect(bus!.runStep!({ op: 'message', target: 'ds_1' }, { row: { id: 'rec_9' } })).toBe(false)
+  })
+})

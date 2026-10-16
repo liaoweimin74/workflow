@@ -68,17 +68,24 @@
                   <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
                 </el-select>
                 <div v-for="(p, pi) in getActionParams(ai)" :key="pi" class="event-param-row">
-                  <el-input
+                  <el-select
                     :model-value="p.key"
+                    filterable
+                    allow-create
+                    default-first-option
                     placeholder="参数名"
                     style="width: 100px"
-                    @input="(v: string) => patchParam(ai, pi, { key: v })"
-                  />
-                  <el-input
+                    @change="(v: string) => patchParam(ai, pi, { key: v })"
+                  >
+                    <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
+                  </el-select>
+                  <ChainParamInput
                     :model-value="p.value"
+                    :kind="chainParamKind(action.type, p.key)"
+                    :options="chainParamOptions(action.type, p.key)"
                     placeholder="值，支持 $row.字段"
-                    style="width: 170px"
-                    @input="(v: string) => patchParam(ai, pi, { value: v })"
+                    width="170px"
+                    @update:model-value="(v: string) => patchParam(ai, pi, { value: v })"
                   />
                   <el-button link type="danger" @click="removeParam(ai, pi)">删</el-button>
                 </div>
@@ -182,9 +189,11 @@ import { ref, computed, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import ExpressionEditor from '@/components/expression/ExpressionEditor.vue'
 import type { ColumnViewConfig } from './schemaTypes'
+import { chainActionOptions, chainParamKeyOptions, chainParamKind, chainParamOptions, syncActionParams } from '@/types/pageActionCatalog'
 import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
 import { aggregateOptionsOf } from './tableEnhance'
+import ChainParamInput from './ChainParamInput.vue'
 import StyleRuleEditor from './StyleRuleEditor.vue'
 import StyleScriptInput from './StyleScriptInput.vue'
 
@@ -266,22 +275,8 @@ function handleModeChange(mode: string) {
   }
 }
 
-/** 动作类型选项（对齐 ActionsConfig） */
-const actionTypeOptions = [
-  { label: '设置筛选', value: 'set-filter' },
-  { label: '刷新数据', value: 'refresh' },
-  { label: '打开详情', value: 'open-detail' },
-  { label: '打开链接', value: 'open-link' },
-  { label: '消息提示', value: 'message' },
-  { label: '打开新建', value: 'open-create' },
-  { label: '编辑', value: 'edit' },
-  { label: '删除', value: 'delete' },
-  { label: '设置分页', value: 'set-page' },
-  { label: '设置排序', value: 'set-sort' },
-  { label: '清空选择', value: 'clear-selection' },
-  { label: '导出数据', value: 'export' },
-  { label: '脚本', value: 'script' },
-]
+/** 动作类型选项（列点击入口，未接线的动作不暴露） */
+const actionTypeOptions = chainActionOptions('cell')
 
 function patch(p: Partial<MergedColumnConfig>) {
   if (!col.value) return
@@ -309,7 +304,7 @@ function getActionParams(ai: number): any[] {
 }
 
 function addAction() {
-  const list = [...actions(), { type: 'message', params: [] }]
+  const list = [...actions(), { type: 'message', params: syncActionParams('message') }]
   patchActions(list)
 }
 
@@ -322,7 +317,12 @@ function removeAction(ai: number) {
 }
 
 function patchAction(ai: number, p: Record<string, any>) {
-  patchActions(actions().map((a: any, i: number) => (i === ai ? { ...a, ...p } : a)))
+  patchActions(actions().map((a: any, i: number) => {
+    if (i !== ai) return a
+    const merged = { ...a, ...p }
+    // 换动作即按新类型补齐约定参数，省去手打参数名（script 的 source 等）
+    return p.type ? { ...merged, params: syncActionParams(p.type, a.params) } : merged
+  }))
 }
 
 function addParam(ai: number) {

@@ -250,6 +250,43 @@ describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {
   })
 })
 
+describe('用户场景：卡片列表编辑按钮 → 总线打开容器', () => {
+  /** 卡片与容器绑不同数据源标识：同源自动关联不成立，只能靠页面总线 row-edit 打开容器 */
+  function cardPageSchema() {
+    const schema = userPageSchema()
+    schema.rule[0] = {
+      type: 'page-list-cards',
+      field: 'c1',
+      title: '卡片列表',
+      props: {
+        dataSourceId: 'ds_cards',
+        columns: [{ prop: 'name', label: '姓名' }],
+        viewActions: { buttons: [{ key: 'edit', label: '编辑' }] },
+      },
+    }
+    ;(schema.rule[1] as any).props.dataSourceId = 'ds_form'
+    schema.dataSources = [
+      { id: 'ds_cards', refId: 'global1' },
+      { id: 'ds_form', refId: 'global1' },
+    ]
+    schema.actions = [
+      { trigger: 'row-edit', source: 'ds_cards', steps: [{ op: 'open-container', target: 'ds_form' }] },
+    ]
+    return schema
+  }
+
+  it('点击卡片"编辑" → 总线 open-container 打开容器弹窗（不落内建编辑窗口）', async () => {
+    const wrapper = await mountPage(cardPageSchema())
+    expect(wrapper.find('.card-action-edit').exists()).toBe(true)
+
+    await wrapper.find('.card-action-edit').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.linkage-container-dialog.visible').length).toBe(1)
+    wrapper.unmount()
+  })
+})
+
 describe('definition props 下传（PAGE definition 单次加载）', () => {
   function buildDefinition(schema: unknown): PageDefinitionDetailDTO {
     return {

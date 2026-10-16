@@ -85,7 +85,7 @@ import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
 import { createDsBindingEngine } from './DsBindingEngine'
 import { createActionBus } from './DsActionBus'
-import type { DsLink } from './DsActionBus'
+import type { ActionLink, ActionStep, PageAction } from '@/types/pageActionCatalog'
 import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender, deepDisableRules, deepDisableField, injectPickerDisplayTexts } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
@@ -101,21 +101,6 @@ import { registerAiComponent, unregisterAiComponent, type AiFieldMeta } from '@/
 // 注册数据表格组件到 form-create（表单内嵌 page-table 支持）
 formCreate.component('page-table', PageDataTable)
 formCreate.component('page-list-cards', PageDataCards)
-
-/** 表单级动作链类型（对齐 DataSourceConfigPanel Action：trigger/source/steps） */
-interface FormActionStep {
-  op: string
-  target: string
-  field?: string
-  value?: string
-  displayMode?: string
-  recordId?: string
-}
-interface FormAction {
-  trigger: string
-  source?: string
-  steps: FormActionStep[]
-}
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -134,9 +119,9 @@ const props = defineProps<{
   /** 是否只读模式。true 时所有字段 disabled，用于已办详情等查看场景。 */
   readonly?: boolean
   /** data-linkage action chain config (optional) */
-  links?: DsLink[]
+  links?: ActionLink[]
   /** 表格-容器联动动作链（schema.actions，trigger/source/steps 结构） */
-  actions?: FormAction[]
+  actions?: PageAction[]
   /** record locator: return current record id */
   recordId?: () => string | undefined
   /** notify record context change (tree click / route param) */
@@ -216,10 +201,10 @@ let queryHandled = false
 const schemaDataSources = ref<DataSourceBindingContext[]>([])
 
 /** 表单级动作链（schema.actions，表格-容器联动用） */
-const schemaActions = ref<FormAction[]>([])
+const schemaActions = ref<PageAction[]>([])
 
 /** 生效动作链：props.actions 优先，其次 schema.actions */
-const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
+const effectiveActions = computed<PageAction[]>(() => props.actions ?? schemaActions.value)
 
 /** 数据表格组件配置注册表：dataSourceId → page-table 节点 props（联动容器"以数据表格配置为准"） */
 const tableViewConfigs = reactive<Record<string, any>>({})
@@ -692,6 +677,50 @@ function resolveTemplateValue(tpl: string | undefined, eventData: any): string {
 }
 
 /**
+ * 执行单个容器联动步骤，返回是否被本宿主消费。
+ * 供表单级动作链（dispatchAction）与组件级动作链（pageActionBus.runStep）共用。
+ */
+function runStep(step: ActionStep, eventData: any, trigger?: string): boolean {
+  const op = step.op
+  const target = step.target
+  if (op === 'open-container') {
+    // 容器 displayMode 优先（属性面板配置为准），step.displayMode 为兜底，默认 dialog
+    const mode = containerModes.get(target) || step.displayMode || 'dialog'
+    // 共享打开逻辑：dialog/inline 统一清空 formData + 显示 + 引擎 loadRecord；
+    // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）；
+    // row-view 触发 → 只读查看（字段禁用、仅关闭按钮）
+    const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+    openContainer(target || '', rid, mode as any, trigger === 'row-view')
+    return true
+  }
+  if (op === 'load-record') {
+    const rid = step.recordId
+      ? resolveTemplateValue(step.recordId, eventData)
+      : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+    if (rid) {
+      // 优先加载到容器引擎（如有匹配），否则加载到主引擎
+      loadContainerRecord(target, rid, () => void bindingEngine.value?.loadRecord(rid))
+    }
+    return true
+  }
+  if (op === 'save-container') {
+    // 冲刷容器引擎；无容器时回退主引擎
+    flushContainer(target, () => void bindingEngine.value?.flush())
+    return true
+  }
+  if (op === 'close-container') {
+    closeContainer(target)
+    return true
+  }
+  if (op === 'reload-record') {
+    const rid = props.recordId?.()
+    if (rid) void bindingEngine.value?.loadRecord(rid)
+    return true
+  }
+  return false
+}
+
+/**
  * 派发表格-容器联动触发器（PageDataTable 注入 pageActionBus 后调用）。
  * 匹配表单级动作链（trigger + source），执行步骤；返回是否被消费（表格据此跳过默认行为）。
  */
@@ -702,38 +731,7 @@ function dispatchAction(trigger: string, eventData: any): boolean {
     if (action.trigger !== trigger) continue
     if (action.source && action.source !== source) continue
     for (const step of action.steps || []) {
-      const op = step.op
-      const target = step.target
-      if (op === 'open-container') {
-        // 容器 displayMode 优先（属性面板配置为准），step.displayMode 为兜底，默认 dialog
-        const mode = containerModes.get(target) || step.displayMode || 'dialog'
-        // 共享打开逻辑：dialog/inline 统一清空 formData + 显示 + 引擎 loadRecord；
-        // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）；
-        // row-view 触发 → 只读查看（字段禁用、仅关闭按钮）
-        const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-        openContainer(target || '', rid, mode as any, trigger === 'row-view')
-        consumed = true
-      } else if (op === 'load-record') {
-        const rid = step.recordId
-          ? resolveTemplateValue(step.recordId, eventData)
-          : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-        if (rid) {
-          // 优先加载到容器引擎（如有匹配），否则加载到主引擎
-          loadContainerRecord(target, rid, () => void bindingEngine.value?.loadRecord(rid))
-        }
-        consumed = true
-      } else if (op === 'save-container') {
-        // 冲刷容器引擎；无容器时回退主引擎
-        flushContainer(target, () => void bindingEngine.value?.flush())
-        consumed = true
-      } else if (op === 'close-container') {
-        closeContainer(target)
-        consumed = true
-      } else if (op === 'reload-record') {
-        const rid = props.recordId?.()
-        if (rid) void bindingEngine.value?.loadRecord(rid)
-        consumed = true
-      }
+      if (runStep(step, eventData, trigger)) consumed = true
     }
   }
   return consumed
@@ -758,6 +756,8 @@ provide('pageActionBus', {
   register: (dataSourceId: string, instance: any) => {
     componentRefs.set(dataSourceId, instance)
   },
+  /** 组件级动作链的容器动作委托（表格/卡片按钮无容器渲染能力）；trigger 由渲染器透传（row-view → 只读） */
+  runStep: (step: ActionStep, eventData: any, trigger?: string) => runStep(step, eventData, trigger),
 })
 
 /** 重新加载当前记录回显容器（记录上下文变化时由调用方触发） */

@@ -179,6 +179,33 @@ describe('DataSourceConfigPanel', () => {
     expect(vm.localActions[0].steps[0].recordId).toBe('{row.id}')
   })
 
+  it('步骤参数输入由清单驱动：按 op 渲染对应数量的输入框', () => {
+    const inputsOf = (op: string) =>
+      mountPanel({ actions: [{ trigger: 'row-edit', steps: [{ op, target: 'ds1' }] }] }).findAll('input').length
+    expect(inputsOf('set-filter')).toBe(2)
+    expect(inputsOf('reload-record')).toBe(1)
+    expect(inputsOf('load-record')).toBe(1)
+    expect(inputsOf('refresh')).toBe(0)
+    expect(inputsOf('close-container')).toBe(0)
+  })
+
+  it('reload-record 的 value 输入给出记录 ID 模板提示，set-filter 给过滤值提示', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'record-change', steps: [{ op: 'reload-record', target: 'ds1' }] }],
+    })
+    const vm = wrapper.vm as any
+    expect(vm.stepValuePlaceholder('reload-record')).toContain('记录ID')
+    expect(vm.stepValuePlaceholder('set-filter')).toContain('{node.id}')
+  })
+
+  it('总线动作下拉不含 set-value（运行时支持但暂无配置入口）', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'refresh', target: 'ds1' }] }],
+    })
+    const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).not.toContain('set-value')
+  })
+
   it('新增动作默认 steps 支持 open-container 配置', async () => {
     const wrapper = mountPanel({ actions: [] })
     const vm = wrapper.vm as any

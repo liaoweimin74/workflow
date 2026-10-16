@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createActionBus, type DsLink, type DsStep, type ActionExecutor } from './DsActionBus'
+import { createActionBus, type ActionExecutor } from './DsActionBus'
+import type { ActionLink, BusOp } from '@/types/pageActionCatalog'
 import type { TemplateContext } from './templateResolver'
 
 /** 构造记录 executor 调用的辅助函数 */
 function createRecordingExecutor() {
-  const calls: Array<{ op: DsStep['op']; target: string; resolved: Record<string, string> }> = []
+  const calls: Array<{ op: BusOp; target: string; resolved: Record<string, string> }> = []
   const executor: ActionExecutor = (op, target, resolved) => {
     calls.push({ op, target, resolved: { ...resolved } })
   }
@@ -16,7 +17,7 @@ describe('DsActionBus 表格-容器联动扩展', () => {
     it('open-container 动作分发到 executor 并传递 displayMode', async () => {
       const { calls, executor } = createRecordingExecutor()
       const bus = createActionBus(executor)
-      const link: DsLink = {
+      const link: ActionLink = {
         trigger: 'row-edit',
         steps: [{ op: 'open-container', target: 'form1', displayMode: 'dialog' }],
       }
@@ -33,7 +34,7 @@ describe('DsActionBus 表格-容器联动扩展', () => {
     it('load-record 动作将 recordId 模板解析后传递', async () => {
       const { calls, executor } = createRecordingExecutor()
       const bus = createActionBus(executor)
-      const link: DsLink = {
+      const link: ActionLink = {
         trigger: 'row-edit',
         steps: [{ op: 'load-record', target: 'form1', recordId: '{row.id}' }],
       }

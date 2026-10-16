@@ -25,6 +25,8 @@ vi.mock('@/api/data-source', () => ({
 
 vi.mock('@/views/form/schemaRules', () => ({
   normalizeForRender: (rules: any[]) => rules,
+  // 容器转只读时宿主调用 deepDisableRules（本文件只验证弹窗/标题状态，规则原样返回）
+  deepDisableRules: (rules: any[]) => rules,
 }))
 
 // form-create 桩：渲染 rule 节点——page-table 渲染为触发按钮（调用 transformComponent 注入的 on 处理器），
@@ -248,6 +250,46 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     await flushPromises()
     const dialog = wrapper.findComponent(ElDialogStub)
     expect(dialog.props('modelValue')).toBe(true)
+  })
+
+  it('组件级动作链经 bus.runStep 委托：页面级未配动作也能打开容器', async () => {
+    const schema = makePageSchema('dialog')
+    schema.actions = []
+    const wrapper = await mountPage(schema)
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { runStep?: (step: any, eventData: any) => boolean }
+      | undefined
+    expect(typeof bus!.runStep).toBe('function')
+
+    expect(bus!.runStep!({ op: 'open-container', target: 'dsForm' }, { row: { id: 'R1' } })).toBe(true)
+    await flushPromises()
+    expect(wrapper.findComponent(ElDialogStub).props('modelValue')).toBe(true)
+
+    // 非容器动作不由宿主接管（仍由渲染器自身执行）
+    expect(bus!.runStep!({ op: 'message', target: 'dsForm' }, { row: { id: 'R1' } })).toBe(false)
+  })
+
+  it('bus.runStep 透传触发器 row-view → 容器只读打开（标题「详情」）', async () => {
+    const schema = makePageSchema('dialog')
+    schema.actions = []
+    const wrapper = await mountPage(schema)
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { runStep?: (step: any, eventData: any, trigger?: string) => boolean }
+      | undefined
+
+    expect(bus!.runStep!({ op: 'open-container', target: 'dsForm' }, { row: { id: 'R1' } }, 'row-view')).toBe(true)
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(dialog.props('title')).toBe('详情')
+
+    // 不传触发器（如按钮事件链）→ 保持可编辑，标题用容器配置
+    bus!.runStep!({ op: 'close-container', target: 'dsForm' }, { row: { id: 'R1' } })
+    await flushPromises()
+    bus!.runStep!({ op: 'open-container', target: 'dsForm' }, { row: { id: 'R1' } }, 'click')
+    await flushPromises()
+    expect(wrapper.findComponent(ElDialogStub).props('title')).toBe('编辑员工')
   })
 
   it('load-record 动作将记录 ID 加载到联动容器引擎', async () => {

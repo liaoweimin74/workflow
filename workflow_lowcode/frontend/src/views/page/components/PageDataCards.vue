@@ -70,6 +70,7 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { leafDisplayText, withArrayLabels } from '@/views/form/arrayValueLabel'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
 import type { CardTheme, CardStyle } from '@/components/business/ListCards.types'
+import type { ActionStep, BusOp } from '@/types/pageActionCatalog'
 
 /** 卡片操作按钮配置（对齐 ViewDesigner.ViewActionButton / ListCards.actions） */
 interface ViewActionButton {
@@ -125,6 +126,8 @@ const actionBus = inject<{
   register?: (id: string, instance: any) => void
   hasLinkedContainer?: (id?: string) => boolean
   openLinkedContainer?: (id: string, mode: 'create' | 'edit' | 'view', row: any) => void
+  /** 容器类动作由宿主渲染，转交总线执行单个步骤；trigger 供宿主判定只读 */
+  runStep?: (step: ActionStep, eventData: any, trigger?: string) => boolean
 }>('pageActionBus')
 const cardsRef = ref<InstanceType<typeof ListCards>>()
 
@@ -428,15 +431,34 @@ function handleRowClick(row: any) {
   actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
 }
 
+/** 卡片-容器联动触发器映射（按钮 key → 页面总线触发器，对齐 PageDataTable） */
+const LINKAGE_TRIGGERS: Record<string, string> = {
+  edit: 'row-edit',
+  view: 'row-view',
+  create: 'row-create',
+}
+
 function handleActionClick(action: { key: string; label: string; events?: any[] }, row: any) {
-  // 有绑定事件 → 优先执行事件链（内建/自定义都一样，对齐 PageDataTable）
-  if (action.events?.length) {
+  // 有绑定事件且链里实际配了动作 → 优先执行事件链（内建/自定义都一样，对齐 PageDataTable）；
+  // 空链（面板保存了但没配动作）视为未配置，不能吞掉按钮，落回总线联动/默认行为
+  if ((action.events || []).some((ev: any) => (ev.actions || []).length > 0)) {
+    // 内置联动按钮的链也带触发器语义（view → row-view），供宿主判定只读
+    const chainTrigger = LINKAGE_TRIGGERS[action.key] || 'click'
     for (const ev of action.events) {
       for (const act of ev.actions || []) {
-        void dispatchButtonAction(act, row)
+        void dispatchButtonAction(act, row, chainTrigger)
       }
     }
     return
+  }
+  // 联动触发器：先派发到页面动作总线（动作链消费时跳过默认行为，避免双弹窗）
+  const linkageTrigger = LINKAGE_TRIGGERS[action.key]
+  if (linkageTrigger && actionBus) {
+    const consumed = actionBus.dispatch(
+      linkageTrigger,
+      row ? { node: row, row, source: props.dataSourceId } : { source: props.dataSourceId },
+    )
+    if (consumed) return
   }
   const mode = action.key === 'create' ? 'create' : action.key === 'view' ? 'view' : action.key === 'edit' ? 'edit' : undefined
   if (mode && actionBus?.hasLinkedContainer?.(props.dataSourceId) && actionBus.openLinkedContainer) {
@@ -493,8 +515,12 @@ function exportData() {
   URL.revokeObjectURL(url)
 }
 
-/** 执行单个事件链动作（ViewDesigner 风格：type/params），对齐 PageDataTable */
-async function dispatchButtonAction(action: { type: string; params?: { key: string; value: string }[] }, row: any) {
+/** 执行单个事件链动作（ViewDesigner 风格：type/params），对齐 PageDataTable；trigger 供容器动作委托宿主判定只读 */
+async function dispatchButtonAction(
+  action: { type: string; params?: { key: string; value: string }[] },
+  row: any,
+  trigger?: string,
+) {
   const resolved = resolveParams(action.params || [], row)
   switch (action.type) {
     case 'open-detail':
@@ -562,6 +588,20 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
         },
         $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
       })
+      break
+    }
+    case 'open-container':
+    case 'close-container':
+    case 'load-record':
+    case 'save-container': {
+      // 容器由宿主（PageRendererPage/FormRenderer）渲染：组装成总线步骤转交 runStep 执行
+      if (!actionBus?.runStep) {
+        console.warn('[page-cards] 宿主总线缺少 runStep，容器动作被忽略:', action.type)
+        break
+      }
+      const step: ActionStep = { op: action.type as BusOp, target: resolved.target || props.dataSourceId || '' }
+      if (resolved.recordId) step.recordId = resolved.recordId
+      actionBus.runStep(step, { row }, trigger)
       break
     }
     default:

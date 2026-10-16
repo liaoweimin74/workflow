@@ -167,6 +167,7 @@ import {
   exportPageDataToExcel,
   pageExcelUrl,
 } from './excelTransfer'
+import type { ActionStep, BusOp } from '@/types/pageActionCatalog'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
 const actionBus = inject<{
@@ -174,6 +175,8 @@ const actionBus = inject<{
   register?: (dataSourceId: string, instance: any) => void
   hasLinkedContainer?: (dataSourceId?: string) => boolean
   openLinkedContainer?: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => void
+  /** 容器类动作由宿主渲染，转交总线执行单个步骤；返回是否被消费 */
+  runStep?: (step: ActionStep, eventData: any, trigger?: string) => boolean
 } | undefined>('pageActionBus')
 
 const route = useRoute()
@@ -900,11 +903,14 @@ const LINKAGE_TRIGGERS: Record<string, string> = {
 }
 
 function handleActionClick(btn: any, row: any) {
-  // 有绑定事件 → 优先执行事件链（内建/自定义都一样，对齐 PageRenderer）
-  if (btn.events?.length) {
+  // 有绑定事件且链里实际配了动作 → 优先执行事件链（内建/自定义都一样，对齐 PageRenderer）；
+  // 空链（面板保存了但没配动作）视为未配置，不能吞掉按钮，落回总线联动/默认行为
+  if ((btn.events || []).some((ev: any) => (ev.actions || []).length > 0)) {
+    // 内置联动按钮的链也带触发器语义（view → row-view），供宿主判定只读
+    const chainTrigger = LINKAGE_TRIGGERS[btn.key] || 'click'
     for (const ev of btn.events) {
       for (const action of ev.actions || []) {
-        void dispatchButtonAction(action, row)
+        void dispatchButtonAction(action, row, chainTrigger)
       }
     }
     return
@@ -968,8 +974,12 @@ function exportData() {
   URL.revokeObjectURL(url)
 }
 
-/** 执行单个事件链动作（ViewDesigner 风格：type/params） */
-async function dispatchButtonAction(action: { type: string; params?: { key: string; value: string }[] }, row: any) {
+/** 执行单个事件链动作（ViewDesigner 风格：type/params）；trigger 供容器动作委托宿主判定只读 */
+async function dispatchButtonAction(
+  action: { type: string; params?: { key: string; value: string }[] },
+  row: any,
+  trigger?: string,
+) {
   const resolved = resolveParams(action.params || [], row)
   switch (action.type) {
     case 'open-detail':
@@ -1055,6 +1065,20 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
       })
       break
     }
+    case 'open-container':
+    case 'close-container':
+    case 'load-record':
+    case 'save-container': {
+      // 容器由宿主（PageRendererPage/FormRenderer）渲染：组装成总线步骤转交 runStep 执行
+      if (!actionBus?.runStep) {
+        console.warn('[page-table] 宿主总线缺少 runStep，容器动作被忽略:', action.type)
+        break
+      }
+      const step: ActionStep = { op: action.type as BusOp, target: resolved.target || props.dataSourceId || '' }
+      if (resolved.recordId) step.recordId = resolved.recordId
+      actionBus.runStep(step, { row }, trigger)
+      break
+    }
     default:
       console.warn('[page-table] 未知动作类型:', action.type)
   }
@@ -1133,7 +1157,7 @@ function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; co
     if (ev.trigger !== trigger) continue
     if (ev.target && ev.target !== target) continue
     for (const action of ev.actions || []) {
-      void dispatchButtonAction(action, ctx.row)
+      void dispatchButtonAction(action, ctx.row, trigger)
     }
   }
 }
@@ -1152,7 +1176,7 @@ function handleCellClick(row: any, column: any) {
   )
   if (col?.onCellClick?.actions?.length) {
     for (const action of col.onCellClick.actions) {
-      void dispatchButtonAction(action, row)
+      void dispatchButtonAction(action, row, 'cell-click')
     }
     return
   }

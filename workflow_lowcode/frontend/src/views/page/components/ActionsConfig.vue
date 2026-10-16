@@ -53,19 +53,24 @@
                 <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
               </el-select>
               <div v-for="(p, pi) in getActionParamsForKey(row.key, ai)" :key="pi" class="event-param-row">
-                <el-input
+                <el-select
                   :model-value="p.key"
-                  
+                  filterable
+                  allow-create
+                  default-first-option
                   placeholder="参数名"
                   style="width: 110px"
-                  @input="(v: string) => patchEventParam(row.key, ai, pi, { key: v })"
-                />
-                <el-input
+                  @change="(v: string) => patchEventParam(row.key, ai, pi, { key: v })"
+                >
+                  <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
+                </el-select>
+                <ChainParamInput
                   :model-value="p.value"
-                  
+                  :kind="chainParamKind(action.type, p.key)"
+                  :options="chainParamOptions(action.type, p.key)"
                   placeholder="值，支持 $row.xxx / $param.xxx"
-                  style="width: 200px"
-                  @input="(v: string) => patchEventParam(row.key, ai, pi, { value: v })"
+                  width="200px"
+                  @update:model-value="(v: string) => patchEventParam(row.key, ai, pi, { value: v })"
                 />
                 <el-button  link type="danger" @click="removeEventParam(row.key, ai, pi)">删</el-button>
               </div>
@@ -289,6 +294,8 @@ import {
 } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 import type { ViewActionsConfig, ViewActionButton, ViewDetailConfig } from './schemaTypes'
+import { chainActionOptions, chainParamKeyOptions, chainParamKind, chainParamOptions, syncActionParams } from '@/types/pageActionCatalog'
+import ChainParamInput from './ChainParamInput.vue'
 
 const props = defineProps<{
   modelValue: ViewActionsConfig
@@ -375,20 +382,8 @@ function unbindEvents(key: string) {
   setButtonEvents(key, [])
 }
 
-/** 动作类型选项（对齐 EventsConfig） */
-const actionTypeOptions = [
-  { label: '设置筛选', value: 'set-filter' },
-  { label: '刷新数据', value: 'refresh' },
-  { label: '打开详情', value: 'open-detail' },
-  { label: '打开链接', value: 'open-link' },
-  { label: '消息提示', value: 'message' },
-  { label: '脚本', value: 'script' },
-  // ===== 表格-容器联动动作 =====
-  { label: '打开容器', value: 'open-container' },
-  { label: '关闭容器', value: 'close-container' },
-  { label: '加载记录', value: 'load-record' },
-  { label: '保存容器', value: 'save-container' },
-]
+/** 动作类型选项（按钮事件链入口，未接线的容器动作不暴露） */
+const actionTypeOptions = chainActionOptions('button')
 
 const presetPermissions = [
   'page:create',
@@ -468,14 +463,17 @@ function setButtonEvents(key: string, events: any[]) {
   commit({ ...props.modelValue, buttons })
 }
 
+/** 新增动作的默认形态：消息提示 + 其约定参数行 */
+const newAction = () => ({ type: 'message', params: syncActionParams('message') })
+
 function addEventAction(key: string) {
   const btn = props.modelValue.buttons.find((b) => b.key === key)
   if (!btn) return
   const events = [...(btn.events || [])]
   if (events.length === 0) {
-    events.push({ trigger: 'click', actions: [{ type: 'message', params: [] }] })
+    events.push({ trigger: 'click', actions: [newAction()] })
   } else {
-    events[0] = { ...events[0], actions: [...(events[0].actions || []), { type: 'message', params: [] }] }
+    events[0] = { ...events[0], actions: [...(events[0].actions || []), newAction()] }
   }
   setButtonEvents(key, events)
 }
@@ -494,7 +492,15 @@ function patchEventAction(key: string, ai: number, patch: Record<string, any>) {
   if (!btn || !btn.events || btn.events.length === 0) return
   const ev = btn.events[0]
   if (!ev || !ev.actions) return
-  const events = [{ ...ev, actions: ev.actions.map((a: any, i: number) => (i === ai ? { ...a, ...patch } : a)) }]
+  const events = [{
+    ...ev,
+    actions: ev.actions.map((a: any, i: number) => {
+      if (i !== ai) return a
+      const merged = { ...a, ...patch }
+      // 换动作即按新类型补齐约定参数，省去手打参数名（script 的 source 等）
+      return patch.type ? { ...merged, params: syncActionParams(patch.type, a.params) } : merged
+    }),
+  }]
   setButtonEvents(key, events)
 }
 

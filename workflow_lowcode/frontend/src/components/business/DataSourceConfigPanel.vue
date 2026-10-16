@@ -62,13 +62,7 @@
         <div class="action-card" v-for="(ac, i) in localActions" :key="i">
           <div class="action-row">
             <el-select v-model="ac.trigger" style="width: 150px">
-              <el-option label="树节点点击" value="node-click" />
-              <el-option label="表格行点击" value="row-click" />
-              <el-option label="行编辑" value="row-edit" />
-              <el-option label="行查看" value="row-view" />
-              <el-option label="行新增" value="row-create" />
-              <el-option label="字段变化" value="field-change" />
-              <el-option label="记录变化" value="record-change" />
+              <el-option v-for="t in triggerOptions" :key="t.value" :label="t.label" :value="t.value" />
             </el-select>
             <el-select v-model="ac.source" placeholder="来源数据源" style="width: 130px" clearable>
               <el-option label="任意来源" value="" />
@@ -78,22 +72,14 @@
           </div>
           <div class="step-row" v-for="(step, si) in ac.steps" :key="si">
             <el-select v-model="step.op" style="width: 130px">
-              <el-option label="设置过滤" value="set-filter" />
-              <el-option label="刷新数据" value="refresh" />
-              <el-option label="重载记录" value="reload-record" />
-              <el-option label="保存记录" value="save-record" />
-              <el-option label="打开容器" value="open-container" />
-              <el-option label="加载记录" value="load-record" />
-              <el-option label="保存容器" value="save-container" />
-              <el-option label="关闭容器" value="close-container" />
+              <el-option v-for="o in opOptions" :key="o.value" :label="o.label" :value="o.value" />
             </el-select>
             <el-select v-model="step.target" placeholder="目标数据源" style="width: 130px">
               <el-option v-for="ds in localDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
             </el-select>
-            <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
-            <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
-            <!-- 显示模式（弹窗/新页签/内嵌）以容器属性面板配置为准，此处不再重复配置 -->
-            <el-input v-if="step.op === 'load-record'" v-model="step.recordId" placeholder="如 {row.id}" style="width: 100px" />
+            <el-input v-if="stepHasField(step, 'field')" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
+            <el-input v-if="stepHasField(step, 'value')" v-model="step.value" :placeholder="stepValuePlaceholder(step.op)" style="width: 130px" />
+            <el-input v-if="stepHasField(step, 'recordId')" v-model="step.recordId" placeholder="如 {row.id}" style="width: 100px" />
             <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
           </div>
           <el-button link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
@@ -101,7 +87,7 @@
         <el-button type="primary" plain @click="addAction">+ 添加动作</el-button>
         <div class="panel-tip">
           <el-icon><InfoFilled /></el-icon>
-          <span>动作链：触发事件 → 步骤列表。「设置过滤」的值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）；「加载记录」recordId 支持 {row.id} 模板</span>
+          <span>动作链：触发事件 → 步骤列表。值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）；「重载记录」用 value、「加载记录」用 recordId 传记录 ID 模板</span>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -112,6 +98,15 @@
 import { ref, watch } from 'vue'
 import { Plus, InfoFilled } from '@element-plus/icons-vue'
 import type { DataSourceDTO } from '@/api/data-source'
+import {
+  busOpOptions,
+  busStepFields,
+  busTriggerOptions,
+  type ActionStep,
+  type BusOp,
+  type BusStepField,
+  type PageAction,
+} from '@/types/pageActionCatalog'
 
 /** 数据源绑定类型 */
 export interface DataSourceBinding {
@@ -123,34 +118,6 @@ export interface DataSourceBinding {
   refId: string
   /** 搜索字段（可选） */
   searchFields?: string[]
-}
-
-/** 动作步骤类型 */
-export interface ActionStep {
-  /** 操作类型 */
-  op: 'set-filter' | 'refresh' | 'reload-record' | 'save-record'
-    | 'open-container' | 'load-record' | 'save-container' | 'close-container'
-  /** 目标数据源标识 */
-  target: string
-  /** 过滤字段（set-filter 时使用） */
-  field?: string
-  /** 过滤值模板（set-filter 时使用） */
-  value?: string
-  /** 显示模式（open-container 时使用，覆盖容器默认配置） */
-  displayMode?: 'dialog' | 'newTab' | 'inline'
-  /** 记录 ID 模板（load-record 时使用，如 {row.id}） */
-  recordId?: string
-}
-
-/** 动作类型 */
-export interface Action {
-  /** 触发事件 */
-  trigger: 'node-click' | 'row-click' | 'field-change' | 'record-change'
-    | 'row-edit' | 'row-view' | 'row-create'
-  /** 触发来源数据源（页面内标识；空 = 任意来源触发） */
-  source?: string
-  /** 步骤列表 */
-  steps: ActionStep[]
 }
 
 /** 验证错误类型 */
@@ -165,15 +132,29 @@ const props = defineProps<{
   /** 已启用的全局数据源列表 */
   enabledDataSources: DataSourceDTO[]
   /** 动作配置 */
-  actions?: Action[]
+  actions?: PageAction[]
 }>()
 
 const emit = defineEmits<{
   /** 更新数据源绑定配置 */
   (e: 'update:dataSources', value: DataSourceBinding[]): void
   /** 更新动作配置 */
-  (e: 'update:actions', value: Action[]): void
+  (e: 'update:actions', value: PageAction[]): void
 }>()
+
+/** 总线动作与触发器候选（来自 @/types/pageActionCatalog） */
+const opOptions = busOpOptions()
+const triggerOptions = busTriggerOptions()
+
+/** 当前 op 是否使用某参数槽（决定输入框是否渲染） */
+function stepHasField(step: ActionStep, field: BusStepField): boolean {
+  return busStepFields(step.op).includes(field)
+}
+
+/** value 输入框提示语：过滤值模板 / 记录 ID 模板 */
+function stepValuePlaceholder(op: BusOp): string {
+  return op === 'reload-record' ? '记录ID，如 {row.id}' : '如 {node.id}'
+}
 
 /** 当前激活的页签 */
 const activeTab = ref('ds')
@@ -182,7 +163,7 @@ const activeTab = ref('ds')
 const localDataSources = ref<DataSourceBinding[]>([...props.dataSources])
 
 /** 本地动作副本 */
-const localActions = ref<Action[]>([...(props.actions || [])])
+const localActions = ref<PageAction[]>([...(props.actions || [])])
 
 /** 验证错误 */
 const errors = ref<ValidationError[]>([])
@@ -228,7 +209,7 @@ function addAction() {
   localActions.value.push({
     trigger: 'row-edit',
     source: '',
-    steps: [{ op: 'open-container', target: firstDs, displayMode: 'dialog' }],
+    steps: [{ op: 'open-container', target: firstDs }],
   })
 }
 

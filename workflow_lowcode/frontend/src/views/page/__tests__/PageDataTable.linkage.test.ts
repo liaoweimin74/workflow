@@ -64,6 +64,8 @@ vi.mock('@/components/business/SearchTable.vue', () => {
 
 /** 页面动作总线 mock（provide 注入；默认返回 false = 无动作链消费） */
 const dispatchMock = vi.hoisted(() => vi.fn(() => false))
+/** 容器动作委托：宿主（PageRendererPage/FormRenderer）执行单个步骤 */
+const runStepMock = vi.fn()
 
 import PageDataTable from '../components/PageDataTable.vue'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -81,7 +83,7 @@ async function mountTable(buttons: any[]) {
     global: {
       plugins: [ElementPlus],
       provide: {
-        pageActionBus: { dispatch: dispatchMock, register: vi.fn() },
+        pageActionBus: { dispatch: dispatchMock, register: vi.fn(), runStep: runStepMock },
       },
       stubs: {
         'el-dialog': { props: ['modelValue'], template: '<div class="dlg-stub" />' },
@@ -100,7 +102,6 @@ beforeEach(() => {
   openFormDialogSpy.mockClear()
   activeDsBindings.value = [] // 重置模块级绑定（setActiveDsBindings 空数组不覆盖非空）
 })
-
 describe('PageDataTable 表格-容器联动事件触发', () => {
   it('点击编辑按钮派发 row-edit 事件（含当前行数据 + 来源 dataSourceId）', async () => {
     const wrapper = await mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
@@ -174,3 +175,152 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
     expect(dispatchMock).toHaveBeenCalledWith('row-click', expect.objectContaining({ row: ROW }))
   })
 })
+
+describe('PageDataTable 按钮容器动作委托宿主总线', () => {
+  it('空事件链（actions 为空数组）不吞按钮：落回总线联动派发', async () => {
+    dispatchMock.mockImplementation(() => true)
+    const wrapper = await mountTable([
+      { key: 'edit', label: '编辑', placement: 'column', events: [{ trigger: 'click', actions: [] }] },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+
+    expect(dispatchMock).toHaveBeenCalledWith('row-edit', expect.objectContaining({ row: ROW }))
+    // 总线已消费 → 内建编辑窗口不弹
+    expect(openEditSpy).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('open-container 动作 → 调用 bus.runStep，target 取 params.target，携带当前行上下文', async () => {
+    const wrapper = await mountTable([
+      {
+        key: 'detail',
+        label: '明细',
+        placement: 'column',
+        events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+      },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+
+    expect(runStepMock).toHaveBeenCalledTimes(1)
+    const [step, eventData] = runStepMock.mock.calls[0]
+    expect(step.op).toBe('open-container')
+    expect(step.target).toBe('ds_form')
+    expect(eventData.row).toEqual(ROW)
+    wrapper.unmount()
+  })
+
+  it('容器动作未填 target 时回退本表格数据源', async () => {
+    const wrapper = await mountTable([
+      {
+        key: 'detail',
+        label: '明细',
+        placement: 'column',
+        events: [{ trigger: 'click', actions: [{ type: 'close-container', params: [] }] }],
+      },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+
+    expect(runStepMock.mock.calls[0][0]).toEqual({ op: 'close-container', target: 'ds1' })
+    wrapper.unmount()
+  })
+
+  it('load-record 传 recordId：$row.id 在组件侧已解析为具体值', async () => {
+    const wrapper = await mountTable([
+      {
+        key: 'detail',
+        label: '明细',
+        placement: 'column',
+        events: [
+          {
+            trigger: 'click',
+            actions: [
+              {
+                type: 'load-record',
+                params: [
+                  { key: 'target', value: 'ds_form' },
+                  { key: 'recordId', value: '$row.id' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+
+    expect(runStepMock.mock.calls[0][0]).toEqual({ op: 'load-record', target: 'ds_form', recordId: 'R1' })
+    wrapper.unmount()
+  })
+
+  it('容器动作委托透传触发器：查看按钮链 row-view，表格事件链取自身触发器', async () => {
+    const wrapper = await mountTable([
+      {
+        key: 'view',
+        label: '查看',
+        placement: 'column',
+        events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+      },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    expect(runStepMock.mock.calls[0][2]).toBe('row-view')
+    wrapper.unmount()
+
+    // 表格事件链（viewEvents）：以配置的触发器为准透传
+    const evWrapper = mount(PageDataTable, {
+      props: {
+        pageKey: 'p1',
+        dataSourceId: 'ds1',
+        dsRefId: 'global1',
+        viewEvents: [
+          { trigger: 'row-click', target: 'table', actions: [{ type: 'load-record', params: [{ key: 'target', value: 'ds_form' }] }] },
+        ],
+      },
+      global: {
+        plugins: [ElementPlus],
+        provide: { pageActionBus: { dispatch: dispatchMock, register: vi.fn(), runStep: runStepMock } },
+        stubs: { 'el-dialog': { props: ['modelValue'], template: '<div class="dlg-stub" />' } },
+      },
+    })
+    await flushPromises()
+    runStepMock.mockClear()
+    evWrapper.findComponent({ name: 'SearchTableStub' }).vm.$emit('row-click', ROW)
+    await flushPromises()
+    expect(runStepMock).toHaveBeenCalledTimes(1)
+    expect(runStepMock.mock.calls[0][2]).toBe('row-click')
+    evWrapper.unmount()
+  })
+
+  it('save-container 同样委托宿主（宿主缺失时不抛错）', async () => {
+    const wrapper = await mountTable([
+      {
+        key: 'detail',
+        label: '明细',
+        placement: 'column',
+        events: [{ trigger: 'click', actions: [{ type: 'save-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+      },
+    ])
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+    expect(runStepMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+
+    // 无 runStep 的宿主（存量页面）：仅告警，不影响其余动作
+    const noBus = mount(PageDataTable, {
+      props: { pageKey: 'p1', dataSourceId: 'ds1', viewActions: { buttons: [] } },
+      global: {
+        plugins: [ElementPlus],
+        provide: { pageActionBus: { dispatch: vi.fn(() => false) } },
+        stubs: { 'el-dialog': { props: ['modelValue'], template: '<div class="dlg-stub" />' } },
+      },
+    })
+    await flushPromises()
+    await (noBus.vm as any).dispatchButtonAction({ type: 'open-container', params: [] }, ROW)
+    await flushPromises()
+    noBus.unmount()
+  })
+})
+

@@ -54,19 +54,24 @@
           </el-select>
           <div class="action-params">
             <div v-for="(row, pi) in action.params" :key="pi" class="param-row">
-              <el-input
+              <el-select
                 :model-value="row.key"
-                
+                filterable
+                allow-create
+                default-first-option
                 placeholder="参数名"
                 style="width: 120px"
-                @input="(v: string) => patchParamKey(idx, ai, pi, v)"
-              />
-              <el-input
+                @change="(v: string) => patchParamKey(idx, ai, pi, v)"
+              >
+                <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
+              </el-select>
+              <ChainParamInput
                 :model-value="row.value"
-                
+                :kind="chainParamKind(action.type, row.key)"
+                :options="chainParamOptions(action.type, row.key)"
                 placeholder="值，支持 $row.xxx / $param.xxx 变量"
-                style="width: 220px"
-                @input="(v: string) => patchParamValue(idx, ai, pi, v)"
+                width="220px"
+                @update:model-value="(v: string) => patchParamValue(idx, ai, pi, v)"
               />
               <el-button  link type="danger" @click="removeParam(idx, ai, pi)">删</el-button>
             </div>
@@ -84,20 +89,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
-
-export interface EventActionParam {
-  key: string
-  value: string
-}
-export interface EventAction {
-  type: string
-  params: EventActionParam[]
-}
-export interface PageEventConfig {
-  trigger: string
-  target: string
-  actions: EventAction[]
-}
+import {
+  CHAIN_TABLE_ONLY_TRIGGERS,
+  chainActionOptions,
+  chainParamKeyOptions,
+  chainParamKind,
+  chainParamOptions,
+  chainTriggerLabel,
+  chainTriggerOptions,
+  syncActionParams,
+  type EventAction,
+  type EventActionParam,
+  type PageEventConfig,
+} from '@/types/pageActionCatalog'
+import ChainParamInput from './ChainParamInput.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: PageEventConfig[]
@@ -111,62 +116,21 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: PageEventConfig[]): void
 }>()
 
-/** 表格专属触发器（卡片模式过滤；首版 selection/cell 能力未实现，后续放开） */
-const TABLE_ONLY_TRIGGERS = new Set(['cell-click', 'selection-change', 'current-change'])
-
-/** 全部触发器候选（表格模式全部展示） */
-const ALL_TRIGGERS = [
-  { label: '行点击', value: 'row-click' },
-  // ===== 表格-容器联动触发器 =====
-  { label: '行编辑', value: 'row-edit' },
-  { label: '行查看', value: 'row-view' },
-  { label: '行新增', value: 'row-create' },
-  { label: '搜索', value: 'search' },
-  { label: '刷新', value: 'refresh' },
-  { label: '新增成功', value: 'create-success' },
-  { label: '单元格点击', value: 'cell-click' },
-  { label: '行选择变化', value: 'selection-change' },
-  { label: '当前行变化', value: 'current-change' },
-  // ===== 表单容器触发器 =====
-  { label: '弹窗打开', value: 'dialog-open' },
-  { label: '弹窗关闭', value: 'dialog-close' },
-  { label: '加载记录成功', value: 'load-success' },
-  { label: '保存成功', value: 'save-success' },
-  { label: '删除成功', value: 'delete-success' },
-]
+/** 动作候选（组件级动作链入口，未接线的容器动作不暴露） */
+const actionTypeOptions = chainActionOptions('event')
 
 /** 按模式过滤后的触发器候选（card 过滤表格专属） */
-const triggerOptions = computed(() =>
-  props.mode === 'card'
-    ? ALL_TRIGGERS.filter((t) => !TABLE_ONLY_TRIGGERS.has(t.value))
-    : ALL_TRIGGERS,
-)
+const triggerOptions = computed(() => chainTriggerOptions(props.mode))
 
 /** 当前模式被过滤掉的触发器值集合（用于旧数据兼容渲染） */
 const filteredTriggerValues = computed(() =>
-  props.mode === 'card' ? TABLE_ONLY_TRIGGERS : new Set<string>(),
+  props.mode === 'card' ? CHAIN_TABLE_ONLY_TRIGGERS : new Set<string>(),
 )
 
-/** 表格专属触发器中文标签（旧数据兼容项展示） */
+/** 触发器中文标签（旧数据兼容项展示） */
 function legacyTriggerLabel(value: string): string {
-  return ALL_TRIGGERS.find((t) => t.value === value)?.label || value
+  return chainTriggerLabel(value)
 }
-
-const actionTypeOptions = [
-  { label: '设置筛选', value: 'set-filter' },
-  { label: '刷新数据', value: 'refresh' },
-  { label: '打开详情', value: 'open-detail' },
-  { label: '脚本', value: 'script' },
-  { label: '设置排序', value: 'set-sort' },
-  { label: '设置分页', value: 'set-page' },
-  { label: '清空选择', value: 'clear-selection' },
-  // ===== 表单容器专属动作 =====
-  { label: '打开容器', value: 'open-container' },
-  { label: '关闭容器', value: 'close-container' },
-  { label: '加载记录', value: 'load-record' },
-  { label: '保存容器', value: 'save-container' },
-  { label: '新增记录', value: 'new-record' }, // 复制后创建
-]
 
 function commit(v: PageEventConfig[]) {
   emit('update:modelValue', v)
@@ -203,7 +167,12 @@ function patchAction(idx: number, ai: number, patch: Partial<EventAction>) {
   const ev = props.modelValue[idx]
   const next: PageEventConfig = {
     ...ev,
-    actions: ev.actions.map((a, i) => (i === ai ? { ...a, ...patch } : a)),
+    actions: ev.actions.map((a, i) => {
+      if (i !== ai) return a
+      const merged = { ...a, ...patch }
+      // 换动作即按新类型补齐约定参数，省去手打参数名（script 的 source 等）
+      return patch.type ? { ...merged, params: syncActionParams(patch.type, a.params) } : merged
+    }),
   }
   commit(props.modelValue.map((e, i) => (i === idx ? next : e)))
 }

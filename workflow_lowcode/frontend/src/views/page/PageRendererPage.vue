@@ -111,6 +111,7 @@ import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { useLinkageContainer } from '@/views/form/composables/useLinkageContainer'
 import { registerAiComponent, unregisterAiComponent } from '@/utils/aiPageBridge'
+import { CONTAINER_OPS, type ActionStep } from '@/types/pageActionCatalog'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -158,6 +159,16 @@ provide(ACTION_BUS_KEY, {
     if (!c) return
     const rid = mode === 'create' ? '' : String(row?.id ?? '')
     openContainer(dataSourceId, rid, undefined, mode === 'view')
+  },
+  /**
+   * 组件级动作链（表格/卡片按钮）的容器动作委托：容器渲染只在本宿主，
+   * 渲染器把步骤转过来执行；非容器动作返回 false 表示未消费。
+   * trigger 由渲染器透传（row-view → 只读打开，与页面总线同一判定）。
+   */
+  runStep: (step: ActionStep, eventData: any, trigger?: string) => {
+    if (!CONTAINER_OPS.has(step.op)) return false
+    executeStep(step, eventData, trigger)
+    return true
   },
 })
 const route = useRoute()

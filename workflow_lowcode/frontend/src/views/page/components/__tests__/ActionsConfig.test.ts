@@ -169,8 +169,7 @@ describe('ActionsConfig — 自定义按钮事件绑定', () => {
     wrapper.unmount()
   })
 
-  it('hasEvents：有事件返回 true，无事件 false', async () => {
-    const wrapper = createWrapper({
+  it('hasEvents：有事件返回 true，无事件 false', async () => {    const wrapper = createWrapper({
       buttons: [
         { key: 'approve', label: '审核', placement: 'column', style: 'text', events: [{ trigger: 'click', actions: [] }] },
         { key: 'reject', label: '驳回', placement: 'column', style: 'text', events: [] },
@@ -324,6 +323,74 @@ describe('ActionsConfig — 权限点多选 Tag', () => {
     const last = emitted[emitted.length - 1][0]
     expect(last.permissions).toBe('page:create,page:view')
     expect(last.buttons.length).toBe(3)
+    wrapper.unmount()
+  })
+})
+
+describe('ActionsConfig — 动作参数按类型自动补齐', () => {
+  const buttonsWithAction = (type: string, params: any[] = []) => ({
+    buttons: [
+      {
+        key: 'approve',
+        label: '审核',
+        placement: 'column',
+        style: 'text',
+        events: [{ trigger: 'click', actions: [{ type, params }] }],
+      },
+    ],
+    permissions: '',
+  })
+
+  const lastEvents = (wrapper: any) => {
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    return emitted[emitted.length - 1][0].buttons[0].events
+  }
+
+  it('新增动作即带默认动作的约定参数行（message → text/type）', async () => {
+    const wrapper = createWrapper({
+      buttons: [{ key: 'approve', label: '审核', placement: 'column', style: 'text', events: [] }],
+      permissions: '',
+    })
+    await nextTick()
+    ;(wrapper.vm as any).addEventAction('approve')
+    await nextTick()
+    expect(lastEvents(wrapper)[0].actions[0].params).toEqual([
+      { key: 'text', value: '' },
+      { key: 'type', value: '' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('切动作类型补齐参数：script → source', async () => {
+    const wrapper = createWrapper(buttonsWithAction('refresh'))
+    await nextTick()
+    ;(wrapper.vm as any).patchEventAction('approve', 0, { type: 'script' })
+    await nextTick()
+    expect(lastEvents(wrapper)[0].actions[0].params).toEqual([{ key: 'source', value: '' }])
+    wrapper.unmount()
+  })
+
+  it('切类型保留同名参数值，不丢已填内容', async () => {
+    const wrapper = createWrapper(
+      buttonsWithAction('script', [{ key: 'source', value: 'actions.refresh()' }]),
+    )
+    await nextTick()
+    ;(wrapper.vm as any).patchEventAction('approve', 0, { type: 'message' })
+    await nextTick()
+    ;(wrapper.vm as any).patchEventAction('approve', 0, { type: 'script' })
+    await nextTick()
+    expect(lastEvents(wrapper)[0].actions[0].params).toEqual([{ key: 'source', value: 'actions.refresh()' }])
+    wrapper.unmount()
+  })
+
+  it('set-filter 无约定参数：切走再切回不抹掉过滤字段', async () => {
+    const wrapper = createWrapper(
+      buttonsWithAction('set-filter', [{ key: 'status', value: '$row.status' }]),
+    )
+    await nextTick()
+    ;(wrapper.vm as any).patchEventAction('approve', 0, { type: 'refresh' })
+    await nextTick()
+    expect(lastEvents(wrapper)[0].actions[0].params).toEqual([{ key: 'status', value: '$row.status' }])
     wrapper.unmount()
   })
 })

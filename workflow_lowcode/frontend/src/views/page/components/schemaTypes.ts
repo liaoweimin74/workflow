@@ -1,6 +1,10 @@
 // 页面/组件级数据源 schema 类型（原由 ViewDesigner.vue 宿主导出，ViewDesigner 废弃后迁出至此，
 // 供 ActionsConfig / EventsConfig / ColumnAdvancedConfig / QueryColumnsConfig / SearchFieldsConfig 等共享组件引用）。
 
+import type { ButtonEventConfig, CellClickConfig, PageEventConfig } from '@/types/pageActionCatalog'
+
+export type { ButtonEventConfig, CellClickConfig, PageEventConfig }
+
 /** 搜索字段配置 */
 export interface SearchFieldConfig {
   key: string
@@ -35,7 +39,7 @@ export interface ColumnViewConfig {
   /** 统一字段样式（结构化，替代 className/styleExpr） */
   style?: import('@/utils/fieldStyle').FieldStyle
   /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
-  onCellClick?: { actions: any[] }
+  onCellClick?: CellClickConfig
   /** 汇总行聚合（Task ⑤）：sum/avg/count/max/min；数值列开放 sum/avg/max/min；全类型可 count；按当前页数据统计 */
   aggregate?: 'sum' | 'avg' | 'count' | 'max' | 'min'
   /** 自定义计算列标记（key 非数据源字段；由"添加自定义列"写入，后端编译时跳过引用列校验） */
@@ -55,7 +59,7 @@ export interface ViewActionButton {
   /** 图标名（Element Plus 图标，如 Plus/Edit/Delete/View；留空按内置 key 兜底） */
   icon?: string
   /** 自定义按钮事件链（点击触发）；内置按钮无需 */
-  events?: any[]
+  events?: ButtonEventConfig[]
   /** 条件显示表达式（如 $row.status === 'PENDING'） */
   visible?: string
 }

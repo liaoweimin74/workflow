@@ -273,6 +273,72 @@ describe('PageDataCards', () => {
     wrapper.unmount()
   })
 
+  it('编辑按钮先派发总线联动触发器 row-edit', async () => {
+    const dispatch = vi.fn(() => false)
+    const openLinkedContainer = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'edit', label: '编辑' }] },
+      },
+      global: { provide: { pageActionBus: { dispatch, hasLinkedContainer: () => false, openLinkedContainer } } },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'edit', label: '编辑' }, { id: 7, name: '订单' })
+
+    expect(dispatch).toHaveBeenCalledWith('row-edit', { node: { id: 7, name: '订单' }, row: { id: 7, name: '订单' }, source: 'orders' })
+    wrapper.unmount()
+  })
+
+  it('总线消费了 row-edit 时不再落回默认编辑行为', async () => {
+    const dispatch = vi.fn(() => true)
+    const openLinkedContainer = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'edit', label: '编辑' }] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch, hasLinkedContainer: () => true, openLinkedContainer } },
+        stubs: {
+          'el-dialog': { props: ['modelValue', 'title'], template: '<div v-if="modelValue" class="default-form-dialog"><slot /></div>' },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'edit', label: '编辑' }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    expect(dispatch).toHaveBeenCalledWith('row-edit', expect.objectContaining({ source: 'orders' }))
+    expect(openLinkedContainer).not.toHaveBeenCalled()
+    expect(wrapper.find('.default-form-dialog').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('查看按钮派发 row-view，工具栏新增按钮派发 row-create（无行数据）', async () => {
+    const dispatch = vi.fn(() => false)
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'view', label: '查看' }, { key: 'create', label: '新增', placement: 'toolbar' }] },
+      },
+      global: { provide: { pageActionBus: { dispatch, hasLinkedContainer: () => false } } },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'view', label: '查看' }, { id: 7, name: '订单' })
+    await cardsStub.vm.$emit('toolbar-action', { key: 'create', label: '新增' })
+
+    expect(dispatch).toHaveBeenCalledWith('row-view', expect.objectContaining({ row: { id: 7, name: '订单' }, source: 'orders' }))
+    expect(dispatch).toHaveBeenCalledWith('row-create', { source: 'orders' })
+    wrapper.unmount()
+  })
+
   it('带事件链的按钮优先执行事件链，不落回默认编辑行为', async () => {
     const wrapper = mount(PageDataCards, {
       props: {
@@ -534,6 +600,127 @@ describe('PageDataCards', () => {
     const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
     const col = cardsStub.props('columns').find((c: any) => c.prop === 'dept')
     expect(col?.formatter).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('PageDataCards 按钮容器动作委托宿主总线', () => {
+  it('卡片按钮 open-container → 调用 bus.runStep 并携带当前行', async () => {
+    const runStep = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: {
+          buttons: [
+            {
+              key: 'detail',
+              label: '明细',
+              events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+            },
+          ],
+        },
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false, runStep } } },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', {
+      key: 'detail',
+      label: '明细',
+      events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+    }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    expect(runStep).toHaveBeenCalledTimes(1)
+    const [step, eventData] = runStep.mock.calls[0]
+    expect(step).toEqual({ op: 'open-container', target: 'ds_form' })
+    expect(eventData.row).toEqual({ id: 7, name: '订单' })
+    wrapper.unmount()
+  })
+
+  it('容器动作委托透传联动触发器：查看按钮链按 row-view（宿主据此只读打开容器）', async () => {
+    const runStep = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: {
+          buttons: [
+            { key: 'view', label: '查看', events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }] },
+            { key: 'detail', label: '明细', events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }] },
+          ],
+        },
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false, runStep } } },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', {
+      key: 'view', label: '查看',
+      events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+    }, { id: 7, name: '订单' })
+    await cardsStub.vm.$emit('action-click', {
+      key: 'detail', label: '明细',
+      events: [{ trigger: 'click', actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_form' }] }] }],
+    }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    expect(runStep.mock.calls[0][2]).toBe('row-view')
+    // 非内置联动 key 无只读语义，透传按钮自身的 click 触发器
+    expect(runStep.mock.calls[1][2]).toBe('click')
+    wrapper.unmount()
+  })
+
+  it('空事件链（actions 为空数组）不吞按钮：落回总线联动派发', async () => {
+    const dispatch = vi.fn(() => true)
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'edit', label: '编辑', events: [{ trigger: 'click', actions: [] }] }] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch, hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': { props: ['modelValue', 'title'], template: '<div v-if="modelValue" class="default-form-dialog"><slot /></div>' },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'edit', label: '编辑', events: [{ trigger: 'click', actions: [] }] }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    expect(dispatch).toHaveBeenCalledWith('row-edit', expect.objectContaining({ row: { id: 7, name: '订单' } }))
+    expect(wrapper.find('.default-form-dialog').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('宿主未提供 runStep 时静默跳过（不抛错）', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: {
+          buttons: [
+            { key: 'detail', label: '明细', events: [{ trigger: 'click', actions: [{ type: 'load-record', params: [] }] }] },
+          ],
+        },
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } } },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', {
+      key: 'detail',
+      label: '明细',
+      events: [{ trigger: 'click', actions: [{ type: 'load-record', params: [] }] }],
+    }, { id: 7 })
+    await flushPromises()
     wrapper.unmount()
   })
 })

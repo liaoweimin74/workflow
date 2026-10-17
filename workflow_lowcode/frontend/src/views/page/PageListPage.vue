@@ -1,29 +1,38 @@
 <template>
   <div class="page-list-page">
-    <el-card style="overflow: hidden">
-      <SearchTable
-        ref="tableRef"
-        :search-fields="searchFields"
-        :columns="columns"
-        :action-buttons="actionButtons"
-        :fetch-api="fetchApi"
-        :form-config="formConfig"
-        :default-page-size="20"
-        :max-visible-buttons="4"
-      >
-        <template #status="{ row }">
-          <el-tag :type="statusTagType(row.status)">
-            {{ statusLabel(row.status) }}
-          </el-tag>
-        </template>
-        <template #formKey="{ row }">
-          <span>{{ row.formKey || '—' }}</span>
-        </template>
-        <template #updatedAt="{ row }">
-          {{ formatDate(row.updatedAt) }}
-        </template>
-      </SearchTable>
-    </el-card>
+    <el-tabs v-model="activeTab" class="page-list-tabs">
+      <el-tab-pane label="页面" name="pages">
+        <el-card style="overflow: hidden">
+          <SearchTable
+            ref="tableRef"
+            :search-fields="searchFields"
+            :columns="columns"
+            :action-buttons="actionButtons"
+            :fetch-api="fetchApi"
+            :form-config="formConfig"
+            :default-page-size="20"
+            :max-visible-buttons="4"
+          >
+            <template #status="{ row }">
+              <el-tag :type="statusTagType(row.status)">
+                {{ statusLabel(row.status) }}
+              </el-tag>
+            </template>
+            <template #formKey="{ row }">
+              <span>{{ row.formKey || '—' }}</span>
+            </template>
+            <template #updatedAt="{ row }">
+              {{ formatDate(row.updatedAt) }}
+            </template>
+          </SearchTable>
+        </el-card>
+      </el-tab-pane>
+      <el-tab-pane label="模板" name="templates" lazy>
+        <el-card style="overflow: hidden">
+          <PageTemplateTab />
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 挂接菜单弹窗：多挂接 + 已挂列表管理 -->
     <el-dialog v-model="mountDialogVisible" :title="`挂接到系统菜单 - ${mountTarget?.name || ''}`" width="560px">
@@ -84,10 +93,14 @@ import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/compo
 import { pageApi, type PageDefinitionDTO, type PageMenuItem } from '@/api/page'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import { useAuthStore } from '@/stores/auth'
+import PageTemplateTab from './PageTemplateTab.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
+
+/** 页面 / 模板 两个 Tab */
+const activeTab = ref<'pages' | 'templates'>('pages')
 
 /** 已发布业务表单（创建弹窗 formKey 下拉候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
@@ -352,19 +365,33 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 对齐用户管理布局标准：根容器撑满 main，卡片与内部 SearchTable 逐级接管剩余高度 */
+/* 对齐用户管理布局标准：根容器撑满 main，tabs 接管剩余高度，卡片与内部 SearchTable 逐级填满 */
 .page-list-page {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
-.page-list-page > :deep(.el-card) {
+.page-list-tabs {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.page-list-page > :deep(.el-card__body) {
+.page-list-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.page-list-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+/* 只命中 tab pane 的直接子卡片，避免波及 SearchTable 内部的 .search-card 等嵌套 el-card */
+.page-list-tabs :deep(.el-tab-pane > .el-card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.page-list-tabs :deep(.el-tab-pane > .el-card > .el-card__body) {
   flex: 1;
   min-height: 0;
   overflow: hidden;

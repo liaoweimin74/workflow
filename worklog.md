@@ -8515,3 +8515,20 @@ Work Log:
 
 Stage Summary:
 - r98 全绿 200×4 真绿，重供给 #49 单轮内恢复，零 mvn 33 次，累计重供给 49 次；内存 3.58GB 备案（vite 710MB/java 465MB）
+
+---
+
+Task ID: r99
+Agent: main (巡检)
+Task: 2026-10-17 20:05 cron 巡检（重供给 #50 恢复，里程碑第 50 次）
+
+Work Log:
+- 探测：8080=500 no such table（重供给 #50）；本轮 dump-db 失败 rc=1（workflow dump 无效——库被重置为空，脚本正确放弃，属重供给预期现象非脚本故障）
+- 标准流水线：重拼 md5 e369839b ✓ → recover 全链路 33 秒（MariaDB 重建→最新 dump 导入→jar 恢复→Java 拉起，零 mvn 第 34 次）
+- 域名 Host 必测 200 ✓；四链路 200×4；40 秒稳定复验通过（java 1427 / vite 1166）
+- 内存备案：cgroup 3.63GB 超 3.5GB 线 —— vite RSS 522MB、java RSS 467MB，重编译期水位，无 oom
+- 收口：dump-db OK 20261017-120738（恢复后快照闭环补回，workflow 260K / v6 128K 数据完整）
+
+Stage Summary:
+- r99 全绿 200×4 真绿，重供给 #50 单轮内恢复（累计 50 次，频率稳定 ~1 次/小时持续 50 轮）；零 mvn 34 次
+- dump-db 在重供给窗口的 rc=1 为预期行为（空库 dump 无效即放弃），恢复后收口 dump 成功即闭环

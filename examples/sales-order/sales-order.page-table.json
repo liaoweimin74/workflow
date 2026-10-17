@@ -1,0 +1,29 @@
+{
+  "_note": "页面设计器「数据表格」组件片段：订单列表页。type 须为 page-table；dataSourceId 替换为『销售订单』业务表单发布后自动生成的 FORM 数据源 refId；columns 取 column_config 中的列 key。",
+  "component": {
+    "type": "page-table",
+    "field": "table_sales_order_list",
+    "title": "销售订单列表",
+    "props": {
+      "dataSourceId": "REPLACE_WITH_销售订单_FORM数据源refId",
+      "border": true,
+      "stripe": true,
+      "sortable": true,
+      "filterable": true,
+      "pagination": true,
+      "pageSize": 10,
+      "selectionMode": "none",
+      "actionColumnWidth": 0,
+      "columns": [
+        { "prop": "order_no", "label": "订单编号", "sortable": true, "filterable": true },
+        { "prop": "customer_text", "label": "客户", "sortable": false, "filterable": true },
+        { "prop": "order_date", "label": "下单日期", "sortable": true, "filterable": false },
+        { "prop": "warehouse_text", "label": "发货仓库", "sortable": false, "filterable": false },
+        { "prop": "contact_name", "label": "联系人", "sortable": false, "filterable": true },
+        { "prop": "order_amount", "label": "订单总金额", "sortable": true, "filterable": false },
+        { "prop": "due_amount", "label": "应收金额", "sortable": true, "filterable": false },
+        { "prop": "remark", "label": "备注", "sortable": false, "filterable": false }
+      ]
+    }
+  }
+}

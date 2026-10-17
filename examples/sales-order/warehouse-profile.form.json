@@ -1,0 +1,55 @@
+{
+  "form": {
+    "name": "仓库档案",
+    "key": "warehouse_profile",
+    "type": "BUSINESS"
+  },
+  "option": {
+    "form": {
+      "formCreateFormName": "仓库档案",
+      "labelWidth": "110px"
+    }
+  },
+  "dataSources": [],
+  "actions": [],
+  "rule": [
+    {
+      "type": "input",
+      "field": "warehouse_code",
+      "title": "仓库编码",
+      "$required": true,
+      "props": {
+        "placeholder": "如 WH-0001"
+      }
+    },
+    {
+      "type": "input",
+      "field": "name",
+      "title": "仓库名称",
+      "$required": true
+    },
+    {
+      "type": "input",
+      "field": "address",
+      "title": "仓库地址"
+    },
+    {
+      "type": "input",
+      "field": "manager",
+      "title": "负责人"
+    },
+    {
+      "type": "input",
+      "field": "phone",
+      "title": "联系电话"
+    },
+    {
+      "type": "textarea",
+      "field": "remark",
+      "title": "备注",
+      "props": {
+        "rows": 3
+      }
+    }
+  ]
+}

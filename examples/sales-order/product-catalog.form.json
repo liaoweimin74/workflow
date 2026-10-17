@@ -1,0 +1,82 @@
+{
+  "form": {
+    "name": "产品档案",
+    "key": "product_catalog",
+    "type": "BUSINESS"
+  },
+  "option": {
+    "form": {
+      "formCreateFormName": "产品档案",
+      "labelWidth": "110px"
+    }
+  },
+  "dataSources": [],
+  "actions": [],
+  "rule": [
+    {
+      "type": "input",
+      "field": "product_code",
+      "title": "产品编码",
+      "$required": true,
+      "props": {
+        "placeholder": "如 SKU-0001"
+      }
+    },
+    {
+      "type": "input",
+      "field": "product_name",
+      "title": "产品名称",
+      "$required": true
+    },
+    {
+      "type": "input",
+      "field": "spec",
+      "title": "规格型号"
+    },
+    {
+      "type": "select",
+      "field": "unit",
+      "title": "计量单位",
+      "props": {
+        "placeholder": "请选择"
+      },
+      "options": [
+        { "label": "个", "value": "PCS" },
+        { "label": "箱", "value": "BOX" },
+        { "label": "套", "value": "SET" },
+        { "label": "千克", "value": "KG" }
+      ]
+    },
+    {
+      "type": "inputNumber",
+      "field": "price",
+      "title": "标准单价",
+      "$required": true,
+      "props": {
+        "min": 0,
+        "precision": 2
+      }
+    },
+    {
+      "type": "inputNumber",
+      "field": "stock_qty",
+      "title": "当前库存",
+      "props": {
+        "min": 0,
+        "precision": 0
+      }
+    },
+    {
+      "type": "select",
+      "field": "status",
+      "title": "状态",
+      "props": {
+        "placeholder": "请选择"
+      },
+      "options": [
+        { "label": "在售", "value": "ON_SALE" },
+        { "label": "停售", "value": "OFF_SALE" }
+      ]
+    }
+  ]
+}

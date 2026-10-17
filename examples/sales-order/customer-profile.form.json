@@ -1,0 +1,73 @@
+{
+  "form": {
+    "name": "客户档案",
+    "key": "customer_profile",
+    "type": "BUSINESS"
+  },
+  "option": {
+    "form": {
+      "formCreateFormName": "客户档案",
+      "labelWidth": "110px"
+    }
+  },
+  "dataSources": [],
+  "actions": [],
+  "rule": [
+    {
+      "type": "input",
+      "field": "customer_code",
+      "title": "客户编码",
+      "$required": true,
+      "props": {
+        "placeholder": "如 CUS-0001"
+      }
+    },
+    {
+      "type": "input",
+      "field": "name",
+      "title": "客户名称",
+      "$required": true
+    },
+    {
+      "type": "input",
+      "field": "contact",
+      "title": "联系人",
+      "$required": true
+    },
+    {
+      "type": "input",
+      "field": "phone",
+      "title": "联系电话",
+      "props": {
+        "placeholder": "手机号或座机"
+      }
+    },
+    {
+      "type": "input",
+      "field": "address",
+      "title": "联系地址"
+    },
+    {
+      "type": "select",
+      "field": "credit_level",
+      "title": "信用等级",
+      "props": {
+        "placeholder": "请选择"
+      },
+      "options": [
+        { "label": "A（优质）", "value": "A" },
+        { "label": "B（良好）", "value": "B" },
+        { "label": "C（一般）", "value": "C" },
+        { "label": "D（受限）", "value": "D" }
+      ]
+    },
+    {
+      "type": "textarea",
+      "field": "remark",
+      "title": "备注",
+      "props": {
+        "rows": 3
+      }
+    }
+  ]
+}

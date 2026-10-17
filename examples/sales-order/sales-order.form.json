@@ -1,0 +1,349 @@
+{
+  "form": {
+    "name": "销售订单",
+    "key": "sales_order",
+    "type": "BUSINESS"
+  },
+  "option": {
+    "form": {
+      "formCreateFormName": "销售订单",
+      "labelWidth": "130px"
+    }
+  },
+  "dataSources": [
+    {
+      "id": "ds_customer",
+      "refId": "REPLACE_WITH_客户档案_数据源id"
+    },
+    {
+      "id": "ds_product",
+      "refId": "REPLACE_WITH_产品档案_数据源id"
+    },
+    {
+      "id": "ds_warehouse",
+      "refId": "REPLACE_WITH_仓库档案_数据源id"
+    }
+  ],
+  "actions": [],
+  "rule": [
+    {
+      "type": "input",
+      "field": "order_no",
+      "title": "订单编号",
+      "$required": true,
+      "props": {
+        "placeholder": "如 SO-20261015-001"
+      }
+    },
+    {
+      "type": "datePicker",
+      "field": "order_date",
+      "title": "下单日期",
+      "$required": true,
+      "props": {
+        "type": "date",
+        "valueFormat": "YYYY-MM-DD"
+      }
+    },
+    {
+      "type": "input",
+      "field": "customer_id",
+      "title": "客户记录ID",
+      "hidden": true
+    },
+    {
+      "type": "LookupPicker",
+      "field": "customer",
+      "title": "选择客户",
+      "info": "查找带回：从客户档案弹窗选择，选中的记录 id 写入 customer_id，联系人/电话自动回填",
+      "$required": true,
+      "props": {
+        "dataSourceId": "ds_customer",
+        "displayField": "name",
+        "columns": [
+          { "prop": "name", "label": "客户名称" },
+          { "prop": "contact", "label": "联系人" },
+          { "prop": "phone", "label": "联系电话" }
+        ],
+        "searchColumns": ["name"],
+        "idField": "customer_id",
+        "returnFields": {
+          "contact": "contact_name",
+          "phone": "contact_phone"
+        }
+      }
+    },
+    {
+      "type": "input",
+      "field": "contact_name",
+      "title": "联系人",
+      "props": {
+        "placeholder": "由查找带回自动回填"
+      }
+    },
+    {
+      "type": "input",
+      "field": "contact_phone",
+      "title": "联系电话",
+      "props": {
+        "placeholder": "由查找带回自动回填"
+      }
+    },
+    {
+      "type": "dataPicker",
+      "field": "warehouse",
+      "title": "发货仓库",
+      "info": "数据引用：从仓库档案弹窗选择（单选）",
+      "$required": true,
+      "props": {
+        "dataSourceId": "ds_warehouse",
+        "displayField": "name",
+        "columns": ["name", "address", "manager"],
+        "searchColumns": ["name"],
+        "maxCount": 1,
+        "detailReadonly": true
+      }
+    },
+    {
+      "type": "RelationCard",
+      "field": "customerCard",
+      "title": "客户档案卡片",
+      "info": "关联记录卡片：根据 customer_id 实时拉取客户档案最新整行做摘要展示",
+      "props": {
+        "title": "客户档案",
+        "description": "随客户档案变更实时更新",
+        "globalDataSourceId": "REPLACE_WITH_客户档案_数据源id",
+        "recordIdField": "customer_id",
+        "displayFields": ["name", "contact", "phone", "address"],
+        "clickable": true
+      }
+    },
+    {
+      "type": "group",
+      "field": "items",
+      "title": "订单明细",
+      "$required": true,
+      "props": {
+        "type": "card",
+        "title": "明细{index}",
+        "min": 1,
+        "button": true,
+        "sortBtn": true,
+        "rule": [
+          {
+            "type": "dataPicker",
+            "field": "product",
+            "title": "产品",
+            "info": "数据引用：从产品档案弹窗选择（单选）",
+            "$required": true,
+            "props": {
+              "dataSourceId": "ds_product",
+              "displayField": "product_name",
+              "columns": ["product_code", "product_name", "spec", "unit", "price"],
+              "searchColumns": ["product_name", "product_code"],
+              "maxCount": 1,
+              "detailReadonly": true
+            }
+          },
+          {
+            "type": "inputNumber",
+            "field": "qty",
+            "title": "数量",
+            "$required": true,
+            "props": {
+              "min": 1,
+              "precision": 0
+            }
+          },
+          {
+            "type": "inputNumber",
+            "field": "price",
+            "title": "单价",
+            "$required": true,
+            "props": {
+              "min": 0,
+              "precision": 2
+            }
+          },
+          {
+            "type": "inputNumber",
+            "field": "amount",
+            "title": "金额",
+            "info": "计算公式组件暂不支持子表单行内字段引用，行金额手工填写（后续扩展后可改为 qty * price 公式）",
+            "props": {
+              "min": 0,
+              "precision": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "tableForm",
+      "field": "delivery_plan",
+      "title": "交付计划",
+      "info": "表格表单：以表格行编辑多阶段交付安排",
+      "props": {
+        "addable": true,
+        "deletable": true,
+        "showIndex": true,
+        "filterEmptyColumn": true,
+        "min": 1,
+        "max": 10,
+        "columns": [
+          {
+            "label": "阶段",
+            "required": true,
+            "hidden": false,
+            "align": "center",
+            "style": { "width": "160px", "color": "" },
+            "formatter": "",
+            "fixed": "",
+            "rule": [
+              {
+                "type": "select",
+                "field": "stage",
+                "title": "阶段",
+                "$required": true,
+                "options": [
+                  { "label": "生产备货", "value": "PRODUCE" },
+                  { "label": "质检放行", "value": "QC" },
+                  { "label": "物流发货", "value": "SHIP" },
+                  { "label": "签收确认", "value": "RECEIVE" }
+                ]
+              }
+            ]
+          },
+          {
+            "label": "计划日期",
+            "required": true,
+            "hidden": false,
+            "align": "center",
+            "style": { "width": "180px", "color": "" },
+            "formatter": "",
+            "fixed": "",
+            "rule": [
+              {
+                "type": "datePicker",
+                "field": "plan_date",
+                "title": "计划日期",
+                "$required": true,
+                "props": {
+                  "type": "date",
+                  "valueFormat": "YYYY-MM-DD"
+                }
+              }
+            ]
+          },
+          {
+            "label": "交付内容",
+            "required": false,
+            "hidden": false,
+            "align": "left",
+            "style": { "width": "", "color": "" },
+            "formatter": "",
+            "fixed": "",
+            "rule": [
+              {
+                "type": "input",
+                "field": "content",
+                "title": "交付内容"
+              }
+            ]
+          },
+          {
+            "label": "备注",
+            "required": false,
+            "hidden": false,
+            "align": "left",
+            "style": { "width": "", "color": "" },
+            "formatter": "",
+            "fixed": "",
+            "rule": [
+              {
+                "type": "input",
+                "field": "remark",
+                "title": "备注"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "subForm",
+      "field": "invoice_info",
+      "title": "发票信息",
+      "info": "分组表单：整体以 JSON 列存储的嵌套对象",
+      "props": {
+        "rule": [
+          {
+            "type": "select",
+            "field": "invoice_type",
+            "title": "发票类型",
+            "options": [
+              { "label": "增值税专用发票", "value": "SPECIAL" },
+              { "label": "增值税普通发票", "value": "NORMAL" },
+              { "label": "电子发票", "value": "ELECTRONIC" }
+            ]
+          },
+          {
+            "type": "input",
+            "field": "invoice_title",
+            "title": "发票抬头"
+          },
+          {
+            "type": "input",
+            "field": "tax_no",
+            "title": "纳税人识别号"
+          }
+        ]
+      }
+    },
+    {
+      "type": "inputNumber",
+      "field": "order_amount",
+      "title": "订单总金额",
+      "info": "汇总订单明细各行金额（明细行内公式暂不支持，暂手工填写）",
+      "$required": true,
+      "props": {
+        "min": 0,
+        "precision": 2
+      }
+    },
+    {
+      "type": "inputNumber",
+      "field": "discount_rate",
+      "title": "折扣率",
+      "info": "0~1，如 0.9 表示 9 折",
+      "props": {
+        "min": 0,
+        "max": 1,
+        "precision": 2
+      }
+    },
+    {
+      "type": "FormulaField",
+      "field": "due_amount",
+      "title": "应收金额",
+      "info": "计算公式：订单总金额 × (1 - 折扣率)，依赖字段变化自动重算",
+      "props": {
+        "expression": "ROUND(${order_amount} * (1 - ${discount_rate}), 2)",
+        "precision": 2,
+        "prefix": "¥",
+        "suffix": "",
+        "placeholder": "—",
+        "disabled": false
+      }
+    },
+    {
+      "type": "textarea",
+      "field": "remark",
+      "title": "订单备注",
+      "props": {
+        "rows": 3,
+        "placeholder": "特殊要求、付款条款等"
+      }
+    }
+  ]
+}

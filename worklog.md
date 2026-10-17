@@ -8407,3 +8407,18 @@ Work Log:
 
 Stage Summary:
 - 重供给 #44 单轮内恢复（~2 分钟）；内存 3.51GB，oom_kill=0；零 mvn 计数 28
+
+---
+Task ID: r93
+Agent: main
+Task: 2026-10-17 14:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #45）
+- pkill bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，32s done，零 mvn 第 29 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261017-0606 推送成功
+
+Stage Summary:
+- 重供给 #45 单轮内恢复（~2 分钟）；内存 3.51GB，oom_kill=0；零 mvn 计数 29

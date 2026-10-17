@@ -8701,3 +8701,23 @@ Stage Summary:
 - 重供给 #59 已恢复，零 mvn 第 43 次（jar 分卷命中）
 - 确认新系统性问题（连续两轮）：recover-dplus.sh 打印「真绿 done」后脚本挂起不退出，需 timeout 强杀——功能无损但流程不收敛；建议用户裁决修脚本尾部（疑 wait/read/tail 残留或「无 jar 备份」分支误入前台等待）
 - 域名 Host 500 竞态连续两轮出现，重启 Java 均即时治愈，r96 结论持续有效
+
+---
+Task ID: r109
+Agent: main (cron ops loop)
+Task: 2026-10-18 07:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（230537，workflow 260K+v6 128K，mariadbd 幸存本轮重供给）
+- 8080 真伪核验 no such table: SYS_USER = 重供给 #60（累计 59→60）
+- 标准流水线：pkill 占位 → checkout 分卷 → 重拼 md5 e369839b 校验通过
+- recover-dplus.sh timeout 400 第三轮连续挂起（改为 400s 减少等待），日志确认 ~30s 已 done: 8080=200 jar=ok 3306=ok 真绿；「无 jar 备份 mvn」误报 + ERROR 1045 同样再现（连续第三轮）
+- hostLocal 500 竞态再现（连续第三轮）→ pkill Java + setsid 重拉 → 28s 后 hostLocal 200
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261017-231501 成功，git commit 66d46572 已推送
+- 内存 2.82GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #60 已恢复，零 mvn 第 44 次（jar 分卷命中）
+- recover 挂起+「无 jar 备份」误报+hostLocal 500 竞态均已连续三轮出现，模式高度固化：①recover ~30s 完成真功能 ②脚本尾部挂起需强杀 ③recover 拉起的 Java 存在域名 Host 竞态需手动重启一次即愈。整套恢复等效于「recover(30s)+Java 重启」，累计三轮验证一致
+- 建议（待用户裁决）：授权一次性修复 recover-dplus.sh（尾部挂起 + jar 检测误报）

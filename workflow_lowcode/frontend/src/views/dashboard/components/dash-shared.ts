@@ -68,6 +68,60 @@ export function splitCompositeKey(key: string): string[] {
 }
 
 /**
+ * 统一宽高档位（图表分组全部组件共用一套：dash-kpi / dash-chart / dash-filter /
+ * dash-goal / dash-leaderboard / dash-alert / dash-kpi-trend / page-chart）。
+ * 档位是唯一事实源——配置弹窗与属性面板都从这里取，避免各组件选项不一致。
+ */
+
+/** 宽度：24 栅格档位，value 0 = 自定义栅格（数字输入 1-24） */
+export const DASH_SPAN_OPTIONS: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 24, label: '撑满 (100%)' },
+  { value: 16, label: '2/3 宽' },
+  { value: 12, label: '1/2 宽' },
+  { value: 8, label: '1/3 宽' },
+  { value: 6, label: '1/4 宽' },
+  { value: 0, label: '自定义栅格…' },
+]
+
+/** 显示高度：'' = 自适应（随内容伸缩），'custom' = 自定义输入，其余为 CSS 高度值 */
+export const DASH_HEIGHT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '', label: '自适应' },
+  { value: '120px', label: '紧凑 (120px)' },
+  { value: '200px', label: '矮 (200px)' },
+  { value: '260px', label: '标准 (260px)' },
+  { value: '320px', label: '高 (320px)' },
+  { value: '420px', label: '超高 (420px)' },
+  { value: 'custom', label: '自定义…' },
+]
+
+/** 固定跨度档（不含自定义档 0） */
+const SPAN_PRESETS = DASH_SPAN_OPTIONS.filter((o) => o.value !== 0).map((o) => o.value)
+/** 固定高度档（不含自适应 '' 与自定义 'custom'） */
+const HEIGHT_PRESETS = DASH_HEIGHT_OPTIONS
+  .filter((o) => o.value !== '' && o.value !== 'custom')
+  .map((o) => o.value)
+
+export function clampDashSpan(value: unknown): number {
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n) || n <= 0) return 24
+  return Math.min(24, Math.max(1, n))
+}
+
+/** 既有 span 回填为档位：命中固定档用该档，否则落自定义档 */
+export function dashSpanModeOf(span: unknown): number {
+  const n = clampDashSpan(span)
+  return SPAN_PRESETS.includes(n) ? n : 0
+}
+
+/** 既有 height 回填为档位：'' / auto = 自适应；命中固定档（纯数字自动补 px）用该档；其余落自定义档保留原值 */
+export function dashHeightModeOf(height: unknown): string {
+  let raw = String(height ?? '').trim()
+  if (!raw || raw === 'auto') return ''
+  if (/^\d+$/.test(raw)) raw = `${raw}px`
+  return HEIGHT_PRESETS.includes(raw) ? raw : 'custom'
+}
+
+/**
  * Task 123 宽度布局：栅格跨度 <24（并排）时组件根左右留白，避免相邻卡片贴住。
  * 用 margin 而非 padding——组件根自带内边距（卡片留白语义），不能被覆盖；
  * 全宽（24）不加，保证与历史页面视觉零差异。全屏态由组件自行跳过（铺满语义）。

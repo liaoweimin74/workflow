@@ -45,6 +45,9 @@
         title="饼图仅使用第一个指标列，其余指标在饼图形态下将被忽略"
       />
       <el-empty v-if="!hasCandidates" description="当前数据源暂无可用列" :image-size="60" />
+
+      <!-- 宽高段：与仪表盘组件族共用同一套档位（DashSizeFields） -->
+      <DashSizeFields v-model:span="size.span" v-model:height="size.height" />
     </el-form>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
@@ -65,11 +68,13 @@
  *   指标字段切换为非数值列时，当前聚合不在可用口径内自动回落 count；
  * - 饼图仅取第一条指标（chartDataset.buildPieDataset 退化语义），多行保留可编辑并界面提示。
  *
- * 回传通道：confirm 事件（回传完整配置并关弹窗，对齐 CardStyleConfigDialog 惯例）
- * 与 update:config（支持父组件 v-model:config）同时触发，父组件按需取用其一。
+ * 回传通道：confirm 事件（第一参完整配置、第二参宽高，回传并关弹窗，对齐 CardStyleConfigDialog 惯例）
+ * 与 update:config（仅配置，支持父组件 v-model:config）同时触发，父组件按需取用其一。
  * 校验：维度列与至少一条有效指标齐备才可确认（确定按钮禁用，无需 ElMessage 打断）。
  */
 import { computed, reactive, watch } from 'vue'
+import DashSizeFields from '@/views/dashboard/components/DashSizeFields.vue'
+import { clampDashSpan } from '@/views/dashboard/components/dash-shared'
 import { aggregateOptionsOf } from './tableEnhance'
 import type { AggregateFn } from './tableEnhance'
 import type { PageChartConfig, PageChartMeasure } from './pageChartConfig'
@@ -88,11 +93,15 @@ const props = defineProps<{
   config?: PageChartConfig | null
   /** 候选列（数据源 metadata 列声明） */
   candidates?: CandidateColumn[]
+  /** 当前宽度栅格跨度（回显；确认经 confirm 第二参回传） */
+  span?: number
+  /** 当前显示高度（回显；'' = 自适应） */
+  height?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
-  (e: 'confirm', value: PageChartConfig): void
+  (e: 'confirm', value: PageChartConfig, size: { span: number; height: string }): void
   (e: 'update:config', value: PageChartConfig): void
 }>()
 
@@ -109,6 +118,12 @@ const local = reactive<{ type: 'bar' | 'line' | 'pie'; dimension: string; measur
   measures: [],
 })
 
+/** 宽高编辑态（与图表配置同一弹窗确认，避免图表分组其他组件有的宽高入口这里没有） */
+const size = reactive<{ span: number; height: string }>({
+  span: clampDashSpan(props.span ?? 24),
+  height: String(props.height ?? ''),
+})
+
 const CHART_TYPE_SET = new Set(['bar', 'line', 'pie'])
 const AGG_SET = new Set<AggregateFn>(['sum', 'avg', 'count', 'max', 'min'])
 
@@ -116,6 +131,8 @@ function initForm() {
   const src = props.config && typeof props.config === 'object' ? props.config : {}
   local.type = CHART_TYPE_SET.has(String(src.type)) ? (src.type as 'bar' | 'line' | 'pie') : 'bar'
   local.dimension = typeof src.dimension === 'string' ? src.dimension : ''
+  size.span = clampDashSpan(props.span ?? 24)
+  size.height = String(props.height ?? '')
   local.measures = (Array.isArray(src.measures) ? src.measures : [])
     .filter((m: any) => m && typeof m.key === 'string' && m.key !== '')
     .map((m: any) => ({
@@ -183,7 +200,7 @@ function handleConfirm() {
       .map((m) => ({ key: m.key, agg: m.agg, ...(m.label ? { label: m.label } : {}) })),
   }
   emit('update:config', payload)
-  emit('confirm', payload)
+  emit('confirm', payload, { span: size.span, height: size.height })
   visible.value = false
 }
 </script>

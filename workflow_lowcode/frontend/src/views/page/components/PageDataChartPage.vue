@@ -1,5 +1,5 @@
 <template>
-  <div class="page-chart">
+  <div class="page-chart" :class="{ 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <!-- 可选标题行 -->
     <div v-if="title" class="page-chart-title">{{ title }}</div>
     <!-- 已配置：交 PageDataChart 渲染（空数据/加载态/空态文案由其内部处理） -->
@@ -9,10 +9,11 @@
       :config="chartConfig"
       :columns="labelColumns"
       :height="height"
+      :fill="fixedHeight"
       :loading="loading"
     />
     <!-- 未配置维度/指标：占位提示（不发起取数） -->
-    <div v-else class="page-chart-empty" :style="{ height: height || '320px' }">
+    <div v-else class="page-chart-empty" :style="fixedHeight ? { flex: '1 1 auto', minHeight: '0' } : { height: height || '320px' }">
       <el-empty description="请在属性面板「配置图表」中设置图表类型、维度列与指标列" :image-size="80" />
     </div>
   </div>
@@ -42,6 +43,7 @@ import { normalizeChartConfig, CHART_AGGS, type ViewChartConfig } from './chartD
 import type { PageChartConfig, PageChartMeasure } from './pageChartConfig'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
+import { dashSpanGapStyle, dashHeightStyle } from '@/views/dashboard/components/dash-shared'
 import type { DataSourceBindingContext } from '@/components/business/types'
 
 const props = withDefaults(
@@ -54,15 +56,18 @@ const props = withDefaults(
     dsRefId?: string
     /** 设计态标记：取数固定首页且最多 10 条（PageDesigner.enableCardDesignMode 注入） */
     designMode?: boolean
-    /** 图表画布高度（css 值），缺省 320px */
+    /** 显示高度（css 值；空 = 自适应，画布用缺省 320px） */
     height?: string
+    /** 栅格跨度（1-24，与 rule.col.span 镜像；<24 时左右留白） */
+    span?: number
     /** 图表配置（PageChartConfigDialog 产出：{type, dimension, measures:[{key,agg,label?}]}） */
     config?: PageChartConfig | null
     /** 可选标题（画布上方标题行；缺省不渲染） */
     title?: string
   }>(),
   {
-    height: '320px',
+    height: '',
+    span: 24,
     config: null,
     title: '',
   },
@@ -86,6 +91,14 @@ const actionBus = inject<
     register?: (dataSourceId: string, instance: any) => void
   } | undefined
 >('pageActionBus')
+
+// ==================== 宽高布局（与仪表盘组件族同一套档位与语义） ====================
+
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const layoutStyle = computed<Record<string, string>>(() => ({
+  ...dashSpanGapStyle(props.span),
+  ...(dashHeightStyle(props.height) || {}),
+}))
 
 // ==================== 数据源解析 ====================
 
@@ -272,6 +285,11 @@ watch(() => props.config, () => {
 .page-chart {
   width: 100%;
   min-width: 0;
+}
+/* 固定显示高度：根转 flex 列，图表卡片撑满剩余空间 */
+.page-chart.is-fixed-height {
+  display: flex;
+  flex-direction: column;
 }
 .page-chart-title {
   margin-bottom: 8px;

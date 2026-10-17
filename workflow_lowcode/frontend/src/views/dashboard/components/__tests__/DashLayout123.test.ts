@@ -1,19 +1,30 @@
 /**
- * 仪表盘组件宽高布局测试（Task 123：用户需求「dashboard 组件可以设置宽度和高度吗？比如撑满，1/2」）。
+ * 图表分组组件宽高布局测试（Task 123 起于「dashboard 组件可以设置宽度和高度吗」，
+ * 后续统一为：图表分组 8 个组件共用同一套宽高档位与语义）。
  *
- * 覆盖三层契约：
- *  1. dash-shared 布局工具（span 留白 / 高度规范化）；
- *  2. register.ts rule 工厂（col.span + props 镜像 + height 默认值）；
- *  3. 组件运行时（root 内联样式与 is-fixed-height 类）+ 配置链路源码锚点。
+ * 覆盖四层契约：
+ *  1. dash-shared 布局工具（span 留白 / 高度规范化 / 档位归一）；
+ *  2. register.ts rule 工厂（col.span + props 镜像 + height 缺省全部自适应）；
+ *  3. 组件运行时（root 内联样式、is-fixed-height 类、统计图画布伸缩）；
+ *  4. 配置链路源码锚点（宽高段单一来源 DashSizeFields，两种配置入口共用）。
  */
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import ElementPlus from 'element-plus'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import DashKpi from '../DashKpi.vue'
+import DashChart from '../DashChart.vue'
+import DashFilter from '../DashFilter.vue'
+import DashConfigDialog from '../DashConfigDialog.vue'
 import {
-  dashSpanGapStyle,
+  DASH_HEIGHT_OPTIONS,
+  DASH_SPAN_OPTIONS,
+  clampDashSpan,
+  dashHeightModeOf,
   dashHeightStyle,
+  dashSpanGapStyle,
+  dashSpanModeOf,
 } from '../dash-shared'
 import {
   dashKpiRule,
@@ -31,7 +42,7 @@ vi.mock('@/api/data-source', () => ({
   },
 }))
 
-describe('dash-shared 布局工具（Task 123）', () => {
+describe('dash-shared 布局工具', () => {
   it('dashSpanGapStyle：全宽（24/0/undefined）不留白，跨度 <24 时根节点左右 8px 留白', () => {
     expect(dashSpanGapStyle(24)).toEqual({})
     expect(dashSpanGapStyle(0)).toEqual({})
@@ -49,9 +60,41 @@ describe('dash-shared 布局工具（Task 123）', () => {
     expect(dashHeightStyle('300px')).toEqual({ height: '300px' })
     expect(dashHeightStyle('50vh')).toEqual({ height: '50vh' })
   })
+
+  it('clampDashSpan：越界与非法值回缺省（1-24，非法 = 24）', () => {
+    expect(clampDashSpan(12)).toBe(12)
+    expect(clampDashSpan(30)).toBe(24)
+    expect(clampDashSpan(0)).toBe(24)
+    expect(clampDashSpan(undefined)).toBe(24)
+    expect(clampDashSpan('abc')).toBe(24)
+  })
+
+  it('档位归一：固定档命中自身，非固定档落自定义档（不丢历史值）', () => {
+    expect(dashSpanModeOf(12)).toBe(12)
+    expect(dashSpanModeOf(10)).toBe(0)
+    expect(dashHeightModeOf('')).toBe('')
+    expect(dashHeightModeOf('260px')).toBe('260px')
+    expect(dashHeightModeOf('260')).toBe('260px')
+    expect(dashHeightModeOf('280px')).toBe('custom')
+  })
 })
 
-describe('register.ts rule 工厂（Task 123）', () => {
+describe('宽高档位唯一事实源', () => {
+  it('高度档位含自适应与自定义，宽度档位含撑满与自定义栅格', () => {
+    expect(DASH_HEIGHT_OPTIONS.map((o) => o.value)).toEqual([
+      '',
+      '120px',
+      '200px',
+      '260px',
+      '320px',
+      '420px',
+      'custom',
+    ])
+    expect(DASH_SPAN_OPTIONS.map((o) => o.value)).toEqual([24, 16, 12, 8, 6, 0])
+  })
+})
+
+describe('register.ts rule 工厂', () => {
   const factories = [
     ['kpi', dashKpiRule],
     ['chart', dashChartRule],
@@ -69,18 +112,15 @@ describe('register.ts rule 工厂（Task 123）', () => {
     }
   })
 
-  it('数据卡片类组件默认高度自适应（height 空），图表保持 260px 绘图高度', () => {
-    expect((dashKpiRule() as any).props.height).toBe('')
-    expect((dashGoalRule() as any).props.height).toBe('')
-    expect((dashAlertRule() as any).props.height).toBe('')
-    expect((dashLeaderboardRule() as any).props.height).toBe('')
-    expect((dashFilterRule() as any).props.height).toBeUndefined()
-    expect((dashChartRule() as any).props.height).toBe('260px')
+  it('宽高语义统一：全部组件（含统计图与筛选器）拖入默认自适应', () => {
+    for (const [name, factory] of factories) {
+      expect((factory() as any).props.height, `${name} 默认高度应自适应`).toBe('')
+    }
   })
 })
 
-describe('DashKpi 宽高渲染（Task 123）', () => {
-  it('span=12 + height=300：根节点带 8px 留白、固定 300px 高与 is-fixed-height 类', () => {
+describe('组件运行时宽高渲染', () => {
+  it('DashKpi：span=12 + height=300 → 根节点 8px 留白、固定 300px 高与 is-fixed-height 类', () => {
     const wrapper = mount(DashKpi, {
       props: { designMode: true, span: 12, height: '300' },
     })
@@ -92,41 +132,102 @@ describe('DashKpi 宽高渲染（Task 123）', () => {
     expect(root.classes()).toContain('is-fixed-height')
   })
 
-  it('默认全宽自适应：无留白无固定高（与历史页面视觉零差异）', () => {
+  it('DashKpi：默认全宽自适应 → 无留白无固定高（与历史页面视觉零差异）', () => {
     const wrapper = mount(DashKpi, { props: { designMode: true } })
     const root = wrapper.find('.dash-kpi')
     expect(root.attributes('style') || '').not.toContain('margin')
     expect(root.attributes('style') || '').not.toContain('height')
     expect(root.classes()).not.toContain('is-fixed-height')
   })
+
+  it('DashChart：固定显示高度时卡片定高、画布随卡片伸缩（不再用像素绘图高度）', () => {
+    const wrapper = mount(DashChart, {
+      props: { designMode: true, height: '320px' },
+      global: { plugins: [ElementPlus] },
+    })
+    const root = wrapper.find('.dash-chart')
+    expect(root.attributes('style')).toContain('height: 320px')
+    expect(root.classes()).toContain('is-fixed-height')
+    const style = wrapper.find('.dash-chart-empty').attributes('style') || ''
+    expect(style).toContain('flex')
+    // min-height 同含 "height" 字样，故只匹配独立的 height 属性
+    expect(style).not.toMatch(/(?:^|;\s*)height:/)
+  })
+
+  it('DashChart：自适应时用缺省绘图高度（与改动前的图表观感一致）', () => {
+    const wrapper = mount(DashChart, {
+      props: { designMode: true },
+      global: { plugins: [ElementPlus] },
+    })
+    const root = wrapper.find('.dash-chart')
+    expect(root.attributes('style') || '').not.toContain('height')
+    expect(wrapper.find('.dash-chart-empty').attributes('style')).toContain('height: 260px')
+  })
+
+  it('DashFilter：与其他图表分组组件一样接受显示高度并写入根节点', () => {
+    const wrapper = mount(DashFilter, {
+      props: { designMode: true, field: 'startTime', height: '200px' },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(wrapper.find('.dash-filter').attributes('style')).toContain('height: 200px')
+  })
 })
 
-describe('配置链路源码锚点（Task 123）', () => {
+describe('配置链路源码锚点', () => {
   const dialog = readFileSync(resolve(__dirname, '../DashConfigDialog.vue'), 'utf8')
+  const sizeFields = readFileSync(resolve(__dirname, '../DashSizeFields.vue'), 'utf8')
+  const chartDialog = readFileSync(resolve(__dirname, '../../../page/components/PageChartConfigDialog.vue'), 'utf8')
   const designer = readFileSync(resolve(__dirname, '../../../page/PageDesigner.vue'), 'utf8')
 
-  it('配置弹窗：宽度栅格段全模式可用（含筛选器）且含常用档位', () => {
-    expect(dialog).toContain('label="宽度"')
-    expect(dialog).toContain('label="撑满 (100%)"')
-    expect(dialog).toContain('label="1/2 宽"')
-    expect(dialog).toContain('label="1/3 宽"')
-    expect(dialog).toContain('label="1/4 宽"')
-    // 宽度段位于两个模式分支之外（filter 与数据组件共用）
-    const filterBranchEnd = dialog.indexOf('</template>\n\n      <!-- Task 123')
-    expect(filterBranchEnd).toBeGreaterThan(-1)
+  it('档位只写在 dash-shared：宽高下拉选项取自共享常量（不再各写一套）', () => {
+    expect(sizeFields).toContain('DASH_SPAN_OPTIONS')
+    expect(sizeFields).toContain('DASH_HEIGHT_OPTIONS')
+    expect(sizeFields).toContain('label="宽度"')
+    expect(sizeFields).toContain('label="显示高度"')
+    expect(dialog).not.toContain('绘图高度')
+    expect(dialog).not.toContain('label="宽度"')
   })
 
-  it('配置弹窗：非图表组件有「显示高度」段（图表保留绘图高度语义）', () => {
-    expect(dialog).toContain('label="显示高度"')
-    expect(dialog).toMatch(/v-if="mode !== 'chart'" label="显示高度"/)
+  it('仪表盘配置弹窗与数据图表配置弹窗共用同一段宽高控件', () => {
+    expect(dialog).toContain('<DashSizeFields')
+    expect(chartDialog).toContain('<DashSizeFields')
   })
 
-  it('配置弹窗：六个 confirm 分支均回传 span', () => {
-    expect(dialog).toContain('span: effectiveSpan.value')
-  })
-
-  it('设计器：handleDashConfirm 把 span 双写 props 镜像与 rule.col', () => {
+  it('设计器：仪表盘与数据图表都把 span 双写 props 镜像与 rule.col', () => {
     expect(designer).toContain('active.props.span = spanNum')
     expect(designer).toContain('active.col = { ...(active.col || {}), span: spanNum }')
+    expect((designer.match(/active\.col = \{ \.\.\.\(active\.col \|\| \{\}\), span: spanNum \}/g) || []).length).toBe(2)
   })
+})
+
+describe('宽高段对所有模式可见', () => {
+  /** el-dialog 内容 teleport 到 document.body：DOM 级断言用 document 查询（attachTo 保证树内挂载，unmount 清理） */
+  function createDialog(mode: string) {
+    return mount(DashConfigDialog, {
+      props: {
+        modelValue: true,
+        mode,
+        bindingProps: {},
+        formDataSources: [],
+        enabledDataSources: [],
+      },
+      global: { plugins: [ElementPlus] },
+      attachTo: document.body,
+    })
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  for (const mode of ['kpi', 'chart', 'filter', 'goal', 'leaderboard', 'alert', 'kpiTrend']) {
+    it(`${mode}：弹窗含「宽度」与「显示高度」两段`, async () => {
+      const wrapper = createDialog(mode)
+      await flushPromises()
+      const text = document.body.textContent || ''
+      expect(text).toContain('宽度')
+      expect(text).toContain('显示高度')
+      wrapper.unmount()
+    })
+  }
 })

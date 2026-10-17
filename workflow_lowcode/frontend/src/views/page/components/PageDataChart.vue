@@ -1,9 +1,9 @@
 <template>
-  <el-card v-loading="loading" class="page-data-chart" shadow="never">
+  <el-card v-loading="loading" class="page-data-chart" :class="{ 'is-fill': fill }" shadow="never">
     <!-- 画布：有数据时渲染；0 尺寸（隐藏 tab）时 ResizeObserver 恢复后补渲染 -->
-    <div v-show="hasData" ref="chartEl" class="page-data-chart-canvas" :style="{ height: canvasHeight }" />
+    <div v-show="hasData" ref="chartEl" class="page-data-chart-canvas" :style="canvasStyle" />
     <!-- 空态：未配置维度/指标 or 无数据 -->
-    <div v-if="!hasData" class="page-data-chart-empty" :style="{ height: canvasHeight }">
+    <div v-if="!hasData" class="page-data-chart-empty" :style="canvasStyle">
       <el-empty :description="emptyText" :image-size="80" />
     </div>
   </el-card>
@@ -42,6 +42,8 @@ const props = withDefaults(
     columns?: Array<{ key: string; label?: string }>
     /** 画布高度（css 值），缺省 320px */
     height?: string
+    /** 填充模式：父级给定卡片高度时画布随卡片伸缩（与仪表盘统计图同语义） */
+    fill?: boolean
     /** 取数中（v-loading 遮罩） */
     loading?: boolean
   }>(),
@@ -61,6 +63,10 @@ let resizeObserver: ResizeObserver | null = null
 /** 配置归一化（畸形容错 + 缺省回填），渲染映射全部基于归一化结果 */
 const cfg = computed(() => normalizeChartConfig(props.config))
 const canvasHeight = computed(() => props.height || '320px')
+/** 填充模式交给 CSS（卡片定高，画布撑满 body），否则按 height 值定画布 */
+const canvasStyle = computed<Record<string, string>>(() =>
+  props.fill ? { height: '100%' } : { height: canvasHeight.value },
+)
 
 /** 列显示名映射：视图 columns 的 label，未命中回退 key */
 function labelOf(key: string): string {
@@ -194,6 +200,11 @@ onBeforeUnmount(() => {
 }
 .page-data-chart :deep(.el-card__body) {
   padding: 12px 16px;
+}
+/* 填充模式：卡片定高时 body 撑满卡片，画布按 100% 随容器伸缩 */
+.page-data-chart.is-fill :deep(.el-card__body) {
+  height: 100%;
+  box-sizing: border-box;
 }
 .page-data-chart-canvas {
   width: 100%;

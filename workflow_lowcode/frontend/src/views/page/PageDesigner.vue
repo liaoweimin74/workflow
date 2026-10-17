@@ -90,6 +90,8 @@
       v-model="chartDialogVisible"
       :config="currentChartConfig"
       :candidates="chartCandidates"
+      :span="currentChartSize.span"
+      :height="currentChartSize.height"
       @confirm="handleChartConfirm"
     />
 
@@ -290,6 +292,7 @@ import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDial
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
 import DashConfigDialog, { type DashConfigMode } from '@/views/dashboard/components/DashConfigDialog.vue'
+import { clampDashSpan } from '@/views/dashboard/components/dash-shared'
 import {
   DASH_KPI_NAME,
   DASH_CHART_NAME,
@@ -775,9 +778,9 @@ function handleDashConfirm(patch: Record<string, any>) {
   if (active && active.type === currentDashType.value && active.props) {
     const { mode: _mode, span, ...propsPatch } = patch
     Object.assign(active.props, propsPatch)
-    // Task 123 宽度栅格：props 镜像（组件并排留白感知）+ rule.col（form-create 布局真身），
+    // 宽度栅格：props 镜像（组件并排留白感知）+ rule.col（form-create 布局真身），
     // 运行态 transformComponent 浅拷贝透传 col，双端一致
-    const spanNum = Math.min(24, Math.max(1, Number(span || 24)))
+    const spanNum = clampDashSpan(span ?? 24)
     active.props.span = spanNum
     active.col = { ...(active.col || {}), span: spanNum }
   }
@@ -795,6 +798,12 @@ const currentChartConfig = computed(() => {
   const active = designerRef.value?.activeRule as any
   return active?.type === 'page-chart' ? active?.props?.config || null : null
 })
+/** 数据图表当前宽高（与仪表盘组件族同一套 props.span / props.height 形态） */
+const currentChartSize = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  const p = active?.type === 'page-chart' ? active?.props || {} : {}
+  return { span: clampDashSpan(p.span ?? 24), height: String(p.height ?? '') }
+})
 /** 打开图表配置：从页面绑定层解析 refId 拉取列元数据作候选 */
 async function openChartConfig() {
   chartDialogVisible.value = true
@@ -811,10 +820,17 @@ async function openChartConfig() {
     chartCandidates.value = []
   }
 }
-function handleChartConfirm(config: any) {
+function handleChartConfirm(config: any, size?: { span?: number; height?: string }) {
   const active = designerRef.value?.activeRule as any
   if (active?.type === 'page-chart' && active.props) {
     active.props.config = config
+    if (size) {
+      // 宽高双写：props 镜像（渲染层留白/定高）+ rule.col（form-create 栅格真身），与 handleDashConfirm 同款
+      const spanNum = clampDashSpan(size.span ?? 24)
+      active.props.span = spanNum
+      active.props.height = size.height ?? ''
+      active.col = { ...(active.col || {}), span: spanNum }
+    }
     ElMessage.success('图表配置已保存')
   }
 }
@@ -1207,7 +1223,8 @@ function registerPageComponents() {
       type: 'page-chart',
       field: 'chart' + Date.now(),
       title: '数据图表',
-      props: { dataSourceId: '', config: null, height: '320px' },
+      col: { span: 24 },
+      props: { dataSourceId: '', config: null, span: 24, height: '' },
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-chart', () => [
@@ -1234,7 +1251,8 @@ function registerPageComponents() {
       type: DASH_KPI_TREND_NAME,
       field: 'kpiTrend' + Date.now(),
       title: '环比指标卡',
-      props: { dataSourceId: '', compareOffset: 'month', compareLabel: '环比' },
+      col: { span: 24 },
+      props: { dataSourceId: '', compareOffset: 'month', compareLabel: '环比', span: 24, height: '' },
     }),
   })
   designerRef.value?.setComponentRuleConfig(

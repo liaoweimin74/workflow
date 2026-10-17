@@ -42,7 +42,7 @@ export function dashKpiRule(): Record<string, unknown> {
   }
 }
 
-/** 统计图拖入 rule（props 与 DashChart.vue 对齐；Task 120 增加 area/scatter/heatmap/funnel；Task 123 增加宽度栅格） */
+/** 统计图拖入 rule（props 与 DashChart.vue 对齐；Task 120 增加 area/scatter/heatmap/funnel；宽高见 dash-shared 档位） */
 export function dashChartRule(): Record<string, unknown> {
   return {
     type: DASH_CHART_NAME,
@@ -60,13 +60,13 @@ export function dashChartRule(): Record<string, unknown> {
       order: 'asc',
       limit: 0,
       dataSourceId: '',
-      height: '260px',
+      height: '',
       span: 24,
     },
   }
 }
 
-/** 筛选器拖入 rule（Task 120；Task 123 增加宽度栅格） */
+/** 筛选器拖入 rule（Task 120；宽高与仪表盘其他组件同档） */
 export function dashFilterRule(): Record<string, unknown> {
   return {
     type: DASH_FILTER_NAME,
@@ -81,6 +81,7 @@ export function dashFilterRule(): Record<string, unknown> {
       options: '',
       autoBroadcast: true,
       span: 24,
+      height: '',
     },
   }
 }

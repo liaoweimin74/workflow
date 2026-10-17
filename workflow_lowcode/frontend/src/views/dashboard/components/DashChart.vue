@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <div class="dash-chart-head">
       <div v-if="title" class="dash-chart-title">{{ title }}</div>
       <button
@@ -18,8 +18,8 @@
         </svg>
       </button>
     </div>
-    <div v-show="hasData" ref="chartEl" class="dash-chart-canvas" :style="{ height: chartHeight }" />
-    <div v-if="!hasData" class="dash-chart-empty" :style="{ height: chartHeight }">
+    <div v-show="hasData" ref="chartEl" class="dash-chart-canvas" :style="canvasStyle" />
+    <div v-if="!hasData" class="dash-chart-empty" :style="canvasStyle">
       <el-empty
         :description="emptyText"
         :image-size="60"
@@ -45,7 +45,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ensureEcharts, DASH_PALETTE, cssVar, canvasAvailable } from './useEcharts'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, dashSpanGapStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -70,7 +70,7 @@ const props = withDefaults(
     dsRefId?: string
     /** 结构化 filter JSON */
     filter?: string | null
-    /** 绘图高度（css 值） */
+    /** 显示高度（空 = 自适应，画布用缺省绘图高度；固定值时画布撑满卡片剩余空间） */
     height?: string
     designMode?: boolean
     /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像；高度沿用既有 height 绘图语义） */
@@ -89,7 +89,7 @@ const props = withDefaults(
     dataSourceId: '',
     dsRefId: '',
     filter: null,
-    height: '260px',
+    height: '',
     designMode: false,
     span: 24,
   },
@@ -104,10 +104,10 @@ const loading = ref(false)
 const loadError = ref('')
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
 
-/** Task 123 布局：并排留白（全屏跳过）；绘图高度仍由既有 height prop 驱动画布 */
+/** 布局：并排留白 + 卡片显示高度（全屏跳过留白，高度由全屏容器铺满） */
 const layoutStyle = computed<Record<string, string>>(() => {
   if (isFullscreen.value) return {}
-  return dashSpanGapStyle(props.span)
+  return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
 let chart: ReturnType<ReturnType<typeof ensureEcharts>['init']> | null = null
 let resizeObserver: ResizeObserver | null = null
@@ -118,7 +118,14 @@ const extraConditions = ref<DashCondition[]>([])
 const resolvedSourceId = computed(
   () => props.dsRefId || activeDsBindings.value.find((b) => b.id === props.dataSourceId)?.refId || '',
 )
-const chartHeight = computed(() => props.height || '260px')
+/** 自适应（height 空）时的缺省绘图高度 */
+const DEFAULT_DRAWING_HEIGHT = '260px'
+/** 固定显示高度时画布撑满卡片剩余空间，自适应时用缺省绘图高度 */
+const CANVAS_FILL_STYLE: Record<string, string> = { flex: '1 1 auto', minHeight: '0' }
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const canvasStyle = computed<Record<string, string>>(() =>
+  fixedHeight.value ? CANVAS_FILL_STYLE : { height: DEFAULT_DRAWING_HEIGHT },
+)
 const hasData = computed(() => rows.value.length > 0)
 const emptyText = computed(() =>
   loadError.value ? `加载失败：${loadError.value}` : props.designMode ? '设计态预览（运行时加载数据源数据）' : '暂无数据',
@@ -393,6 +400,10 @@ defineExpose({ setFilter, refresh, loading })
 }
 .dash-chart.is-design {
   outline: 1px dashed var(--el-color-primary-light-5, #a7f3d0);
+}
+/* 固定显示高度时卡片不溢出（画布经 flex 撑满剩余空间） */
+.dash-chart.is-fixed-height {
+  overflow: hidden;
 }
 .dash-chart.is-fullscreen {
   z-index: 3000;

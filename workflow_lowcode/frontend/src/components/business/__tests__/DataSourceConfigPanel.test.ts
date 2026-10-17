@@ -1,16 +1,32 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import DataSourceConfigPanel from '../DataSourceConfigPanel.vue'
+import BusTemplateInput from '../BusTemplateInput.vue'
+import { resetBusFieldCache } from '../busFieldOptions'
 import type { DataSourceDTO } from '@/api/data-source'
 
+// 目标数据源列清单经 metadata 接口取（set-filter 字段下拉候选）
+const getMetadataMock = vi.fn()
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: { getMetadata: (id: string) => getMetadataMock(id) },
+}))
+
 // Mock Element Plus（kebab-case 组件名，匹配模板 <el-xxx>）
-const stub = (name: string, template: string, props: string[] = []) =>
+const stub = (name: string, template: string, props: string[] | Record<string, any> = []) =>
   defineComponent({ name, template, props })
 
 const ElStubs = {
   'el-input': stub('ElInputStub', '<input />', ['modelValue', 'placeholder']),
-  'el-select': stub('ElSelectStub', '<select><slot /></select>', ['modelValue', 'placeholder', 'filterable']),
+  // 布尔 props 需显式类型，否则裸写 filterable 传成 ''（断言读不到 true）
+  'el-select': stub('ElSelectStub', '<select><slot /></select>', {
+    modelValue: {},
+    placeholder: String,
+    filterable: Boolean,
+    allowCreate: Boolean,
+    defaultFirstOption: Boolean,
+    reserveKeyword: Boolean,
+  }),
   'el-option': stub('ElOptionStub', '<option :value="value">{{ label || value }}</option>', ['label', 'value']),
   'el-button': stub('ElButtonStub', '<button />', ['type', 'plain', 'link']),
   'el-empty': stub('ElEmptyStub', '<div />', ['description', 'imageSize']),
@@ -55,6 +71,10 @@ function mountPanel(props: Record<string, any> = {}) {
 }
 
 describe('DataSourceConfigPanel', () => {
+  beforeEach(() => {
+    resetBusFieldCache()
+    getMetadataMock.mockReset()
+  })
 
   it('renders panel with tabs', () => {
     const wrapper = mountPanel()
@@ -179,14 +199,21 @@ describe('DataSourceConfigPanel', () => {
     expect(vm.localActions[0].steps[0].recordId).toBe('{row.id}')
   })
 
-  it('步骤参数输入由清单驱动：按 op 渲染对应数量的输入框', () => {
-    const inputsOf = (op: string) =>
-      mountPanel({ actions: [{ trigger: 'row-edit', steps: [{ op, target: 'ds1' }] }] }).findAll('input').length
-    expect(inputsOf('set-filter')).toBe(2)
-    expect(inputsOf('reload-record')).toBe(1)
-    expect(inputsOf('load-record')).toBe(1)
-    expect(inputsOf('refresh')).toBe(0)
-    expect(inputsOf('close-container')).toBe(0)
+  it('步骤参数槽由清单驱动：按 op 渲染对应数量的下拉与表达式框', () => {
+    const slotsOf = (op: string) => {
+      const row = mountPanel({ actions: [{ trigger: 'row-edit', steps: [{ op, target: 'ds1' }] }] })
+        .find('.step-row')
+      return {
+        selects: row.findAll('select').length,
+        editors: row.findAllComponents(BusTemplateInput).length,
+      }
+    }
+    // 每行固定 op + target 两个下拉；set-filter 多一个 field 下拉，value/recordId 各占一个表达式框
+    expect(slotsOf('set-filter')).toEqual({ selects: 3, editors: 1 })
+    expect(slotsOf('reload-record')).toEqual({ selects: 2, editors: 1 })
+    expect(slotsOf('load-record')).toEqual({ selects: 2, editors: 1 })
+    expect(slotsOf('refresh')).toEqual({ selects: 2, editors: 0 })
+    expect(slotsOf('close-container')).toEqual({ selects: 2, editors: 0 })
   })
 
   it('reload-record 的 value 输入给出记录 ID 模板提示，set-filter 给过滤值提示', () => {
@@ -275,5 +302,148 @@ describe('DataSourceConfigPanel', () => {
     vm.addAction()
     // addAction 新建 open-container 步骤，target 应预填第一个数据源
     expect(vm.localActions[0].steps[0].target).toBe('dsForm')
+  })
+
+  // ==================== 值/记录 ID 模板补全 ====================
+
+  it('value 槽是模板表达式框，候选按触发器可用根展开行字段', () => {
+    const wrapper = mountPanel({
+      rowFields: ['order_no'],
+      actions: [{ trigger: 'row-click', steps: [{ op: 'set-filter', target: 'ds1' }] }],
+    })
+    const inputs = wrapper.findAllComponents(BusTemplateInput)
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0].props('vars')).toEqual([
+      '{node.order_no}',
+      '{node.id}',
+      '{row.order_no}',
+      '{row.id}',
+      '{source}',
+    ])
+  })
+
+  it('recordId 槽同样用模板表达式框（load-record）', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'record-change', steps: [{ op: 'load-record', target: 'ds1' }] }],
+    })
+    const inputs = wrapper.findAllComponents(BusTemplateInput)
+    expect(inputs).toHaveLength(1)
+    // 未上行字段时至少给 id
+    expect(inputs[0].props('vars')).toContain('{record.id}')
+  })
+
+  it('无值槽的动作不渲染表达式框', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-click', steps: [{ op: 'refresh', target: 'ds1' }] }],
+    })
+    expect(wrapper.findAllComponents(BusTemplateInput)).toHaveLength(0)
+  })
+
+  // ==================== set-filter 字段下拉（按 target 容器实际列） ====================
+
+  const filterStep = () =>
+    mountPanel({
+      dataSources: [
+        { id: 'dsTable', refId: 'g_order' },
+        { id: 'dsForm', refId: 'g_customer' },
+      ],
+      actions: [{ trigger: 'row-click', steps: [{ op: 'set-filter', target: 'dsTable', field: '', value: '' }] }],
+    })
+
+  it('字段槽是可自由输入的下拉（候选按 target 数据源取实际列）', async () => {
+    getMetadataMock.mockResolvedValue({ data: { columns: [{ key: 'order_no', label: '订单号' }] } })
+    const wrapper = filterStep()
+    const fieldSelect = wrapper
+      .findAllComponents({ name: 'ElSelectStub' })
+      .find((s) => s.props('placeholder') === '过滤字段')
+    expect(fieldSelect).toBeTruthy()
+    expect(fieldSelect!.props('filterable')).toBe(true)
+    expect(fieldSelect!.props('allowCreate')).toBe(true)
+
+    fieldSelect!.vm.$emit('visible-change', true)
+    await wrapper.vm.$nextTick()
+    await vi.waitFor(() => expect(wrapper.find('.step-row').text()).toContain('order_no'))
+    expect(getMetadataMock).toHaveBeenCalledWith('g_order')
+    expect(wrapper.findAll('.step-row option').map((o) => o.attributes('value'))).toContain('order_no')
+  })
+
+  it('target 换绑后候选跟着换（不沿用上一个数据源的列）', async () => {
+    getMetadataMock.mockImplementation((id: string) =>
+      Promise.resolve({ data: { columns: [{ key: `col_of_${id}` }] } }),
+    )
+    const wrapper = filterStep()
+    const vm = wrapper.vm as any
+    const fieldSelect = () =>
+      wrapper.findAllComponents({ name: 'ElSelectStub' }).find((s) => s.props('placeholder') === '过滤字段')!
+    fieldSelect().vm.$emit('visible-change', true)
+    await vi.waitFor(() => expect(wrapper.html()).toContain('col_of_g_order'))
+
+    vm.localActions[0].steps[0].target = 'dsForm'
+    await wrapper.vm.$nextTick()
+    fieldSelect().vm.$emit('visible-change', true)
+    await vi.waitFor(() => expect(wrapper.html()).toContain('col_of_g_customer'))
+  })
+
+  it('未选目标数据源时不发请求（仍可手输字段名）', async () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-click', steps: [{ op: 'set-filter', target: '', field: '', value: '' }] }],
+    })
+    const fieldSelect = wrapper
+      .findAllComponents({ name: 'ElSelectStub' })
+      .find((s) => s.props('placeholder') === '过滤字段')
+    fieldSelect!.vm.$emit('visible-change', true)
+    await wrapper.vm.$nextTick()
+    expect(getMetadataMock).not.toHaveBeenCalled()
+  })
+
+  // ==================== 值模板候选按来源容器 ====================
+
+  it('已选来源：值模板候选按来源容器实际列（不是整页字段）', async () => {
+    getMetadataMock.mockResolvedValue({ data: { columns: [{ key: 'status' }, { key: 'amount' }] } })
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: 'dsSrc', refId: 'g_src' },
+        { id: 'dsTarget', refId: 'g_target' },
+      ],
+      rowFields: ['order_no'],
+      actions: [
+        {
+          trigger: 'row-click',
+          source: 'dsSrc',
+          steps: [{ op: 'set-filter', target: 'dsTarget', field: '', value: '' }],
+        },
+      ],
+    })
+    await vi.waitFor(() =>
+      expect(wrapper.findComponent(BusTemplateInput).props('vars')).toEqual([
+        '{node.status}',
+        '{node.amount}',
+        '{node.id}',
+        '{row.status}',
+        '{row.amount}',
+        '{row.id}',
+        '{source}',
+      ]),
+    )
+    expect(getMetadataMock).toHaveBeenCalledWith('g_src')
+  })
+
+  it('任意来源（source 空）：回退整页字段，且不预取列清单', async () => {
+    const wrapper = mountPanel({
+      dataSources: [{ id: 'dsTarget', refId: 'g_target' }],
+      rowFields: ['order_no'],
+      actions: [
+        { trigger: 'row-click', source: '', steps: [{ op: 'set-filter', target: 'dsTarget', field: '', value: '' }] },
+      ],
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent(BusTemplateInput).props('vars')).toEqual([
+      '{node.order_no}',
+      '{node.id}',
+      '{row.order_no}',
+      '{row.id}',
+      '{source}',
+    ])
+    expect(getMetadataMock).not.toHaveBeenCalled()
   })
 })

@@ -115,6 +115,7 @@
         :dataSources="formDataSources"
         :enabledDataSources="enabledDataSources"
         :actions="formActions"
+        :row-fields="currentFieldKeys"
         @update:dataSources="updateFormDataSources"
         @update:actions="updateFormActions"
       />

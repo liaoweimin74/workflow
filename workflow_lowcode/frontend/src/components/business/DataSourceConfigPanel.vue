@@ -77,9 +77,21 @@
             <el-select v-model="step.target" placeholder="目标数据源" style="width: 130px">
               <el-option v-for="ds in localDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
             </el-select>
-            <el-input v-if="stepHasField(step, 'field')" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
-            <el-input v-if="stepHasField(step, 'value')" v-model="step.value" :placeholder="stepValuePlaceholder(step.op)" style="width: 130px" />
-            <el-input v-if="stepHasField(step, 'recordId')" v-model="step.recordId" placeholder="如 {row.id}" style="width: 100px" />
+            <el-select
+              v-if="stepHasField(step, 'field')"
+              v-model="step.field"
+              placeholder="过滤字段"
+              style="width: 130px"
+              filterable
+              allow-create
+              default-first-option
+              :reserve-keyword="false"
+              @visible-change="(v: boolean) => v && ensureFields(step.target)"
+            >
+              <el-option v-for="f in fieldOptions(step)" :key="f.value" :label="f.label" :value="f.value" />
+            </el-select>
+            <BusTemplateInput v-if="stepHasField(step, 'value')" v-model="step.value" :vars="templateVars(ac)" :placeholder="stepValuePlaceholder(step.op)" style="width: 130px" />
+            <BusTemplateInput v-if="stepHasField(step, 'recordId')" v-model="step.recordId" :vars="templateVars(ac)" placeholder="如 {row.id}" style="width: 130px" />
             <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
           </div>
           <el-button link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
@@ -87,7 +99,7 @@
         <el-button type="primary" plain @click="addAction">+ 添加动作</el-button>
         <div class="panel-tip">
           <el-icon><InfoFilled /></el-icon>
-          <span>动作链：触发事件 → 步骤列表。值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）；「重载记录」用 value、「加载记录」用 recordId 传记录 ID 模板</span>
+          <span>动作链：触发事件 → 步骤列表。值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识），输入 { 可从当前触发器可用变量中补全；「重载记录」用 value、「加载记录」用 recordId 传记录 ID 模板</span>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -98,9 +110,12 @@
 import { ref, watch } from 'vue'
 import { Plus, InfoFilled } from '@element-plus/icons-vue'
 import type { DataSourceDTO } from '@/api/data-source'
+import BusTemplateInput from './BusTemplateInput.vue'
+import { loadBusFieldOptions, type BusFieldOption } from './busFieldOptions'
 import {
   busOpOptions,
   busStepFields,
+  busTemplateVars,
   busTriggerOptions,
   type ActionStep,
   type BusOp,
@@ -133,6 +148,8 @@ const props = defineProps<{
   enabledDataSources: DataSourceDTO[]
   /** 动作配置 */
   actions?: PageAction[]
+  /** 行/记录字段名（模板变量 {row.x} 候选，由宿主设计器传入） */
+  rowFields?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -154,6 +171,36 @@ function stepHasField(step: ActionStep, field: BusStepField): boolean {
 /** value 输入框提示语：过滤值模板 / 记录 ID 模板 */
 function stepValuePlaceholder(op: BusOp): string {
   return op === 'reload-record' ? '记录ID，如 {row.id}' : '如 {node.id}'
+}
+
+/** 页面内数据源标识 → 全局数据源 refId（未绑定/未选返回空串） */
+function refIdOf(dsId?: string): string {
+  return localDataSources.value.find((ds) => ds.id === dsId)?.refId || ''
+}
+
+/** 数据源实际列清单（按 refId 缓存，见 busFieldOptions） */
+const fieldsByRefId = ref<Record<string, BusFieldOption[]>>({})
+
+async function ensureFields(...dsIds: (string | undefined)[]): Promise<void> {
+  for (const dsId of new Set(dsIds.filter(Boolean))) {
+    const refId = refIdOf(dsId)
+    if (!refId || fieldsByRefId.value[refId]) continue
+    const options = await loadBusFieldOptions(refId)
+    // 空清单（含请求失败）不落本地映射，下次重试；模块层已缓存的成功结果不会重复请求
+    if (options.length) fieldsByRefId.value[refId] = options
+  }
+}
+
+/** 值模板候选：{row.x} 取的是触发侧（来源容器）的数据，故按 ac.source 的列展开；
+ *  source 为空=任意来源，无单一容器可依，回退宿主传入的整页字段 */
+function templateVars(ac: PageAction): string[] {
+  const sourceRefId = ac.source ? refIdOf(ac.source) : ''
+  const sourceFields = sourceRefId ? fieldsByRefId.value[sourceRefId]?.map((f) => f.value) : undefined
+  return busTemplateVars(ac.trigger, sourceFields ?? props.rowFields ?? [])
+}
+
+function fieldOptions(step: ActionStep): BusFieldOption[] {
+  return fieldsByRefId.value[refIdOf(step.target)] || []
 }
 
 /** 当前激活的页签 */
@@ -185,6 +232,15 @@ watch(
     localActions.value = [...(newVal || [])]
   },
   { deep: true }
+)
+
+// 卡片配了来源就预取其列，值输入敲 { 时才有候选（任意来源无单一容器可依，不预取）
+watch(
+  () => localActions.value.map((ac) => ac.source || '').join('\u0000'),
+  () => {
+    for (const ac of localActions.value) if (ac.source) void ensureFields(ac.source)
+  },
+  { immediate: true },
 )
 
 /** 添加数据源绑定 */

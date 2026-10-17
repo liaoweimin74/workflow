@@ -8500,3 +8500,18 @@ Work Log:
 Stage Summary:
 - r97 全绿 200×4 真绿，重供给 #48 单轮内恢复，零 mvn 32 次，累计重供给 48 次
 - 内存 3.0GB 正常，oom 0
+
+---
+
+Task ID: r98
+Agent: main (巡检)
+Task: 2026-10-17 19:05 cron 巡检（重供给 #49 恢复）
+
+Work Log:
+- 探测：8080=500 no such table（重供给 #49，Node 假绿）；标准流水线：重拼 md5 e369839b ✓ → recover 31 秒（零 mvn 第 33 次，/usr/bin/java 实例）
+- 域名 Host 必测 200 ✓；四链路 200×4；40 秒稳定复验通过（java 1456 / vite 1260）
+- 内存备案：cgroup 3.58GB 超 3.5GB 线 —— vite RSS 710MB、java RSS 465MB，属重供给后前端重编译期正常水位，无 oom
+- 收口：dump-db OK 20261017-110723（push 本轮正常）
+
+Stage Summary:
+- r98 全绿 200×4 真绿，重供给 #49 单轮内恢复，零 mvn 33 次，累计重供给 49 次；内存 3.58GB 备案（vite 710MB/java 465MB）

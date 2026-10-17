@@ -7,6 +7,10 @@ import {
   CHAIN_ACTIONS,
   chainParamKeyOptions,
   chainParamOptions,
+  chainParamView,
+  chainParamsEditable,
+  busTemplateVars,
+  retargetActionParams,
   syncActionParams,
   busOpOptions,
   busStepFields,
@@ -108,7 +112,13 @@ describe('参数值输入形态（chainParamKind）', () => {
   it('未标注 paramKinds 的动作一律 free（不改变既有控件）', () => {
     expect(chainParamKind('message', 'text')).toBe('free')
     expect(chainParamKind('message', 'type')).toBe('free')
-    expect(chainParamKind('open-container', 'target')).toBe('free')
+  })
+
+  it('容器类动作的 target 为 target 形态（候选来自设计器上下文）', () => {
+    for (const op of ['open-container', 'close-container', 'load-record', 'save-container']) {
+      expect(chainParamKind(op, 'target')).toBe('target')
+    }
+    expect(chainParamKind('load-record', 'recordId')).toBe('free')
   })
 
   it('paramKinds 的键必须属于该动作的 paramKeys（防元数据漂移）', () => {
@@ -181,6 +191,32 @@ describe('切换动作类型补齐约定参数（syncActionParams）', () => {
   })
 })
 
+describe('换动作类型重置参数（retargetActionParams）', () => {
+  it('契约外旧键一律丢弃，新契约按键补空行', () => {
+    expect(retargetActionParams('message', [{ key: 'url', value: 'https://a' }])).toEqual([
+      { key: 'text', value: '' },
+      { key: 'type', value: '' },
+    ])
+  })
+
+  it('同名参数保留已填值（容器动作之间切换不清空 target）', () => {
+    expect(retargetActionParams('load-record', [{ key: 'target', value: 'ds_1' }, { key: 'text', value: 'ok' }])).toEqual([
+      { key: 'target', value: 'ds_1' },
+      { key: 'recordId', value: '' },
+    ])
+  })
+
+  it('动态参数动作无契约键 → 换入即清空（set-filter 整包当过滤条件，残留键会错筛）', () => {
+    expect(retargetActionParams('set-filter', [{ key: 'text', value: 'ok' }])).toEqual([])
+  })
+
+  it('无参数动作不参与执行，参数原样保留（切回原动作不丢已填字段）', () => {
+    const existing = [{ key: 'status', value: '$row.status' }]
+    expect(retargetActionParams('refresh', existing)).toEqual(existing)
+    expect(retargetActionParams('script', [])).toEqual([{ key: 'source', value: '' }])
+  })
+})
+
 describe('参数名候选（chainParamKeyOptions）', () => {
   it('返回该动作约定的参数名，供下拉选择', () => {
     expect(chainParamKeyOptions('script')).toEqual(['source'])
@@ -190,5 +226,94 @@ describe('参数名候选（chainParamKeyOptions）', () => {
   it('无约定参数的动作候选为空（仍可自由输入过滤字段名）', () => {
     expect(chainParamKeyOptions('set-filter')).toEqual([])
     expect(chainParamKeyOptions('unknown-action')).toEqual([])
+  })
+})
+
+describe('总线步骤值模板候选（busTemplateVars）', () => {
+  it('行/节点类触发器：行对象根按字段展开，标量根给本身', () => {
+    const vars = busTemplateVars('row-click', ['order_no', 'id'])
+    expect(vars).toEqual([
+      '{node.order_no}',
+      '{node.id}',
+      '{row.order_no}',
+      '{row.id}',
+      '{source}',
+    ])
+  })
+
+  it('record-change 额外提供 record 根（节点点击与记录变化都带）', () => {
+    const vars = busTemplateVars('record-change', ['id'])
+    expect(vars).toContain('{record.id}')
+    expect(busTemplateVars('row-click', ['id'])).not.toContain('{record.id}')
+  })
+
+  it('field-change 给 field/value/record，不给 row/node', () => {
+    const vars = busTemplateVars('field-change', ['id'])
+    expect(vars).toEqual(['{field}', '{value}', '{record.id}'])
+  })
+
+  it('未登记触发器回退到 row/node/source + id（不给空候选）', () => {
+    expect(busTemplateVars('whatever', [])).toEqual(['{row.id}', '{node.id}', '{source}'])
+  })
+
+  it('行字段为空时至少给 id（记录 ID 是最常用模板）', () => {
+    expect(busTemplateVars('row-click', [])).toEqual(['{node.id}', '{row.id}', '{source}'])
+  })
+
+  it('记录 id 恒在候选内（数据源列清单不含 id，行数据却带）', () => {
+    expect(busTemplateVars('row-click', ['status', 'amount'])).toEqual([
+      '{node.status}',
+      '{node.amount}',
+      '{node.id}',
+      '{row.status}',
+      '{row.amount}',
+      '{row.id}',
+      '{source}',
+    ])
+    // 字段清单里已有 id 时不重复
+    expect(busTemplateVars('row-click', ['id'])).toEqual(['{node.id}', '{row.id}', '{source}'])
+  })
+})
+
+describe('参数行视图（chainParamView / chainParamsEditable）', () => {
+  it('契约参数按声明顺序成行，缺失的键补空占位行', () => {
+    expect(chainParamView('message', [{ key: 'type', value: 'info' }])).toEqual([
+      { key: 'text', value: '', custom: false },
+      { key: 'type', value: 'info', custom: false },
+    ])
+  })
+
+  it('契约外的键排在契约参数之后并标记 custom，空值垃圾键丢弃', () => {
+    const view = chainParamView('message', [
+      { key: 'text', value: 'ok' },
+      { key: 'foo', value: '1' },
+      { key: 'bar', value: '' },
+    ])
+    expect(view.map((p) => `${p.key}:${p.custom}`)).toEqual(['text:false', 'type:false', 'foo:true'])
+  })
+
+  it('动态参数动作（set-filter）原样保留用户填写的参数名', () => {
+    expect(chainParamView('set-filter', [{ key: 'status', value: '$row.status' }])).toEqual([
+      { key: 'status', value: '$row.status', custom: false },
+    ])
+  })
+
+  it('只有参数名本身是业务变量的动作可增删参数行', () => {
+    expect(chainParamsEditable('set-filter')).toBe(true)
+    expect(chainParamsEditable('message')).toBe(false)
+    expect(chainParamsEditable('refresh')).toBe(false)
+  })
+
+  it('无参数动作不产生参数行（执行侧不读参数，显示出来就是误导）', () => {
+    expect(chainParamView('refresh', [])).toEqual([])
+    expect(chainParamView('refresh', [{ key: 'text', value: 'ok' }])).toEqual([])
+    expect(chainParamView('open-detail', [{ key: 'junk', value: '1' }])).toEqual([])
+    expect(chainParamView('clear-selection', [{ key: 'field', value: 'a' }])).toEqual([])
+  })
+
+  it('未登记的动作类型仍显示契约外参数（避免把未知动作的参数静默藏掉）', () => {
+    expect(chainParamView('future-action', [{ key: 'x', value: '1' }])).toEqual([
+      { key: 'x', value: '1', custom: true },
+    ])
   })
 })

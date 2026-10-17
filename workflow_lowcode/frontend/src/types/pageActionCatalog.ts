@@ -128,6 +128,34 @@ export function busTriggerOptions(): Array<{ value: BusTrigger; label: string }>
   return BUS_TRIGGERS.map(({ value, label }) => ({ value, label }))
 }
 
+/**
+ * 各触发器 eventData 的模板根（值里的 `{row.id}` 由 PageRendererPage.resolveStepValue
+ * 对 eventData 做点路径取值，根名写错就静默取空）。清单需与渲染侧 emit 的形状一致。
+ */
+export const BUS_EVENT_ROOTS: Record<string, string[]> = {
+  'node-click': ['node', 'row', 'record', 'source'],
+  'row-click': ['node', 'row', 'source'],
+  'row-edit': ['node', 'row', 'source'],
+  'row-view': ['node', 'row', 'source'],
+  'row-create': ['node', 'row', 'source'],
+  'record-change': ['node', 'row', 'record', 'source'],
+  'field-change': ['field', 'value', 'record'],
+}
+
+/** 记录对象根：可按行字段展开成 {row.xxx}；其余根是标量，直接给根名 */
+const ROW_LIKE_ROOTS = new Set(['row', 'node', 'record'])
+
+/** 总线步骤值输入框的 `{...}` 模板候选，按触发器可用根展开行字段 */
+export function busTemplateVars(trigger: string, rowFields: string[] = []): string[] {
+  const roots = BUS_EVENT_ROOTS[trigger] ?? ['row', 'node', 'source']
+  // 记录 id 补齐：数据源 metadata 只给业务列，行数据自带的 id 不在其中，而 {row.id} 恰是最常用模板
+  const fields = rowFields.length ? [...rowFields] : ['id']
+  if (!fields.includes('id')) fields.push('id')
+  return roots.flatMap((root) =>
+    ROW_LIKE_ROOTS.has(root) ? fields.map((f) => `{${root}.${f}}`) : [`{${root}}`],
+  )
+}
+
 // ==================== 体系 B：组件级事件动作链 ====================
 
 /** 组件级动作类型 */
@@ -206,8 +234,8 @@ export interface CellClickConfig {
   actions: EventAction[]
 }
 
-/** 参数值的输入形态：free=单行文本（$row./$param. 模板）；script=多行代码编辑器 */
-export type ChainParamKind = 'free' | 'script'
+/** 参数值的输入形态：free=单行文本（$row./$param. 模板）；script=多行代码编辑器；target=容器数据源标识（候选来自设计器上下文，仍可手填） */
+export type ChainParamKind = 'free' | 'script' | 'target'
 
 /** 组件级动作的能力声明 */
 export interface ChainActionMeta {
@@ -221,6 +249,8 @@ export interface ChainActionMeta {
   delegated?: boolean
   /** 约定参数 key（resolveParams 结果按这些 key 取值） */
   paramKeys?: string[]
+  /** 参数名本身就是业务变量（如 set-filter 的参数名即过滤字段）→ 面板允许增删参数行 */
+  dynamicParams?: boolean
   /** 参数值输入形态（键为 paramKeys 中的参数名）；缺省 free */
   paramKinds?: Record<string, ChainParamKind>
   /** 枚举参数的固定候选（键为 paramKeys 中的参数名）；缺省自由输入 */
@@ -239,6 +269,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     label: '设置筛选',
     consumers: ['button', 'event', 'cell'],
     renderers: ['table', 'cards'],
+    dynamicParams: true,
     paramHint: '参数名即过滤字段，值支持 $row.字段',
   },
   { value: 'refresh', label: '刷新数据', consumers: ['button', 'event', 'cell'], renderers: ['table', 'cards'] },
@@ -285,6 +316,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     renderers: ['table', 'cards'],
     delegated: true,
     paramKeys: ['target'],
+    paramKinds: { target: 'target' },
     paramHint: 'target 为容器数据源标识，留空则用本组件自身数据源',
   },
   {
@@ -294,6 +326,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     renderers: ['table', 'cards'],
     delegated: true,
     paramKeys: ['target'],
+    paramKinds: { target: 'target' },
   },
   {
     value: 'load-record',
@@ -302,6 +335,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     renderers: ['table', 'cards'],
     delegated: true,
     paramKeys: ['target', 'recordId'],
+    paramKinds: { target: 'target' },
     paramHint: 'recordId 支持 $row.字段，留空取当前行 id',
   },
   {
@@ -311,6 +345,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     renderers: ['table', 'cards'],
     delegated: true,
     paramKeys: ['target'],
+    paramKinds: { target: 'target' },
   },
 ]
 
@@ -367,6 +402,36 @@ export function chainParamOptions(actionType: string, paramKey: string): string[
   return CHAIN_ACTIONS.find((a) => a.value === actionType)?.paramOptions?.[paramKey] ?? []
 }
 
+/** 参数行视图项：custom 表示契约外的遗留键（面板给只读参数名 + 可删） */
+export interface ChainParamView {
+  key: string
+  value: string
+  custom: boolean
+}
+
+/**
+ * 面板参数区的数据源：固定契约动作按 paramKeys 顺序成行（缺失补空占位），
+ * 契约外已填值的遗留键（历史脏数据）附在后面并标 custom 供用户清理；
+ * 动态参数动作（set-filter，参数名即业务字段）原样返回，空值垃圾键丢弃。
+ */
+export function chainParamView(actionType: string, params: EventActionParam[] = []): ChainParamView[] {
+  const meta = CHAIN_ACTIONS.find((a) => a.value === actionType)
+  if (meta?.dynamicParams) return params.map((p) => ({ ...p, custom: false }))
+  // 契约明确不接收参数的动作（刷新数据/打开详情/清空选择…）：执行侧根本不读参数，
+  // 把历史残留渲染成可填行只会误导，故整块参数区不出；未登记类型仍照旧显示，避免静默藏数据。
+  if (meta && !(meta.paramKeys?.length ?? 0)) return []
+  const known = new Set(meta?.paramKeys ?? [])
+  return syncActionParams(actionType, params).map((p) => ({
+    ...p,
+    custom: !!p.key && !known.has(p.key),
+  }))
+}
+
+/** 参数行能否增删改参数名：仅参数名本身是业务变量的动作（其余动作参数由契约固定） */
+export function chainParamsEditable(actionType: string): boolean {
+  return !!CHAIN_ACTIONS.find((a) => a.value === actionType)?.dynamicParams
+}
+
 /**
  * 切换动作类型时补齐约定参数：同名参数保留已填值。
  * 约定外的参数只在已填值时保留（空值是上一个动作自动生成的行，留着就是垃圾参数）；
@@ -380,6 +445,22 @@ export function syncActionParams(actionType: string, existing: EventActionParam[
     ...keys.map((key) => ({ key, value: existing.find((p) => p.key === key)?.value ?? '' })),
     ...existing.filter((p) => p.key && !known.has(p.key) && p.value),
   ]
+}
+
+/**
+ * 换动作类型时的参数重置（仅面板 patchAction 用；参数行每次写入仍走 syncActionParams，
+ * 那条路径要保留历史脏数据供用户清理，两者语义不同）。
+ * - 新动作有契约参数：只按新契约成行，契约外旧键丢弃（上一个动作的键在新语义下无意义）
+ * - 动态参数动作（set-filter）：整包参数会被当作过滤字段，旧键留着即错筛，换入即清空
+ * - 无参数动作：参数不参与执行，原样保留，便于用户切回原动作时不丢已填字段
+ */
+export function retargetActionParams(actionType: string, existing: EventActionParam[] = []): EventActionParam[] {
+  const keys = chainParamKeyOptions(actionType)
+  if (keys.length > 0) {
+    return keys.map((key) => ({ key, value: existing.find((p) => p.key === key)?.value ?? '' }))
+  }
+  if (chainParamsEditable(actionType)) return []
+  return existing
 }
 
 /** 按展示模式取触发器候选（card 过滤表格专属） */

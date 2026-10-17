@@ -4,6 +4,8 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import ElementPlus from 'element-plus'
 import ActionsConfig from '../ActionsConfig.vue'
 
@@ -392,5 +394,55 @@ describe('ActionsConfig — 动作参数按类型自动补齐', () => {
     await nextTick()
     expect(lastEvents(wrapper)[0].actions[0].params).toEqual([{ key: 'status', value: '$row.status' }])
     wrapper.unmount()
+  })
+})
+
+// ----- 展开行事件链区随表格横向滚动被裁切（源码断言，无需 mount）-----
+describe('ActionsConfig — 展开事件链区不随表格横向滚动被裁切', () => {
+  const source = readFileSync(resolve(__dirname, '../ActionsConfig.vue'), 'utf8')
+
+  it('表格设为 container，展开内容限宽为表格可视宽并 sticky 左边缘', () => {
+    // 列宽合计 ≈1076 > 弹窗可视宽 ≈796 → 表格必然横向滚动；
+    // 展开区若跟随滚动，「按钮事件链…」标题、变量提示与左侧动作下拉会被裁出视口。
+    expect(source).toMatch(/\.el-table\s*\{[\s\S]*?container-type:\s*inline-size;/)
+    expect(source).toMatch(/\.button-events\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?left:\s*0;[\s\S]*?width:\s*100cqi;/)
+  })
+})
+
+// ----- 事件链重排：动作卡片化、参数按契约竖排（jsdom 下 el-table 单元格不渲染，故用源码结构断言）-----
+describe('ActionsConfig — 展开事件链布局重排', () => {
+  const source = readFileSync(resolve(__dirname, '../ActionsConfig.vue'), 'utf8')
+  /** 展开区模板片段：从 .button-events 到变量提示 */
+  const block = source.slice(source.indexOf('class="button-events"'), source.indexOf('var-hint'))
+
+  it('动作类型与「移除动作」在头部行，参数不与之同排', () => {
+    expect(block).toContain('class="event-action-head"')
+    const head = block.slice(
+      block.indexOf('class="event-action-head"'),
+      block.indexOf('class="event-action-params"'),
+    )
+    expect(head).toContain('actionTypeOptions')
+    expect(head).toContain('event-action-remove')
+    expect(head).not.toContain('event-param-row')
+  })
+
+  it('参数纵向排列在参数区内，值输入弹性撑满', () => {
+    expect(block).toContain('class="event-param-row"')
+    expect(block).toContain('class="param-value"')
+    expect(source).toMatch(/\.event-action-params\s*\{[\s\S]*?flex-direction:\s*column;/)
+    expect(source).toMatch(/\.param-value\s*\{[\s\S]*?flex:\s*1 1 auto;/)
+  })
+
+  it('参数行按契约渲染：固定参数名只读，仅动态参数动作给增删入口', () => {
+    expect(block).toContain('class="param-key-label"')
+    expect(block).toContain('p.custom || paramsEditable(action.type)')
+    expect(block).toContain('v-if="paramsEditable(action.type)"')
+    expect(block).toContain('eventParamView(row.key, ai)')
+    // 动态参数动作零参数时也要渲染参数区，否则没有第一个参数的添加入口
+    expect(block).toContain('eventParamView(row.key, ai).length > 0 || paramsEditable(action.type)')
+  })
+
+  it('换动作类型走参数重置，不沿用上一个动作的残留键', () => {
+    expect(source).toMatch(/patch\.type \? \{ \.\.\.merged, params: retargetActionParams\(patch\.type, a\.params\) \}/)
   })
 })

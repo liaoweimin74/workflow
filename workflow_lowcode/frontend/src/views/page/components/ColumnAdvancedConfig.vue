@@ -49,7 +49,7 @@
           </div>
           <StyleRuleEditor v-model="fieldRules" scope="field" @update:model-value="syncFieldStyle" />
 
-          <el-form-item>
+          <el-form-item class="cellclick-item">
             <template #label>
               <span class="label-with-tip">
                 点击动作
@@ -59,38 +59,67 @@
               </span>
             </template>
             <div class="cellclick-editor">
-              <div v-for="(action, ai) in col?.onCellClick?.actions || []" :key="ai" class="event-action-row">
-                <el-select
-                  :model-value="action.type"
-                  style="width: 130px"
-                  @change="(v: string) => patchAction(ai, { type: v })"
-                >
-                  <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
-                </el-select>
-                <div v-for="(p, pi) in getActionParams(ai)" :key="pi" class="event-param-row">
+              <div v-for="(action, ai) in col?.onCellClick?.actions || []" :key="ai" class="event-action-card">
+                <div class="event-action-head">
+                  <span class="event-action-index">动作 {{ ai + 1 }}</span>
                   <el-select
-                    :model-value="p.key"
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="参数名"
-                    style="width: 100px"
-                    @change="(v: string) => patchParam(ai, pi, { key: v })"
+                    :model-value="action.type"
+                    style="width: 140px"
+                    @change="(v: string) => patchAction(ai, { type: v })"
                   >
-                    <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
+                    <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
                   </el-select>
-                  <ChainParamInput
-                    :model-value="p.value"
-                    :kind="chainParamKind(action.type, p.key)"
-                    :options="chainParamOptions(action.type, p.key)"
-                    placeholder="值，支持 $row.字段"
-                    width="170px"
-                    @update:model-value="(v: string) => patchParam(ai, pi, { value: v })"
-                  />
-                  <el-button link type="danger" @click="removeParam(ai, pi)">删</el-button>
+                  <el-button class="event-action-remove" link type="danger" @click="removeAction(ai)">移除</el-button>
                 </div>
-                <el-button link type="primary" @click="addParam(ai)">+ 参数</el-button>
-                <el-button link type="danger" @click="removeAction(ai)">移除</el-button>
+
+                <!-- 参数区由动作契约驱动：固定参数只读参数名，只有 set-filter 这类动态参数动作可增删 -->
+                <div v-if="paramView(action).length > 0 || paramsEditable(action.type)" class="event-action-params">
+                  <div v-for="(p, pi) in paramView(action)" :key="p.key || `空行${pi}`" class="event-param-row">
+                    <el-select
+                      v-if="p.custom || paramsEditable(action.type)"
+                      class="param-key-input"
+                      :model-value="p.key"
+                      filterable
+                      allow-create
+                      default-first-option
+                      placeholder="参数名"
+                      style="width: 100px"
+                      @change="(v: string) => patchParam(ai, pi, { key: v })"
+                    >
+                      <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
+                    </el-select>
+                    <span v-else class="param-key-label">{{ p.key }}</span>
+                    <span v-if="p.custom" class="param-key-custom">自定义</span>
+                    <div class="param-value">
+                      <ChainParamInput
+                        :model-value="p.value"
+                        :kind="chainParamKind(action.type, p.key)"
+                        :options="chainParamOptions(action.type, p.key)"
+                        placeholder="值，支持 $row.字段"
+                        width="100%"
+                        @update:model-value="(v: string) => patchParam(ai, pi, { value: v })"
+                      />
+                    </div>
+                    <el-button
+                      v-if="p.custom || paramsEditable(action.type)"
+                      class="param-remove"
+                      link
+                      type="danger"
+                      @click="removeParam(ai, pi)"
+                    >
+                      删
+                    </el-button>
+                  </div>
+                  <el-button
+                    v-if="paramsEditable(action.type)"
+                    class="param-add"
+                    link
+                    type="primary"
+                    @click="addParam(ai)"
+                  >
+                    + 参数
+                  </el-button>
+                </div>
               </div>
               <el-button type="primary" plain size="small" @click="addAction">+ 增加动作</el-button>
             </div>
@@ -189,7 +218,7 @@ import { ref, computed, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import ExpressionEditor from '@/components/expression/ExpressionEditor.vue'
 import type { ColumnViewConfig } from './schemaTypes'
-import { chainActionOptions, chainParamKeyOptions, chainParamKind, chainParamOptions, syncActionParams } from '@/types/pageActionCatalog'
+import { chainActionOptions, chainParamKeyOptions, chainParamKind, chainParamOptions, chainParamView, chainParamsEditable, retargetActionParams, syncActionParams } from '@/types/pageActionCatalog'
 import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
 import { aggregateOptionsOf } from './tableEnhance'
@@ -299,9 +328,12 @@ function patchActions(actions: any[]) {
   col.value = { ...col.value, onCellClick: { actions } }
 }
 
-function getActionParams(ai: number): any[] {
-  return actions()[ai]?.params || []
+/** 参数区数据源：契约参数成行（缺失补空占位），契约外遗留键标 custom */
+function paramView(action: any) {
+  return chainParamView(action?.type ?? '', action?.params || [])
 }
+
+const paramsEditable = chainParamsEditable
 
 function addAction() {
   const list = [...actions(), { type: 'message', params: syncActionParams('message') }]
@@ -320,26 +352,27 @@ function patchAction(ai: number, p: Record<string, any>) {
   patchActions(actions().map((a: any, i: number) => {
     if (i !== ai) return a
     const merged = { ...a, ...p }
-    // 换动作即按新类型补齐约定参数，省去手打参数名（script 的 source 等）
-    return p.type ? { ...merged, params: syncActionParams(p.type, a.params) } : merged
+    // 换动作即按新契约重置参数：补约定参数空行，同时丢弃上一个动作的残留键
+    return p.type ? { ...merged, params: retargetActionParams(p.type, a.params) } : merged
   }))
 }
 
 function addParam(ai: number) {
   patchActions(actions().map((a: any, i: number) =>
-    i === ai ? { ...a, params: [...(a.params || []), { key: '', value: '' }] } : a,
+    i === ai ? { ...a, params: [...syncActionParams(a.type, a.params), { key: '', value: '' }] } : a,
   ))
 }
 
 function removeParam(ai: number, pi: number) {
   patchActions(actions().map((a: any, i: number) =>
-    i === ai ? { ...a, params: (a.params || []).filter((_: any, j: number) => j !== pi) } : a,
+    i === ai ? { ...a, params: syncActionParams(a.type, a.params).filter((_: any, j: number) => j !== pi) } : a,
   ))
 }
 
 function patchParam(ai: number, pi: number, p: Record<string, string>) {
+  // 写前先按契约对齐参数序，使视图行号与 params 下标一致（占位行首次填写即落库）
   patchActions(actions().map((a: any, i: number) =>
-    i === ai ? { ...a, params: (a.params || []).map((x: any, j: number) => (j === pi ? { ...x, ...p } : x)) } : a,
+    i === ai ? { ...a, params: syncActionParams(a.type, a.params).map((x: any, j: number) => (j === pi ? { ...x, ...p } : x)) } : a,
   ))
 }
 
@@ -364,6 +397,9 @@ function handleClosed() {
 .advanced-column-form > :deep(.el-form-item) { grid-column: span 24; margin-bottom: 0; }
 .advanced-column-form > :deep(.el-form-item:nth-of-type(4)),
 .advanced-column-form > :deep(.el-form-item:nth-of-type(5)) { grid-column: span 12; }
+/* 点击动作项：栅格中 .alignment-class-row / .style-rule-table 同为 div，nth-of-type 计数会把它误判为半宽项（≈286px），
+   动作卡片与参数值输入被压窄，故专属规则排在半宽规则之后显式占满整行。 */
+.advanced-column-form > :deep(.el-form-item.cellclick-item) { grid-column: span 24; }
 .advanced-column-form :deep(.el-input), .advanced-column-form :deep(.el-select), .advanced-column-form :deep(.el-input-number) { width: 100%; }
 .advanced-column-form :deep(.style-rule-table), .advanced-column-form :deep(.cellclick-editor) { width: 100%; }
 .advanced-column-form > :deep(.style-rule-table) { grid-column: span 24; min-width: 0; }
@@ -371,17 +407,55 @@ function handleClosed() {
 .advanced-column-form :deep(.el-form-item__content) { display: block; }
 .alignment-class-row { display: grid; grid-column: span 24; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; }
 .alignment-class-row :deep(.el-form-item) { margin-bottom: 0; min-width: 0; }
-.event-action-row {
+.event-action-card {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background: #fff;
+}
+.event-action-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
+}
+.event-action-index {
+  font-size: 12px;
+  color: #909399;
+}
+.event-action-remove {
+  margin-left: auto;
+}
+.event-action-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
 }
 .event-param-row {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.param-key-label {
+  flex: 0 0 110px;
+  width: 110px;
+  font-size: 12px;
+  color: #606266;
+}
+.param-key-custom {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #e6a23c;
+}
+.param-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+.param-remove,
+.param-add {
+  flex: 0 0 auto;
 }
 .label-with-tip {
   display: inline-flex;

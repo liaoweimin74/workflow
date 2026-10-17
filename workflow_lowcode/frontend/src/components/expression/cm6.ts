@@ -669,8 +669,9 @@ export function buildTheme(cfg: ExpressionExtensionConfig): Extension {
         backgroundColor: 'color-mix(in srgb, var(--el-color-primary) 14%, transparent) !important',
       },
       '.cm-cursor': { borderLeftColor: 'var(--el-color-primary)' },
-      // 补全浮层（挂 body，避免面板 overflow 裁剪）
+      // 补全浮层（挂 body，避免面板 overflow 裁剪）；z-index 需压过 el-dialog 遮罩（~2000+）
       '.cm-tooltip.cm-tooltip-autocomplete': {
+        zIndex: 3000,
         border: '1px solid var(--el-border-color-light)',
         backgroundColor: 'var(--el-bg-color-overlay)',
         borderRadius: '8px',

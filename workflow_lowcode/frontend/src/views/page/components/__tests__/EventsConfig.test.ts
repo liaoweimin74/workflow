@@ -106,9 +106,9 @@ describe('EventsConfig — 事件动作链编辑（共享能力）', () => {
     wrapper.unmount()
   })
 
-  it('addParam 追加参数行 → 动作参数增加', async () => {
+  it('addParam 追加参数行 → 动作参数增加（仅动态参数动作可加）', async () => {
     const wrapper = createWrapper(
-      [{ trigger: 'row-click', target: '', actions: [{ type: 'open-container', params: [] }] }],
+      [{ trigger: 'row-click', target: '', actions: [{ type: 'set-filter', params: [] }] }],
       'card',
     )
     await nextTick()
@@ -200,11 +200,110 @@ describe('EventsConfig — 切动作类型自动补齐约定参数', () => {
     wrapper.unmount()
   })
 
-  it('参数名用下拉候选（可下拉选约定参数，也允许自由输入）', async () => {
-    const wrapper = createWrapper(oneAction('script', [{ key: 'source', value: '' }]))
+  it('动态参数动作的参数名用下拉候选（可下拉选，也允许自由输入字段名）', async () => {
+    const wrapper = createWrapper(oneAction('set-filter', [{ key: 'status', value: '' }]))
     await nextTick()
-    expect(wrapper.find('.param-row .el-select').exists()).toBe(true)
-    expect(wrapper.find('.param-row input[placeholder="参数名"]').exists()).toBe(false)
+    expect(wrapper.find('.param-row .param-key-input').exists()).toBe(true)
+    expect(wrapper.find('.param-row .param-key-label').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('切到 set-filter 时丢弃上一个动作的参数（残留键会被当成过滤字段）', async () => {
+    const wrapper = createWrapper(oneAction('message', [{ key: 'text', value: 'ok' }, { key: 'type', value: 'info' }]))
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.patchAction(0, 0, { type: 'set-filter' })
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    expect(emitted[emitted.length - 1][0][0].actions[0].params).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('切到固定参数动作时只留契约键，契约外旧键不残留', async () => {
+    const wrapper = createWrapper(oneAction('message', [{ key: 'text', value: 'ok' }]))
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.patchAction(0, 0, { type: 'open-link' })
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    expect(emitted[emitted.length - 1][0][0].actions[0].params).toEqual([{ key: 'url', value: '' }])
+    wrapper.unmount()
+  })
+
+  it('动态动作零参数时仍给出「+ 参数」入口（否则第一次配置无从下手）', async () => {
+    const wrapper = createWrapper(oneAction('set-filter', []))
+    await nextTick()
+    expect(wrapper.find('.param-add').exists()).toBe(true)
+    wrapper.find('.param-add').trigger('click')
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    expect(emitted[emitted.length - 1][0][0].actions[0].params).toEqual([{ key: '', value: '' }])
+    wrapper.unmount()
+  })
+})
+// ----- 参数区按契约渲染：固定动作参数名只读，只有 set-filter 能增删 -----
+describe('EventsConfig — 参数区按契约渲染', () => {
+  const oneAction = (type: string, params: any[] = []) => [
+    { trigger: 'row-click', target: '', actions: [{ type, params }] },
+  ]
+
+  it('固定动作：契约参数逐个成行且参数名只读，无增删参数入口', async () => {
+    const wrapper = createWrapper(oneAction('message', [{ key: 'text', value: 'ok' }]))
+    await nextTick()
+    expect(wrapper.findAll('.param-key-label')).toHaveLength(2)
+    expect(wrapper.findAll('.param-key-input')).toHaveLength(0)
+    expect(wrapper.find('.param-add').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('固定动作：契约外遗留键标自定义，参数名可改且可删', async () => {
+    const wrapper = createWrapper(
+      oneAction('message', [{ key: 'text', value: 'ok' }, { key: 'foo', value: '1' }]),
+    )
+    await nextTick()
+    expect(wrapper.findAll('.param-key-label')).toHaveLength(2)
+    expect(wrapper.findAll('.param-key-custom')).toHaveLength(1)
+    expect(wrapper.findAll('.param-key-input')).toHaveLength(1)
+    expect(wrapper.findAll('.param-remove')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('动态动作 set-filter：参数名可编辑并保留增删参数', async () => {
+    const wrapper = createWrapper(oneAction('set-filter', [{ key: 'status', value: '$row.status' }]))
+    await nextTick()
+    expect(wrapper.findAll('.param-key-label')).toHaveLength(0)
+    expect(wrapper.findAll('.param-key-input')).toHaveLength(1)
+    expect(wrapper.find('.param-add').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('无参数动作：不渲染参数行，也没有 + 参数', async () => {
+    const wrapper = createWrapper(oneAction('refresh'))
+    await nextTick()
+    expect(wrapper.findAll('.param-row')).toHaveLength(0)
+    expect(wrapper.find('.param-add').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('无参数动作带历史残留参数：整块参数区不显示（执行侧根本不读参数）', async () => {
+    const wrapper = createWrapper(oneAction('refresh', [{ key: 'text', value: 'ok' }, { key: 'type', value: 'info' }]))
+    await nextTick()
+    expect(wrapper.find('.action-params').exists()).toBe(false)
+    expect(wrapper.findAll('.param-row')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('占位契约行填值后按参数名落库', async () => {
+    const wrapper = createWrapper(oneAction('message', [{ key: 'text', value: 'ok' }]))
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.patchParamValue(0, 0, 1, 'info')
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    expect(emitted[emitted.length - 1][0][0].actions[0].params).toEqual([
+      { key: 'text', value: 'ok' },
+      { key: 'type', value: 'info' },
+    ])
     wrapper.unmount()
   })
 })

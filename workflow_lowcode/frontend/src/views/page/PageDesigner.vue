@@ -54,6 +54,7 @@
         :dataSources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, searchFields: ds.searchFields }))"
         :enabledDataSources="enabledDataSources"
         :actions="schema.actions"
+        :row-fields="currentFieldKeys"
         @update:dataSources="updateDataSources"
         @update:actions="updateActions"
       />
@@ -243,6 +244,7 @@ import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFi
 import { appendGeneratedRules } from '@/composables/useDataSourceCrud'
 import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
+import { setChainParamContextProvider } from './components/chainParamContext'
 import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
@@ -388,6 +390,15 @@ const designerRule = computed<any[]>(() => {
 
 /** 计算公式可视化编辑器字段来源（Task 145）：实时收集同层可引用字段（懒调用，registry 已兜底） */
 setFormulaFieldProvider(() => collectFormulaRefFields(designerRef.value?.getRule() || []))
+
+/** 动作链参数上下文：容器 target 候选（绑定层 dataSources 条目，同 refId 多条各自成候选）与行字段（$row./row. 补全） */
+setChainParamContextProvider(() => ({
+  containerTargets: schema.dataSources.map((ds) => {
+    const name = dsNameOf(ds)
+    return { value: ds.id, label: name ? `${name}（${ds.id}）` : ds.id }
+  }),
+  rowFields: [...new Set(collectFieldKeys(designerRef.value?.getRule() || []))],
+}))
 
 /** 页面画布中的全部字段，供筛选条件选择表单字段 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))

@@ -43,19 +43,27 @@
       </el-form>
 
       <div class="actions-chain">
-        <div v-for="(action, ai) in ev.actions" :key="ai" class="action-row">
-          <el-select
-            :model-value="action.type"
-            
-            style="width: 130px"
-            @change="(v: string) => patchAction(idx, ai, { type: v })"
-          >
-            <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
-          </el-select>
-          <div class="action-params">
-            <div v-for="(row, pi) in action.params" :key="pi" class="param-row">
+        <div v-for="(action, ai) in ev.actions" :key="ai" class="action-card">
+          <div class="action-head">
+            <span class="action-index">动作 {{ ai + 1 }}</span>
+            <el-select
+              :model-value="action.type"
+              
+              style="width: 150px"
+              @change="(v: string) => patchAction(idx, ai, { type: v })"
+            >
+              <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
+            </el-select>
+            <el-button class="action-remove" type="danger" link @click="removeAction(idx, ai)">移除动作</el-button>
+          </div>
+
+          <!-- 参数区由动作契约驱动：固定参数只读参数名，只有 set-filter 这类动态参数动作可增删 -->
+          <div v-if="paramView(action).length > 0 || paramsEditable(action.type)" class="action-params">
+            <div v-for="(p, pi) in paramView(action)" :key="p.key || `空行${pi}`" class="param-row">
               <el-select
-                :model-value="row.key"
+                v-if="p.custom || paramsEditable(action.type)"
+                class="param-key-input"
+                :model-value="p.key"
                 filterable
                 allow-create
                 default-first-option
@@ -65,19 +73,38 @@
               >
                 <el-option v-for="k in chainParamKeyOptions(action.type)" :key="k" :label="k" :value="k" />
               </el-select>
-              <ChainParamInput
-                :model-value="row.value"
-                :kind="chainParamKind(action.type, row.key)"
-                :options="chainParamOptions(action.type, row.key)"
-                placeholder="值，支持 $row.xxx / $param.xxx 变量"
-                width="220px"
-                @update:model-value="(v: string) => patchParamValue(idx, ai, pi, v)"
-              />
-              <el-button  link type="danger" @click="removeParam(idx, ai, pi)">删</el-button>
+              <span v-else class="param-key-label">{{ p.key }}</span>
+              <span v-if="p.custom" class="param-key-custom">自定义</span>
+              <div class="param-value">
+                <ChainParamInput
+                  :model-value="p.value"
+                  :kind="chainParamKind(action.type, p.key)"
+                  :options="chainParamOptions(action.type, p.key)"
+                  placeholder="值，支持 $row.xxx / $param.xxx 变量"
+                  width="100%"
+                  @update:model-value="(v: string) => patchParamValue(idx, ai, pi, v)"
+                />
+              </div>
+              <el-button
+                v-if="p.custom || paramsEditable(action.type)"
+                class="param-remove"
+                link
+                type="danger"
+                @click="removeParam(idx, ai, pi)"
+              >
+                删
+              </el-button>
             </div>
-            <el-button  link type="primary" @click="addParam(idx, ai)">+ 参数</el-button>
+            <el-button
+              v-if="paramsEditable(action.type)"
+              class="param-add"
+              link
+              type="primary"
+              @click="addParam(idx, ai)"
+            >
+              + 参数
+            </el-button>
           </div>
-          <el-button  type="danger" link @click="removeAction(idx, ai)">移除动作</el-button>
         </div>
         <el-button  link type="primary" @click="addAction(idx)">+ 动作</el-button>
       </div>
@@ -95,8 +122,11 @@ import {
   chainParamKeyOptions,
   chainParamKind,
   chainParamOptions,
+  chainParamView,
+  chainParamsEditable,
   chainTriggerLabel,
   chainTriggerOptions,
+  retargetActionParams,
   syncActionParams,
   type EventAction,
   type EventActionParam,
@@ -170,11 +200,23 @@ function patchAction(idx: number, ai: number, patch: Partial<EventAction>) {
     actions: ev.actions.map((a, i) => {
       if (i !== ai) return a
       const merged = { ...a, ...patch }
-      // 换动作即按新类型补齐约定参数，省去手打参数名（script 的 source 等）
-      return patch.type ? { ...merged, params: syncActionParams(patch.type, a.params) } : merged
+      // 换动作即按新契约重置参数：补约定参数空行，同时丢弃上一个动作的残留键
+      return patch.type ? { ...merged, params: retargetActionParams(patch.type, a.params) } : merged
     }),
   }
   commit(props.modelValue.map((e, i) => (i === idx ? next : e)))
+}
+
+/** 参数区数据源：契约参数成行（缺失补空占位），契约外遗留键标 custom */
+function paramView(action: EventAction) {
+  return chainParamView(action.type, action.params)
+}
+
+const paramsEditable = chainParamsEditable
+
+/** 写操作前先按契约对齐参数序，保证视图行号与 params 下标一致（占位行首次填写即落库） */
+function syncedParams(action: EventAction): EventActionParam[] {
+  return syncActionParams(action.type, action.params)
 }
 
 function addParam(idx: number, ai: number) {
@@ -182,7 +224,7 @@ function addParam(idx: number, ai: number) {
   const next: PageEventConfig = {
     ...ev,
     actions: ev.actions.map((a, i) =>
-      i === ai ? { ...a, params: [...a.params, { key: '', value: '' }] } : a,
+      i === ai ? { ...a, params: [...syncedParams(a), { key: '', value: '' }] } : a,
     ),
   }
   commit(props.modelValue.map((e, i) => (i === idx ? next : e)))
@@ -193,7 +235,7 @@ function removeParam(idx: number, ai: number, pi: number) {
   const next: PageEventConfig = {
     ...ev,
     actions: ev.actions.map((a, i) =>
-      i === ai ? { ...a, params: a.params.filter((_, j) => j !== pi) } : a,
+      i === ai ? { ...a, params: syncedParams(a).filter((_, j) => j !== pi) } : a,
     ),
   }
   commit(props.modelValue.map((e, i) => (i === idx ? next : e)))
@@ -213,7 +255,7 @@ function patchParam(idx: number, ai: number, pi: number, patch: Partial<EventAct
     ...ev,
     actions: ev.actions.map((a, i) =>
       i === ai
-        ? { ...a, params: a.params.map((p, j) => (j === pi ? { ...p, ...patch } : p)) }
+        ? { ...a, params: syncedParams(a).map((p, j) => (j === pi ? { ...p, ...patch } : p)) }
         : a,
     ),
   }
@@ -254,20 +296,57 @@ function patchParam(idx: number, ai: number, pi: number, patch: Partial<EventAct
   margin-top: 4px;
   padding-left: 8px;
 }
-.action-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+/* 一个动作一张卡片：头部一行放动作类型与移除入口，参数逐行竖排 */
+.action-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 8px 10px;
   margin-bottom: 8px;
+  background: #fff;
+}
+.action-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.action-index {
+  font-size: 12px;
+  color: #909399;
+}
+.action-remove {
+  margin-left: auto;
 }
 .action-params {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
 }
 .param-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+}
+/* 契约参数名只读，与可编辑的参数名下拉同宽，保证值输入左边缘对齐 */
+.param-key-label {
+  flex: 0 0 120px;
+  width: 120px;
+  font-size: 13px;
+  color: #606266;
+}
+.param-key-custom {
+  font-size: 12px;
+  color: #e6a23c;
+}
+/* 值输入撑满行内剩余宽度（上限避免超宽输入框），不再固定 220px 横向拉长 */
+.param-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+.param-remove,
+.param-add {
+  flex: 0 0 auto;
 }
 .var-hint {
   margin-top: 8px;

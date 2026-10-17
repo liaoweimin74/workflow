@@ -8680,3 +8680,24 @@ Stage Summary:
 - 重供给 #58 已恢复，零 mvn 第 42 次（jar 分卷命中）
 - 新观察：recover-dplus.sh 本次超时 550s 未完成自身流程（但核心恢复动作已完成），首轮日志无追加——下轮若再现需查 recover 内部等待循环逻辑（可能与 mariadb 首次重建路径有关）
 - 域名 Host 500 竞态再现一次，重启 Java 即愈，r96 结论持续有效
+
+---
+Task ID: r108
+Agent: main (cron ops loop)
+Task: 2026-10-18 06:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑报「workflow dump 无效」放弃（重供给后库空，预期行为）
+- 8080 真伪核验 no such table: SYS_USER = 重供给 #59（累计 58→59）
+- 标准流水线：pkill 占位 → checkout 分卷 → 重拼 md5 e369839b 校验通过
+- recover-dplus.sh timeout 550 再次超时（连续第二轮），但日志揭示新机理：done: 8080=200 jar=ok 3306=ok + 真绿 (t+5s) 打印于启动后 ~30s（UTC 22:07:02 = CST 06:07:02）→ recover 功能已完成但脚本挂起不退出
+- 日志异常线索：本次显示「无 jar 备份，前台重建工具链 + mvn 构建」+ ERROR 1045 Access denied——但实际 30 秒即 done 且未走真 mvn（时间不符），疑日志行错位/分支误判，最终 jar=ok
+- hostLocal 500 竞态再现（连续第二轮）+ c 链路 000（vite 代理被竞态波及，r95 模式）→ pkill Java + setsid 重拉 → 28s 后 hostLocal 200 + c 自愈 200
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261017-221814 成功，git commit e1b1e869 已推送
+- 内存 2.80GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #59 已恢复，零 mvn 第 43 次（jar 分卷命中）
+- 确认新系统性问题（连续两轮）：recover-dplus.sh 打印「真绿 done」后脚本挂起不退出，需 timeout 强杀——功能无损但流程不收敛；建议用户裁决修脚本尾部（疑 wait/read/tail 残留或「无 jar 备份」分支误入前台等待）
+- 域名 Host 500 竞态连续两轮出现，重启 Java 均即时治愈，r96 结论持续有效

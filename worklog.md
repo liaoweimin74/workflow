@@ -8532,3 +8532,19 @@ Work Log:
 Stage Summary:
 - r99 全绿 200×4 真绿，重供给 #50 单轮内恢复（累计 50 次，频率稳定 ~1 次/小时持续 50 轮）；零 mvn 34 次
 - dump-db 在重供给窗口的 rc=1 为预期行为（空库 dump 无效即放弃），恢复后收口 dump 成功即闭环
+
+---
+
+Task ID: r100
+Agent: main (巡检)
+Task: 2026-10-17 21:05 cron 巡检（重供给 #51 恢复，巡检第 100 轮）
+
+Work Log:
+- 探测：8080=500 no such table（重供给 #51）；dump 本轮 rc=0
+- 标准流水线：重拼 md5 e369839b ✓ → recover 31 秒（零 mvn 第 35 次，/usr/bin/java 实例）
+- 域名 Host 必测 200 ✓；四链路 200×4；40 秒稳定复验通过（java 1459 / vite 1266）
+- 内存备案：cgroup 3.63GB 超 3.5GB 线 —— vite RSS 733MB、java RSS 464MB，重编译期水位，无 oom
+- 收口：dump-db OK 20261017-130724
+
+Stage Summary:
+- r100 全绿 200×4 真绿，重供给 #51 单轮内恢复，零 mvn 35 次，累计重供给 51 次

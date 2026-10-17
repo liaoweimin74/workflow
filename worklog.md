@@ -8660,3 +8660,23 @@ Work Log:
 
 Stage Summary:
 - r107 全绿 200×4 真绿，重供给 #58 单轮内恢复，零 mvn 42 次，累计重供给 58 次
+
+---
+Task ID: r107
+Agent: main (cron ops loop)
+Task: 2026-10-18 05:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑报 3306 不在线跳过（重供给后 mariadbd 数据目录被清空重启）
+- 四链路表面 200 但 8080 真伪核验 no such table: SYS_USER = 重供给 #58（累计 57→58）
+- 标准流水线：pkill bun/node 占位 → checkout jar 分卷 → 重拼 md5 e369839b/121300861B 校验通过
+- recover-dplus.sh timeout 550 超时被杀（异常！前 12 轮均 27-38s 完成）；但 Java 已被 daemon 拉起（elapsed 9m31s 时确认存活），recover.log 无本次追加记录（卡点未写入日志，疑似卡在等待循环）
+- 直连 8080 accessToken 真绿但 Host: localhost:8080 测试 500 = jar 落盘竞态（r96 模式）→ pkill Java + setsid daemon 重拉 → 28s 后 hostLocal 200 竞态消
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261017-211737 成功（workflow 260K + v6 128K），git commit b0f30b34 已推送远端
+- 内存 2.88GB（未超 3.5GB 线），oom_kill=0
+
+Stage Summary:
+- 重供给 #58 已恢复，零 mvn 第 42 次（jar 分卷命中）
+- 新观察：recover-dplus.sh 本次超时 550s 未完成自身流程（但核心恢复动作已完成），首轮日志无追加——下轮若再现需查 recover 内部等待循环逻辑（可能与 mariadb 首次重建路径有关）
+- 域名 Host 500 竞态再现一次，重启 Java 即愈，r96 结论持续有效

@@ -19,7 +19,9 @@
         <!-- Tab 2: 显示列 -->
         <el-tab-pane :label="effectiveListMode === 'card' ? '卡片字段' : '显示列'" name="columns">
           <!-- 查询栏开关：开启后可配置查询列（QueryColumnsConfig 显示查询勾选），运行时显示查询栏 -->
-          <el-form label-width="100px" size="default">
+          <!-- label-width 固定 120px：按最长 label（显示查询栏/分组可折叠 + 问号图标）留宽，保证不换行；
+               不用 auto——auto 会让 EP 给短 label 补 margin-left 对齐到最宽项，两行看起来缩进（右对齐） -->
+          <el-form label-width="120px" size="default">
             <!-- 卡片顶部快捷配置：两行。第一行：显示查询栏/撑满/卡片最小宽度；第二行：分组字段/分组可折叠/操作区位置 -->
             <div class="card-quick-config">
               <div class="card-quick-row">
@@ -703,10 +705,9 @@ function handleConfirm() {
   color: var(--el-text-color-secondary);
 }
 /* 卡片顶部快捷配置：纵向两行容器。
-   el-form 默认 label-width=100px，六项 label+控件合计超宽会触发 flex 换行。
-   拆为两行（每行三~四项）：第一行 显示查询栏/撑满/卡片最小宽度，
-   第二行 分组字段/分组可折叠/操作区位置。行内统一按内容宽（nowrap 不换行），
-   使每行都能在一行内放下。 */
+   el-form 固定 label-width=120px（够放最长 label + 问号图标，配合 nowrap 不换行），
+   六项拆为两行（每行三~四项）：第一行 显示查询栏/撑满/卡片最小宽度，
+   第二行 分组字段/分组可折叠/操作区位置，两行 label 左边缘对齐。 */
 .card-quick-config {
   display: flex;
   flex-direction: column;
@@ -721,22 +722,16 @@ function handleConfirm() {
 .card-quick-row .el-form-item {
   margin-bottom: 0;
   min-width: 0;
-  /* 去掉 el-form label-width=100px 的固定留白：各项 label 都按内容宽 */
-  --el-form-label-width: max-content;
 }
-.card-quick-row .el-form-item__label {
+/* label 不换行 + 左对齐：el-form-item__label 是子组件内部元素，必须 :deep 才命中；
+   左对齐（EP 默认 label 右对齐）使两行 label 文字左边缘齐平 */
+.card-quick-row :deep(.el-form-item__label) {
   white-space: nowrap;
   flex: 0 0 auto;
-}
-/* label 左对齐：el-form 默认 label 右对齐（element-plus 内联规则 .el-form-item--label-right
-   强制 justify-content:flex-end），字数不同的 label 右对齐后文字左边缘错位，
-   导致第二行（分组字段/分组可折叠/操作区位置）看起来比第一行缩进。
-   label 是 el-form-item 子组件内部元素，须用 :deep 才能命中覆盖。 */
-.card-quick-row :deep(.el-form-item__label) {
   justify-content: flex-start;
 }
-/* 控件允许收缩，确保各项挤进一行 */
-.card-quick-row .el-form-item__content {
+/* 控件允许收缩，确保各项挤进一行（同 label，子组件内部元素需 :deep） */
+.card-quick-row :deep(.el-form-item__content) {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -785,7 +780,6 @@ function handleConfirm() {
 .table-enhance-grid .el-form-item {
   margin-bottom: 0;
   min-width: 0;
-  --el-form-label-width: max-content;
 }
 .table-enhance-grid :deep(.el-form-item__label) {
   white-space: nowrap;

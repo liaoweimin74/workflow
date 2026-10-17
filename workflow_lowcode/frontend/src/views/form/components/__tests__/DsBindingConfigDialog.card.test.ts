@@ -209,14 +209,25 @@ describe('DsBindingConfigDialog — 卡片字段顶部快捷配置两行布局',
     expect(source).toContain('tableData.actionsPlacement')
   })
 
-  it('每行强制单行：nowrap + label 按内容宽（不换行）+ 控件可收缩', () => {
-    // 目的：每行（显示查询栏/撑满/卡片最小宽度、分组字段/分组可折叠/操作区位置）各自在一行展示，不因超宽换行。
+  it('每行强制单行：label 固定宽 + nowrap + 左对齐（不用 auto）', () => {
+    // 目的：每行（显示查询栏/撑满/卡片最小宽度、分组字段/分组可折叠/操作区位置）各自在一行展示，label 不折行。
     expect(source).toMatch(/\.card-quick-row\s*\{[\s\S]*?flex-wrap:\s*nowrap;/)
-    // 各项 label 区去掉 el-form 100px 固定留白，改为按内容宽并 nowrap
-    expect(source).toMatch(/\.card-quick-row \.el-form-item__label\s*\{[\s\S]*?white-space:\s*nowrap;/)
-    expect(source).toMatch(/--el-form-label-width:\s*max-content;/)
-    // 控件弹性收缩，确保各项能被压缩进一行
-    expect(source).toMatch(/\.el-form-item__content\s*\{[\s\S]*?flex: 1 1 auto;/)
+    // 必须固定 label-width 且 ≥120px（最长 label「显示查询栏」+ 问号图标 ≈104px，100px 会折行）
+    const labelWidth = source.match(/<el-form\s+label-width="(\d+)px"/)
+    expect(labelWidth).not.toBeNull()
+    expect(Number(labelWidth![1])).toBeGreaterThanOrEqual(120)
+    // 禁用 auto：EP 的 auto label 机制会给短 label 补 margin-left 对齐到最宽项，两行看起来缩进（右对齐）
+    expect(source).not.toMatch(/<el-form\s+label-width="auto"/)
+    // el-form-item__label / __content 是子组件内部元素：不加 :deep 的选择器根本命中不了，
+    // 曾经的"看着有 nowrap 实则无效"就是 label 换行的根因，故断言必须带 :deep
+    expect(source).toMatch(/\.card-quick-row :deep\(\.el-form-item__label\)\s*\{[\s\S]*?white-space:\s*nowrap;[\s\S]*?justify-content:\s*flex-start;/)
+    expect(source).toMatch(/\.card-quick-row :deep\(\.el-form-item__content\)\s*\{[\s\S]*?flex:\s*1 1 auto;/)
+    // 无效的自定义属性不要留在源码里误导后人（EP 无此变量）
+    expect(source).not.toMatch(/--el-form-label-width/)
+  })
+
+  it('表格增强区 label 同样单行：:deep nowrap（数据表格与卡片列表共用一套规则）', () => {
+    expect(source).toMatch(/\.table-enhance-grid :deep\(\.el-form-item__label\)\s*\{[\s\S]*?white-space:\s*nowrap;[\s\S]*?flex:\s*0 0 auto;/)
   })
 
   it('label 左对齐：两行第一个 label 左边缘对齐（:deep 覆盖 element-plus 右对齐）', () => {

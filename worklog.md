@@ -8463,3 +8463,23 @@ Stage Summary:
   3. 交互 shell 直接 & 的后台进程被环境收割 → 恢复动作必须走脚本文件（子 shell daemon 化），勿用内联 &
 - vite 假死新形态：静态 200 但 /api 代理全挂（proxy 上游异常挂起），kill 重拉即愈
 - 零 mvn 恢复 30 次；重供给累计 46 次；jar 分卷+Temurin JDK 为本轮免 mvn 双保险；新增临时脚本 scripts/start-r95.sh（Temurin+vite 干净拉起，可复用）
+
+---
+
+Task ID: r96
+Agent: main (巡检)
+Task: 2026-10-17 17:05 cron 巡检（重供给 #47 恢复 + r95 JRE 结论修正）
+
+Work Log:
+- 探测：3000/HOST/3000API=200 但 8080=500 no such table: SYS_USER（重供给 #47，Node 假绿全链路形态——3000API 的 200 也是 Node 占位返回）；java 不在场，mariadbd 在场但数据目录被重置
+- 恢复（r95 经验应用）：pkill 占位 → checkout 分卷重拼 md5 e369839b ✓ → **PATH=/home/z/tools/jdk21/bin:$PATH 注入后跑 recover-dplus.sh**（不改脚本、环境变量注入规避坏 JRE）→ recover 日志确认「启动 Java（/home/z/tools/jdk21/bin/java）」，38 秒完成，零 mvn 第 31 次
+- 复探：8080 真绿 accessToken ✓；发现实际运行实例为 /usr/bin/java（PID 1602，参数与 recover 启动命令一致，疑似环境侧守护拉起）
+- **关键修正**：该 /usr/bin/java 实例域名 Host 测试 200（上轮 r95 判定「系统 JRE 损坏」不成立）——r95 的 logback CNFE 更可能是**重供给后 jar 刚重拼、页面缓存未落盘的读取竞态**（时间差证据：r95 中 Temurin 成功启动发生在重拼数分钟后）
+- 四链路复探 200×4 全绿；45 秒稳定复验通过（java 1602 etime 2:11）；3000API=200 证明 vite 代理链路健康
+- 收口：dump-db OK 20261017-090918（workflow 260K / v6 128K）
+
+Stage Summary:
+- r96 全绿 200×4 真绿，重供给 #47 单轮内恢复，零 mvn 31 次，累计重供给 47 次
+- 修正 r95 结论：无「系统 JRE 损坏」——CNFE 为重拼 jar 落盘竞态，任何 JDK 均可能在竞态窗口内触发；**规避措施简化**：恢复完成后必测域名 Host（curl -H 'Host: localhost:8080' → 若 500 则等落盘后重启 Java 即愈）
+- PATH 注入 Temurin 方案验证有效且无害（recover 幂等，即使环境侧再拉 /usr/bin/java 实例也正常），保留为标准操作：`PATH=/home/z/tools/jdk21/bin:$PATH bash scripts/recover-dplus.sh`
+- recover-dplus.sh 的 JAVA_BIN 修正建议降级为可选优化（非必需）

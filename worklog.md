@@ -8437,3 +8437,29 @@ Work Log:
 
 Stage Summary:
 - 重供给 #46 单轮内恢复（~2 分钟）；内存 3.25GB，oom_kill=0；零 mvn 计数 30（达成 30 次零 mvn 里程碑）
+
+---
+
+Task ID: r95
+Agent: main (巡检)
+Task: 2026-10-17 16:05 cron 巡检（重供给 #46 恢复 + 三重新故障诊断与修复）
+
+Work Log:
+- 探测：四链路 200×4 但 8080 真伪核验 no such table: SYS_USER（Node 假绿，重供给 #46）；vite 1164 存活（环境自拉），java 不在场
+- 标准流水线：pkill 占位 → checkout jar-parts 四卷 → 重拼 md5 e369839b ✓ → recover 38 秒完成（零 mvn 第 30 次）
+- 复探发现 3000API=000（vite proxy 挂起，静态 200）；诊断：vite changeOrigin 发 Host: localhost:8080 → Java 对域名 Host 500 空 body（IP 字面量 Host 正常）
+- kill 假死 vite 后 start-services.sh 拉起卡死（其 http_alive 用 GET / 误判 Java 假死，等待循环后又卡）→ 手动接管
+- 手动 NODE_OPTIONS=--max-old-space-size=512 拉起 vite 失败（bun 51ms 退出，bun 不认 V8 参数）→ 干净环境 bun run dev 成功
+- 域名 Host 500 根因定位：/home/z/tools/backend.log 中 Tomcat 工作线程打 ERROR 时 logback 抛 NoClassDefFoundError: ThrowableProxy（11 个堆栈块与 500 次数吻合），线程炸死→500 空 body；jar 内嵌套 logback-classic-1.5.34.jar 中 spi/ThrowableProxy.class 完好在场（二层 unzip 验证），md5 校验通过 → 排除 jar 损坏
+- 系统替换实验：kill 1479 后用 recover 同款命令（/usr/bin/java）重启 → 启动期同类 CNFE 复现（环境级）；改用幸存的 /home/z/tools/jdk21（Temurin-21.0.12.1+1 LTS）→ 域名 Host 立即 200，根因锁定：系统 /usr/bin/java（Debian 21.0.12.1+1-1~deb13u1 构建）fat jar 嵌套类加载异常
+- 进程收割规避：直接 bash & 的 java/vite（PID 2371/1901）约 1 分钟内静默消失（无 shutdown 日志，与 worklog 5497 行历史案例一致）；改写 scripts/start-r95.sh（子 shell setsid daemon 化，与 recover 同模式）前台 bash 执行 → Java/vite 持久存活
+- 稳定复验：60 秒后仍 200×4（java 2466 / vite 2467，etime 1:49+）
+- 收口：dump-db OK 20261017-082736（workflow 260K / v6 128K）
+
+Stage Summary:
+- r95 全绿 200×4 真绿恢复，但发现三项环境级新故障（均已有规避方案，记入待用户裁决）：
+  1. 系统 /usr/bin/java 损坏（fat jar 嵌套类加载 CNFE → 任何 ERROR 日志路径炸线程）→ 规避：Java 启动一律用 /home/z/tools/jdk21/bin/java（Temurin）；建议 recover-dplus.sh JAVA_BIN 改为优先 /home/z/tools/jdk21/bin/java（当前 command -v java 恒命中坏 JRE，下次 recover 会再踩坑）
+  2. start-services.sh 两处失效：http_alive 用 GET / 误判 Java（真绿但 GET / 非 2xx）；NODE_OPTIONS=--max-old-space-size=512 使 bun 拒启 vite
+  3. 交互 shell 直接 & 的后台进程被环境收割 → 恢复动作必须走脚本文件（子 shell daemon 化），勿用内联 &
+- vite 假死新形态：静态 200 但 /api 代理全挂（proxy 上游异常挂起），kill 重拉即愈
+- 零 mvn 恢复 30 次；重供给累计 46 次；jar 分卷+Temurin JDK 为本轮免 mvn 双保险；新增临时脚本 scripts/start-r95.sh（Temurin+vite 干净拉起，可复用）

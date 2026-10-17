@@ -61,11 +61,12 @@ public class PageDefinitionService {
      * @param type    页面类型（VIEW 已废弃 / PAGE，null 或空白默认 PAGE）
      * @param formKey 绑定的业务表单 key（VIEW 用，可空，遗留字段）
      * @param dataSourceId 绑定的数据源 ID（新协议，可空）
+     * @param schema  页面 schema（模板实例化可直接带入；空则待设计器保存）
      * @return 创建的页面定义
      * @throws BusinessException 如果 key 已存在
      */
     @Transactional
-    public PageDefinition create(String name, String key, String type, String formKey, String dataSourceId) {
+    public PageDefinition create(String name, String key, String type, String formKey, String dataSourceId, String schema) {
         String tenantId = tenantProvider.getTenantId();
 
         if (pageDefRepository.existsByTenantIdAndKey(tenantId, key)) {
@@ -80,7 +81,7 @@ public class PageDefinitionService {
         pageDef.setType(type == null || type.isBlank() ? "PAGE" : type);
         pageDef.setFormKey(formKey);
         pageDef.setDataSourceId(dataSourceId);
-        pageDef.setSchema(null);
+        pageDef.setSchema(schema == null || schema.isBlank() ? null : schema);
         pageDef.setVersion(1);
         pageDef.setStatus("DRAFT");
 

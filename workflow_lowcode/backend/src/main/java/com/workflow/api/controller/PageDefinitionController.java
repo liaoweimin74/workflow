@@ -39,7 +39,7 @@ public class PageDefinitionController {
     public R<PageDefinition> create(@RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.create(
                 request.getName(), request.getKey(), request.getType(), request.getFormKey(),
-                request.getDataSourceId());
+                request.getDataSourceId(), request.getSchema());
         return R.ok(pageDef);
     }
 

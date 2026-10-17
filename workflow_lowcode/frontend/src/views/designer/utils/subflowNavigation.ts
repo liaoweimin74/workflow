@@ -38,3 +38,28 @@ export function findStartEventInScope(
     (el: any) => el.type === 'bpmn:StartEvent' && el.parent === container
   )
 }
+
+/**
+ * 把边界事件的落点吸附到活动（host）最近的一条边框上。
+ * bpmn-js 的 shape.attach 规则要求附着点位于 host 边缘（内缩 15px 之外），
+ * 落在活动正中会被判为 intersect 而拒绝附着。
+ */
+export function snapToHostBorder(
+  host: { x: number; y: number; width: number; height: number },
+  point: CanvasPoint
+): CanvasPoint {
+  const left = host.x
+  const right = host.x + host.width
+  const top = host.y
+  const bottom = host.y + host.height
+  const clampX = Math.min(Math.max(point.x, left), right)
+  const clampY = Math.min(Math.max(point.y, top), bottom)
+
+  const sides = [
+    { distance: Math.abs(point.x - left), position: { x: left, y: clampY } },
+    { distance: Math.abs(right - point.x), position: { x: right, y: clampY } },
+    { distance: Math.abs(point.y - top), position: { x: clampX, y: top } },
+    { distance: Math.abs(bottom - point.y), position: { x: clampX, y: bottom } }
+  ]
+  return sides.reduce((nearest, side) => (side.distance < nearest.distance ? side : nearest)).position
+}

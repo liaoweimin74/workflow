@@ -68,7 +68,12 @@ import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
 import { validateProcessXml } from './utils/bpmnValidation'
-import { findStartEventInScope, resolveDropParent } from './utils/subflowNavigation'
+import {
+  findStartEventInScope,
+  resolveDropParent,
+  snapToHostBorder,
+  type CanvasPoint
+} from './utils/subflowNavigation'
 import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
@@ -425,9 +430,54 @@ function handleBack() {
   }
 }
 
+/** 附着规则探针：只为过 shape.attach 规则，永远不会加入画布 */
+let attachProbe: any = null
+
+/**
+ * 落点可附着的边界事件目标：命中活动 → 吸附到最近边框 → 过 bpmn-js 的 shape.attach 规则。
+ * 拖拽悬停与放下共用，保证「光标显示能放」与「真的能放」是同一套判断。
+ */
+function resolveBoundaryAttachTarget(
+  point: CanvasPoint
+): { host: any; position: CanvasPoint } | null {
+  const modeler = getModeler()
+  const elementRegistry = (modeler as any).get('elementRegistry')
+  const elementFactory = (modeler as any).get('elementFactory')
+  const rules = (modeler as any).get('rules')
+
+  const host = findActivityAt(point, elementRegistry)
+  if (!host) return null
+
+  const position = snapToHostBorder(host, point)
+  attachProbe = attachProbe || elementFactory.createShape({ type: 'bpmn:BoundaryEvent' })
+  if (!rules.allowed('shape.attach', { shape: attachProbe, target: host, position })) return null
+
+  return { host, position }
+}
+
+/** 拖拽事件的屏幕坐标 → 画布坐标 */
+function toCanvasPoint(event: DragEvent): CanvasPoint | null {
+  const rect = canvasWrapperRef.value?.getBoundingClientRect()
+  if (!rect) return null
+  const viewbox = ((getModeler() as any).get('canvas') as any).viewbox()
+  return {
+    x: (event.clientX - rect.left) / viewbox.scale + viewbox.x,
+    y: (event.clientY - rect.top) / viewbox.scale + viewbox.y
+  }
+}
+
 function handleDragOver(event: DragEvent) {
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'copy'
+  const dataTransfer = event.dataTransfer
+  if (!dataTransfer) return
+  dataTransfer.dropEffect = 'copy'
+
+  // 拖拽进行中浏览器不提供 dataTransfer 的值，只有类型名可读
+  if (!Array.from(dataTransfer.types).includes('node-event-def')) return
+
+  const point = toCanvasPoint(event)
+  if (!point || !resolveBoundaryAttachTarget(point)) {
+    // 落点放不下：光标变为禁止，浏览器不会再触发 drop
+    dataTransfer.dropEffect = 'none'
   }
 }
 
@@ -445,39 +495,29 @@ function handleDrop(event: DragEvent) {
   const modeling = (modeler as any).get('modeling')
   const elementRegistry = (modeler as any).get('elementRegistry')
 
-  // 计算放置坐标（画布坐标）
-  const rect = canvasWrapperRef.value?.getBoundingClientRect()
-  if (!rect) return
-
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-
-  // 转换为画布坐标
-  const viewbox = canvas.viewbox()
-  const canvasX = x / viewbox.scale + viewbox.x
-  const canvasY = y / viewbox.scale + viewbox.y
+  // 计算放置坐标（画布坐标，与 dragover 的落点判定同一套换算）
+  const point = toCanvasPoint(event)
+  if (!point) return
+  const { x: canvasX, y: canvasY } = point
 
   // 父容器：按落点命中「展开态子流程」（保持 bpmn-js 内建界面语义），
   // 未命中任何展开子流程则取当前 plane 根元素（主流程 plane→主流程；子流程 plane→子流程）
   const rootElement = resolveDropParent({ x: canvasX, y: canvasY }, elementRegistry, canvas.getRootElement())
 
-  // 边界事件：必须拖到任务/子流程上方，附着到命中的活动上
+  // 边界事件：必须拖到任务/子流程上，附着到命中的活动（落点吸附到最近边框）
   if (eventDefType) {
-    const host = findActivityAt({ x: canvasX, y: canvasY }, elementRegistry)
-    if (!host) {
-      ElMessage.warning('边界事件需拖到任务/服务任务/子流程的上方，附着到该节点')
+    const target = resolveBoundaryAttachTarget({ x: canvasX, y: canvasY })
+    if (!target) {
+      ElMessage.warning('边界事件需拖到任务/服务任务/子流程的边缘，附着到该节点')
       return
     }
-    try {
-      const boundary = elementFactory.createShape({
-        type: 'bpmn:BoundaryEvent',
-        eventDefinitionType: eventDefType
-      })
-      // createShape 第 4 参 isAttach=true：附着到 host（bpmn-js Modeling API）
-      modeling.createShape(boundary, { x: canvasX, y: canvasY }, host, true)
-    } catch {
-      ElMessage.error('创建边界事件失败，请重试')
-    }
+    const boundary = elementFactory.createShape({
+      type: 'bpmn:BoundaryEvent',
+      eventDefinitionType: eventDefType
+    })
+    // 第 4 参传 hints 而非 parentIndex：attach 让 host 成为附着目标
+    // （父容器取 host.parent），AttachSupport 随即写入 attachedToRef
+    modeling.createShape(boundary, target.position, target.host, { attach: true })
     return
   }
 

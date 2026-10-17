@@ -38,6 +38,15 @@ function inputTypeOf(columnType?: string): string {
   return 'input'
 }
 
+/** 解析字段将生成的组件 type（与 buildFieldRule 同源：componentType 优先，按 columnType 推断兜底），供配置界面展示 */
+export function resolveFieldComponentType(
+  col: Pick<DataSourceColumnLike, 'columnType'> & { componentType?: string | null },
+): string {
+  const ct = (col.componentType || '').trim()
+  if (ct) return ct.endsWith('Text') ? 'input' : ct
+  return inputTypeOf(col.columnType)
+}
+
 /** 数据源列定义（元数据/字段清单）的通用结构，递归支持子表列 */
 export interface DataSourceColumnLike {
   key: string
@@ -64,11 +73,7 @@ export interface DataSourceColumnLike {
  * tableForm → props.columns[].rule，group/subForm → props.rule；hidden 冗余列（xxxText）不进子表 UI。
  */
 export function buildFieldRule(col: DataSourceColumnLike): Record<string, any> {
-  let type = inputTypeOf(col.columnType)
-  const ct = (col.componentType || '').trim()
-  if (ct) {
-    type = ct.endsWith('Text') ? 'input' : ct
-  }
+  const type = resolveFieldComponentType(col)
   const props: Record<string, any> = {}
   if (type === 'inputNumber' && col.columnType === 'DECIMAL') props.precision = col.scale || 2
   if (col.componentProps) {

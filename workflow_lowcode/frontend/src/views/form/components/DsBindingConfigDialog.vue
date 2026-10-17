@@ -228,19 +228,30 @@
               </el-tooltip>
             </span>
           </el-divider>
-          <el-checkbox-group v-if="dsColumns.length > 0" v-model="genSelectedKeys" class="gen-field-list">
-            <el-checkbox
-              v-for="col in dsColumns"
-              :key="col.key"
-              :value="col.key"
-              :disabled="containerFieldSet.has(col.key)"
-            >
-              <span>{{ col.label || col.key }}</span>
-              <span class="gen-field-key">（{{ col.key }}）</span>
-              <el-tag v-if="containerFieldSet.has(col.key)" size="small" type="info" effect="plain" class="gen-field-tag">已存在</el-tag>
-              <el-tag v-else-if="col.columnType" size="small" effect="plain" class="gen-field-tag">{{ col.columnType }}</el-tag>
-            </el-checkbox>
-          </el-checkbox-group>
+          <div v-if="dsColumns.length > 0" class="gen-field-box">
+            <div class="gen-field-toolbar">
+              <el-checkbox
+                :model-value="genCheckAll"
+                :indeterminate="genIndeterminate"
+                :disabled="selectableGenKeys.length === 0"
+                @change="handleGenCheckAll"
+              >全选</el-checkbox>
+              <span class="gen-field-count">已选 {{ genSelectedKeys.length }}/{{ selectableGenKeys.length }}</span>
+            </div>
+            <el-checkbox-group v-model="genSelectedKeys" class="gen-field-list">
+              <el-checkbox
+                v-for="col in dsColumns"
+                :key="col.key"
+                :value="col.key"
+                :disabled="containerFieldSet.has(col.key)"
+              >
+                <span>{{ col.label || col.key }}</span>
+                <span class="gen-field-key">（{{ col.key }}）</span>
+                <el-tag v-if="containerFieldSet.has(col.key)" size="small" type="info" effect="plain" class="gen-field-tag">已存在</el-tag>
+                <el-tag v-else size="small" effect="plain" class="gen-field-tag">{{ componentTypeLabel(col) }}</el-tag>
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
           <el-empty v-else description="该数据源暂无字段" :image-size="48" />
         </template>
 
@@ -296,6 +307,7 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
+import { resolveFieldComponentType } from '@/composables/useDataSourceCrud'
 import UniDataSourceBinding, { type UniDataSourceValue } from '@/views/form/components/UniDataSourceBinding.vue'
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
 import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
@@ -415,6 +427,32 @@ const container = reactive({
 const containerFieldSet = computed(() => new Set(props.containerFields || []))
 /** 勾选的待生成字段 key（切换数据源/打开弹窗时清空） */
 const genSelectedKeys = ref<string[]>([])
+
+/** 可勾选字段 key（已存在的禁选字段不参与全选/计数） */
+const selectableGenKeys = computed(() => dsColumns.value.filter((c) => !containerFieldSet.value.has(c.key)).map((c) => c.key))
+const genCheckAll = computed(() =>
+  selectableGenKeys.value.length > 0 && selectableGenKeys.value.every((k) => genSelectedKeys.value.includes(k)),
+)
+const genIndeterminate = computed(() => {
+  const selected = selectableGenKeys.value.filter((k) => genSelectedKeys.value.includes(k)).length
+  return selected > 0 && selected < selectableGenKeys.value.length
+})
+function handleGenCheckAll(val: boolean) {
+  genSelectedKeys.value = val ? [...selectableGenKeys.value] : []
+}
+
+/** 组件类型展示名：与生成逻辑（buildFieldRule）同源的 type → 中文名，未知类型回退原始 type */
+const COMPONENT_TYPE_LABELS: Record<string, string> = {
+  input: '输入框', textarea: '多行文本', inputNumber: '数字', datePicker: '日期', timePicker: '时间',
+  select: '下拉', radio: '单选', checkbox: '多选', switch: '开关', rate: '评分', slider: '滑块',
+  upload: '上传', colorPicker: '颜色', cascader: '级联', treeSelect: '树选择', editor: '富文本',
+  dataPicker: '数据引用', LookupPicker: '查找带回', lookupPicker: '查找带回', AutoNumber: '自动编号', FormulaField: '公式字段',
+  subForm: '子表单', group: '分组', tableForm: '子表格',
+}
+function componentTypeLabel(col: ColumnConfigItem): string {
+  const type = resolveFieldComponentType(col)
+  return COMPONENT_TYPE_LABELS[type] || type
+}
 
 /** 从 bindingProps 回填容器按钮配置 */
 function initContainerConfig(bp: Record<string, any>) {
@@ -735,7 +773,13 @@ function handleConfirm() {
   flex: 1 1 auto;
   min-width: 0;
 }
-/* 按字段生成组件（formContainer 模式）：字段勾选列表 + 辅助文案 */
+/* 按字段生成组件（formContainer 模式）：全选工具行 + 字段勾选列表（外框承载边框，列表区滚动） */
+.gen-field-box {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+}
 .gen-field-list {
   display: flex;
   flex-direction: column;
@@ -744,13 +788,23 @@ function handleConfirm() {
   width: 100%;
   max-height: 220px;
   overflow: auto;
-  padding: 6px 10px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
 }
 .gen-field-list .el-checkbox {
   margin-right: 0;
   height: 24px;
+}
+/* 全选工具行：占满整行，左侧全选、右侧已选计数 */
+.gen-field-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 0 6px;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+}
+.gen-field-count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .gen-field-key {
   color: var(--el-text-color-secondary);

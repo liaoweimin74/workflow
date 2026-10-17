@@ -8366,3 +8366,29 @@ Work Log:
 
 Stage Summary:
 - 重供给 #42 单轮内恢复（~2 分钟）；内存 3.35GB，oom_kill=0；零 mvn 计数 26
+
+---
+Task ID: r90
+Agent: main
+Task: 2026-10-17 11:05 cron 巡检（轻量运维）
+
+Work Log:
+- 沙箱启动失败（sandbox failed to start），本轮巡检完全未执行，告知用户重启
+
+Stage Summary:
+- 环境在 r90 轮次内未巡检；沙箱故障第 2 次（r85 Bash 网关故障后）
+
+---
+Task ID: r91
+Agent: main
+Task: 2026-10-17 12:05 cron 巡检（轻量运维）
+
+Work Log:
+- 04 链路 200×4，真伪核验 no such table: SYS_USER → Node 假绿（重供给 #43，r90 缺检期间发生）
+- 首轮 dump RC=1（库空）；pkill bun/node 占位 → checkout jar-parts → 重拼 121300861B md5 e369839b 通过
+- 前台 timeout 550 recover rc=0，28s done，零 mvn 第 27 次
+- try1 即 accessToken 真绿，复探 200×4
+- 收口 dump 20261017-0406 推送成功
+
+Stage Summary:
+- 重供给 #43 单轮内恢复（~2 分钟）；内存 3.48GB，oom_kill=0；零 mvn 计数 27

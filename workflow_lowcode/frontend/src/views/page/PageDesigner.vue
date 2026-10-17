@@ -27,6 +27,7 @@
           数据源配置（{{ schema.dataSources.length }}）
         </el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
+        <el-button plain :icon="Collection" @click="openSaveTemplateDialog">另存为模板</el-button>
         <el-button type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
           {{ formStatus === 'PUBLISHED' ? '重新发布' : '发布' }}
         </el-button>
@@ -190,14 +191,76 @@
         <el-button type="primary" :loading="mounting" @click="confirmMount">挂接</el-button>
       </template>
     </el-dialog>
+
+    <!-- 另存为模板弹窗：新建模板 或 按 key 覆盖已有模板 -->
+    <el-dialog v-model="templateDialogVisible" title="另存为模板" width="520px" destroy-on-close>
+      <el-alert
+        :type="templateKind === 'skeleton' ? 'warning' : 'info'"
+        :closable="false"
+        show-icon
+        :title="templateKind === 'skeleton'
+          ? '骨架模板：保留布局与联动机制，数据源转为槽位（实例化时指定），列/字段等数据配置需重新填写。'
+          : '模板将保存当前页面的完整配置（布局、数据源绑定、动作与事件），后续可一键生成新页面。'"
+        style="margin-bottom: 14px"
+      />
+      <el-radio-group v-model="templateMode" style="margin-bottom: 14px">
+        <el-radio value="new">存为新模板</el-radio>
+        <el-radio value="overwrite">覆盖已有模板</el-radio>
+      </el-radio-group>
+      <el-form label-width="90px" @submit.prevent>
+        <el-form-item label="模板形态">
+          <el-radio-group v-model="templateKind">
+            <el-radio value="full">完整模板</el-radio>
+            <el-radio value="skeleton">骨架模板</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <el-form v-if="templateMode === 'new'" label-width="90px" @submit.prevent>
+        <el-form-item label="模板名称">
+          <el-input v-model="templateForm.name" placeholder="默认使用页面名称" />
+        </el-form-item>
+        <el-form-item label="模板标识">
+          <el-input v-model="templateForm.key" placeholder="小写字母开头，可含数字/下划线" />
+        </el-form-item>
+      </el-form>
+      <template v-if="templateKind === 'skeleton'">
+        <div class="slot-label-title">锚点命名（实例化绑槽位时展示给使用者）</div>
+        <div v-for="slot in skeletonSlotDraft" :key="slot.dsId" class="slot-label-row">
+          <span class="slot-label-hint" :title="slot.hint">{{ slot.hint }}</span>
+          <el-input v-model="slot.label" placeholder="锚点名称" style="width: 260px" />
+        </div>
+      </template>
+      <el-form v-if="templateMode === 'overwrite'" label-width="90px" @submit.prevent>
+        <el-form-item label="目标模板">
+          <el-select
+            v-model="templateForm.overwriteId"
+            filterable
+            placeholder="选择要覆盖的模板（按标识匹配）"
+            style="width: 100%"
+            :loading="templateListLoading"
+          >
+            <el-option
+              v-for="t in templateOptions"
+              :key="t.id"
+              :label="`${t.name}（${t.key}）`"
+              :value="t.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="templateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingTemplate" @click="confirmSaveTemplate">保存模板</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, View, Document, Menu, Grid } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, View, Document, Menu, Grid, Collection } from '@element-plus/icons-vue'
 import FcDesigner from '@form-create/designer'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataCards from './components/PageDataCards.vue'
@@ -216,6 +279,9 @@ import PageSteps from './components/PageSteps.vue'
 import PageChartConfigDialog from './components/PageChartConfigDialog.vue'
 import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
+import { pageTemplateApi, type PageTemplateDTO } from '@/api/page-template'
+import { skeletonizePageSchema } from './templateSkeleton'
+import { collectDsRefs } from './templateSchema'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import { useAuthStore } from '@/stores/auth'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
@@ -327,6 +393,157 @@ async function confirmMount() {
     // http 拦截器已弹出错误消息
   } finally {
     mounting.value = false
+  }
+}
+
+// ========== 另存为模板 ==========
+const templateDialogVisible = ref(false)
+const templateMode = ref<'new' | 'overwrite'>('new')
+const templateKind = ref<'full' | 'skeleton'>('full')
+const templateForm = reactive<{ name: string; key: string; overwriteId: string }>({
+  name: '',
+  key: '',
+  overwriteId: '',
+})
+const templateOptions = ref<PageTemplateDTO[]>([])
+const templateListLoading = ref(false)
+const savingTemplate = ref(false)
+
+interface SlotDraft {
+  dsId: string
+  label: string
+  hint: string
+}
+const skeletonSlotDraft = ref<SlotDraft[]>([])
+
+// 锚点默认名：数据源名（去掉"数据源"尾缀）；提示展示原绑定与涉及组件
+function buildSlotDraft(): void {
+  let parsed: any
+  try {
+    parsed = JSON.parse(currentSchemaJson())
+  } catch {
+    skeletonSlotDraft.value = []
+    return
+  }
+  const tagsByDs = new Map<string, Set<string>>()
+  for (const ref of collectDsRefs(parsed)) {
+    const m = ref.path.match(/\(([^()#]+)#([^)]+)\)/)
+    if (!m) continue
+    if (!tagsByDs.has(ref.value)) tagsByDs.set(ref.value, new Set())
+    tagsByDs.get(ref.value)!.add(m[1])
+  }
+  skeletonSlotDraft.value = (parsed.dataSources || []).map((ds: any) => {
+    const dsName = typeof ds.name === 'string' ? ds.name.trim() : ''
+    const label = dsName.replace(/数据源$/, '').trim()
+    const tags = tagsByDs.get(ds.id)
+    const hint = `原「${dsName || ds.refId || ds.id}」${tags && tags.size ? ' · ' + [...tags].join('、') : ''}`
+    return { dsId: ds.id, label, hint }
+  })
+}
+
+watch(templateKind, (k) => {
+  if (k === 'skeleton') buildSlotDraft()
+})
+
+function currentSchemaJson(): string {
+  return JSON.stringify({
+    rule: designerRef.value?.getRule() || [],
+    option: designerRef.value?.getOption() || {},
+    dataSources: schema.dataSources,
+    actions: schema.actions,
+  })
+}
+
+async function openSaveTemplateDialog() {
+  const rule = designerRef.value?.getRule() || []
+  if (!Array.isArray(rule) || rule.length === 0) {
+    ElMessage.warning('页面为空，不能存为模板')
+    return
+  }
+  templateMode.value = 'new'
+  templateKind.value = 'full'
+  buildSlotDraft()
+  templateForm.name = pageName.value
+  templateForm.key = /^(tpl|template)_/.test(pageKey.value) ? pageKey.value : `tpl_${pageKey.value}`
+  templateForm.overwriteId = ''
+  templateDialogVisible.value = true
+  templateListLoading.value = true
+  try {
+    const res = await pageTemplateApi.listTemplates({ page: 1, size: 200 })
+    const data = res.data as any
+    templateOptions.value = data.content || data.rows || []
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    templateListLoading.value = false
+  }
+}
+
+async function confirmSaveTemplate() {
+  const target = templateMode.value === 'overwrite'
+    ? templateOptions.value.find((t) => t.id === templateForm.overwriteId)
+    : undefined
+  if (templateMode.value === 'overwrite') {
+    if (!target) {
+      ElMessage.warning('请选择要覆盖的模板')
+      return
+    }
+  } else {
+    if (!templateForm.name.trim()) {
+      ElMessage.warning('请填写模板名称')
+      return
+    }
+    if (!/^[a-z][a-z0-9_]*$/.test(templateForm.key.trim())) {
+      ElMessage.warning('模板标识只能包含小写字母、数字、下划线，且以字母开头')
+      return
+    }
+    // /save 是按 key upsert：命中已有模板即覆盖快照，先让用户确认
+    const sameKey = templateOptions.value.find((t) => t.key === templateForm.key.trim())
+    if (sameKey) {
+      try {
+        await ElMessageBox.confirm(
+          `模板标识「${sameKey.key}」已存在（${sameKey.name}），保存将覆盖其模板内容。`,
+          '覆盖确认',
+          { type: 'warning' },
+        )
+      } catch {
+        return
+      }
+    }
+  }
+
+  savingTemplate.value = true
+  try {
+    const raw = JSON.parse(currentSchemaJson())
+    let json: string
+    if (templateKind.value === 'skeleton') {
+      const overrides: Record<string, string> = {}
+      for (const slot of skeletonSlotDraft.value) {
+        const name = slot.label.trim()
+        if (name) overrides[slot.dsId] = name
+      }
+      json = JSON.stringify(skeletonizePageSchema(raw, overrides))
+    } else {
+      json = currentSchemaJson()
+    }
+    if (target) {
+      // 覆盖只更新内容与形态，不改模板名称/标识（改名走模板列表「重命名」）
+      await pageTemplateApi.updateTemplate(target.id, { schema: json, kind: templateKind.value })
+      ElMessage.success(`已覆盖模板「${target.name}」`)
+    } else {
+      await pageTemplateApi.saveTemplate({
+        name: templateForm.name.trim(),
+        key: templateForm.key.trim(),
+        schema: json,
+        kind: templateKind.value,
+      })
+      ElMessage.success('模板保存成功，可在页面列表「模板」Tab 查看')
+    }
+    templateDialogVisible.value = false
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    savingTemplate.value = false
   }
 }
 
@@ -1587,4 +1804,25 @@ function statusLabel(status: string): string {
 .mount-alert {
   margin-bottom: 12px;
 }
+.slot-label-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 10px 0 6px;
+}
+.slot-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.slot-label-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #909399;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 </style>

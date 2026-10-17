@@ -8564,3 +8564,19 @@ Work Log:
 
 Stage Summary:
 - r101 全绿 200×4 真绿，重供给 #52 单轮内恢复，零 mvn 36 次，累计重供给 52 次
+
+---
+
+Task ID: r102
+Agent: main (巡检)
+Task: 2026-10-17 23:05 cron 巡检（重供给 #53 恢复）
+
+Work Log:
+- 探测：8080=500 no such table（重供给 #53）；dump rc=0
+- 标准流水线：重拼 md5 e369839b ✓ → recover 31 秒（零 mvn 第 37 次，/usr/bin/java 实例）
+- 域名 Host 必测 200 ✓；四链路 200×4；40 秒稳定复验通过（java 1459 / vite 1160）
+- 内存备案：cgroup 3.62GB 超 3.5GB 线 —— vite RSS 693MB、java RSS 468MB，重编译期水位，无 oom
+- 收口：dump-db OK 20261017-150725
+
+Stage Summary:
+- r102 全绿 200×4 真绿，重供给 #53 单轮内恢复，零 mvn 37 次，累计重供给 53 次

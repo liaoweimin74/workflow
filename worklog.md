@@ -8483,3 +8483,20 @@ Stage Summary:
 - 修正 r95 结论：无「系统 JRE 损坏」——CNFE 为重拼 jar 落盘竞态，任何 JDK 均可能在竞态窗口内触发；**规避措施简化**：恢复完成后必测域名 Host（curl -H 'Host: localhost:8080' → 若 500 则等落盘后重启 Java 即愈）
 - PATH 注入 Temurin 方案验证有效且无害（recover 幂等，即使环境侧再拉 /usr/bin/java 实例也正常），保留为标准操作：`PATH=/home/z/tools/jdk21/bin:$PATH bash scripts/recover-dplus.sh`
 - recover-dplus.sh 的 JAVA_BIN 修正建议降级为可选优化（非必需）
+
+---
+
+Task ID: r97
+Agent: main (巡检)
+Task: 2026-10-17 18:05 cron 巡检（重供给 #48 恢复）
+
+Work Log:
+- 探测：3000/HOST/3000API=200 但 8080=500 no such table（重供给 #48，Node 假绿）；java 不在场
+- 标准流水线：pkill 占位 → 重拼 md5 e369839b ✓ → recover 31 秒完成（零 mvn 第 32 次）；本轮 JAVA_BIN 命中 /usr/bin/java（PATH 注入未生效，r96 同款注入为何本轮无效待查——recover 8080 检测分支可能先命中环境拉起实例）
+- 按 r96 规避措施域名 Host 必测：200 ✓（落盘竞态未触发，坏实例未复现）
+- 四链路 200×4；瞬时 maven 进程（1505）自行退出无残留；40 秒稳定复验通过（java 1458 etime 1:54）
+- 收口：dump-db OK 20261017-1007xx（脚本内 push FAILED 无 rebase 老问题，手动补推）
+
+Stage Summary:
+- r97 全绿 200×4 真绿，重供给 #48 单轮内恢复，零 mvn 32 次，累计重供给 48 次
+- 内存 3.0GB 正常，oom 0

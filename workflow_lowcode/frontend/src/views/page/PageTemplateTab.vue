@@ -11,7 +11,7 @@
       show-selection
       @selection-change="handleSelectionChange"
     >
-      <template #toolbar-right>
+      <template #default>
         <el-button v-if="canPageManage" type="primary" @click="openCreateDialog">用模板新建页面</el-button>
         <el-button @click="handleExportSelected">批量导出</el-button>
         <el-button @click="fileInput?.click()">导入模板</el-button>
@@ -120,13 +120,40 @@
         <el-button type="primary" :loading="creating" @click="confirmBind">绑定并创建页面</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑模板：模板名称 + 标识 + 锚点名（锚点名在实例化绑槽位时展示给使用者） -->
+    <el-dialog v-model="editVisible" title="编辑模板" width="560px">
+      <el-form label-width="80px" @submit.prevent>
+        <el-form-item label="模板名称">
+          <el-input v-model="editForm.name" placeholder="模板名称" />
+        </el-form-item>
+        <el-form-item label="模板标识">
+          <el-input v-model="editForm.key" placeholder="小写字母开头，可含数字/下划线" />
+        </el-form-item>
+      </el-form>
+      <template v-if="anchorRows.length > 0">
+        <div class="slot-label-title">锚点命名</div>
+        <div v-for="s in anchorRows" :key="s.dsId" class="import-entry">
+          <span class="import-entry-label" :title="s.name || s.dsId">{{ s.name || s.dsId }}</span>
+          <el-input v-model="s.label" placeholder="锚点名称" style="width: 220px" />
+          <el-tag v-if="s.bound" type="success" size="small">已绑定</el-tag>
+          <el-tag v-else-if="s.kind === 'skeleton'" type="warning" size="small">未绑定槽位</el-tag>
+          <el-tag v-else type="info" size="small">未引用数据源</el-tag>
+        </div>
+      </template>
+      <div v-else class="import-empty">该模板无数据源槽位</div>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
  * 页面模板管理 Tab（页面管理页内）。
- * 列表/删除/重命名 + 统一导出（单导出/批量 bundle）+ 导入（refId 同名自动匹配、未命中手选）
+ * 列表/删除/编辑（模板名 + 锚点名）+ 统一导出（单导出/批量 bundle）+ 导入（refId 同名自动匹配、未命中手选）
  * + 用模板新建页面（实例化：ID 重映射，report 提示不阻断）。
  */
 import { ref, reactive, computed, onMounted } from 'vue'
@@ -206,20 +233,10 @@ const actionButtons: ActionButton[] = [
     onClick: (row: any) => downloadBundle([row.id]),
   },
   {
-    label: '重命名',
+    label: '编辑',
+    icon: EditPen,
     permission: 'page:edit',
-    onClick: async (row: any) => {
-      let name: string
-      try {
-        const r = await ElMessageBox.prompt('模板名称', '重命名', { inputValue: row.name, inputValidator: (v: string) => !!v.trim() || '名称不能为空' })
-        name = String(r.value).trim()
-      } catch {
-        return
-      }
-      await pageTemplateApi.updateTemplate(row.id, { name })
-      ElMessage.success('已重命名')
-      tableRef.value?.fetchList()
-    },
+    onClick: (row: any) => openEditDialog(row),
   },
   {
     label: '删除',
@@ -371,6 +388,93 @@ async function confirmImport() {
     // http 拦截器已弹出错误消息（含后端 refId 校验拒绝）
   } finally {
     importing.value = false
+  }
+}
+
+// ==================== 编辑模板（名称 + 锚点名） ====================
+
+interface AnchorRow {
+  dsId: string
+  label: string
+  name: string
+  bound: boolean
+  kind: string
+}
+
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editForm = reactive({ id: '', name: '', key: '' })
+const anchorRows = ref<AnchorRow[]>([])
+let anchorSchema: PageSchema | null = null
+/** 打开编辑弹窗时的原始标识，保存时仅在改标识才提交 key（避免无谓唯一校验/覆盖） */
+let editOriginalKey = ''
+
+async function openEditDialog(row: PageTemplateDTO) {
+  try {
+    const detail = await pageTemplateApi.getTemplate(row.id)
+    const parsed = JSON.parse(detail.data.schema || '{}') as PageSchema
+    anchorRows.value = (parsed.dataSources || []).map((ds) => {
+      const name = typeof ds.name === 'string' ? ds.name.trim() : ''
+      return {
+        dsId: ds.id,
+        label: ds.label || name || ds.id,
+        name,
+        bound: !!ds.refId,
+        kind: String(row.kind || ''),
+      }
+    })
+    anchorSchema = parsed
+    editForm.id = row.id
+    editForm.name = row.name
+    editForm.key = row.key
+    editOriginalKey = row.key
+    editVisible.value = true
+  } catch {
+    // http 拦截器已弹出错误消息
+  }
+}
+
+async function saveEdit() {
+  const name = editForm.name.trim()
+  if (!name) {
+    ElMessage.warning('模板名称不能为空')
+    return
+  }
+  const key = editForm.key.trim()
+  if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+    ElMessage.warning('模板标识只能包含小写字母、数字、下划线，且以字母开头')
+    return
+  }
+  for (const s of anchorRows.value) {
+    if (!s.label.trim()) {
+      ElMessage.warning(`锚点「${s.name || s.dsId}」名称不能为空`)
+      return
+    }
+  }
+  const payload: { name: string; key?: string; schema?: string } = { name }
+  if (key !== editOriginalKey) payload.key = key
+  if (anchorSchema) {
+    const byId = new Map(anchorRows.value.map((s) => [s.dsId, s.label.trim()]))
+    let changed = false
+    for (const ds of anchorSchema.dataSources || []) {
+      const next = byId.get(ds.id)
+      if (next && ds.label !== next) {
+        ds.label = next
+        changed = true
+      }
+    }
+    if (changed) payload.schema = JSON.stringify(anchorSchema)
+  }
+  editSaving.value = true
+  try {
+    await pageTemplateApi.updateTemplate(editForm.id, payload)
+    ElMessage.success('已保存')
+    editVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    editSaving.value = false
   }
 }
 
@@ -545,5 +649,10 @@ onMounted(async () => {
 .import-empty {
   color: #909399;
   font-size: 13px;
+}
+.slot-label-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 4px 0 8px;
 }
 </style>

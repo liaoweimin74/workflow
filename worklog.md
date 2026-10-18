@@ -8898,3 +8898,18 @@ Work Log:
 Stage Summary:
 - r120 沙箱故障由 r121 catchup 闭环，无损失
 - 重供给 #70 已恢复，零 mvn 第 54 次；重供给频率维持 ~1 次/小时
+
+---
+Task ID: r122
+Agent: main (cron ops loop)
+Task: 2026-10-18 20:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（120540，mariadbd 幸存型）；8080 真伪核验 no such table = 重供给 #71（累计 70→71）
+- 标准流水线：pkill 占位 → 分卷重拼 md5 e369839b → recover rc=0，四测全过免 Java 重启
+- 四链路 200×4 + 40s 稳定复验 200×4
+- 收口 dump 20261018-120729 成功，git commit ed49b315 已推送
+- 内存 2.98GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #71 已恢复，零 mvn 第 55 次；流水线全绿路径连续稳定（r115-r122 无新增异常模式）

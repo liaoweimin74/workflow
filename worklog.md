@@ -8776,3 +8776,22 @@ Stage Summary:
 - 重供给 #63 已恢复，零 mvn 第 47 次
 - recover 挂起规律确认：mariadbd 幸存型（dump 首跑成功）→ rc=0 干净退出（r110-r111-r112 三轮一致）；mariadbd 需重建型 → 挂起（r107-r109 三轮一致）。规律完全吻合
 - dump 脚本内 push FAILED 连续两轮出现（020537/020743 均被手动 rebase+push 补救），本轮网络波动或远端短暂不可用，推送最终成功
+
+---
+Task ID: r113
+Agent: main (cron ops loop)
+Task: 2026-10-18 11:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑报 3306 不在线；探活发现 dpkg-deb 在解压 mariadb + **两个 recover-dplus.sh 并发**（PID 1078/1332，环境冷启动自动触发 + 疑似二次触发）
+- 8080 真伪核验 no such table = 重供给 #64（累计 63→64），类型：mariadb 需重建型（r107-r109 同型）
+- 自动 recover 走「无 jar 备份 → mvn 构建」分支（r107 发现的误报）：根因定位——重供给清空 backups/jar/ 重拼产物（git add 排除项 ':!backups/jar' 不跟踪），自动 recover 抢先启动时该文件不存在 → 误报；mvn 已启动（plexus-classworlds）
+- 处置：pkill 双 recover + mvn + 占位 → checkout 分卷重拼 md5 e369839b 通过 → 发现被杀前 recover 已拉起 Java（target jar 有效，mariadbd 已重建且数据导入完成）→ 8080 真绿 + hostLocal 200 无竞态（免重启）
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261018-030845 成功，git commit 9764e0d5 已推送
+- 内存 3.41GB（接近 3.5 备案线未超），oom_kill=0
+
+Stage Summary:
+- 重供给 #64 已恢复，零 mvn 第 48 次（mvn 中途被杀，未计入接管）
+- 「无 jar 备份」误报根因最终定位：backups/jar 重拼产物被 ':!backups/jar' git 排除 → 重供给后不存在 → 自动/抢先 recover 判定无备份。修复方案（待授权）：dump-db.sh 或 recover-dplus.sh 起始处加分卷重拼逻辑（checkout parts + cat + md5 校验）
+- 新风险登记：环境冷启动自动触发 recover 与 cron 轮次恢复可并发（本轮实证双实例）→ mvn 分支互踩。建议授权在 recover 起始加 PID 锁

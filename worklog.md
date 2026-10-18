@@ -8758,3 +8758,21 @@ Work Log:
 Stage Summary:
 - 重供给 #62 已恢复，零 mvn 第 46 次
 - recover 挂起样本更新：r107-r109 连续 3 轮挂起 → r110-r111 连续 2 轮正常退出（rc=0）。挂起与重供给后 mariadbd 重建路径相关假设进一步支持（本轮 dump 首跑成功=mariadbd 幸存=recover 无需重建→快速干净退出；r107-r109 dump 首跑失败=mariadbd 需重建→挂起）。timeout 180 策略保持
+
+---
+Task ID: r112
+Agent: main (cron ops loop)
+Task: 2026-10-18 10:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（020537）但 push FAILED；8080 真伪核验 no such table = 重供给 #63（累计 62→63）
+- 标准流水线：pkill 占位 → checkout 分卷 → 重拼 md5 e369839b 校验通过
+- recover rc=0 正常退出（连续第三轮干净退出，mariadbd 幸存型重供给验证稳定），hostLocal 200 无竞态，免 Java 重启
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261018-020743（脚本内 push 又 FAILED）→ 手动 git pull --rebase（4 提交）+ push 成功（738aa3fa）
+- 内存 2.99GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #63 已恢复，零 mvn 第 47 次
+- recover 挂起规律确认：mariadbd 幸存型（dump 首跑成功）→ rc=0 干净退出（r110-r111-r112 三轮一致）；mariadbd 需重建型 → 挂起（r107-r109 三轮一致）。规律完全吻合
+- dump 脚本内 push FAILED 连续两轮出现（020537/020743 均被手动 rebase+push 补救），本轮网络波动或远端短暂不可用，推送最终成功

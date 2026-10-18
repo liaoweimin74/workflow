@@ -8954,3 +8954,21 @@ Stage Summary:
 - 双 recover 并发第 2 次处置成功（r113 模式复用：杀双实例→重拼→前台 recover）
 - 内存 3.46GB（未超 3.5GB 线），oom_kill=0
 - 待裁决清单不变：recover 起始加分卷重拼+PID 锁（本轮双并发+误报再次验证必要性）
+
+---
+Task ID: r125
+Agent: ops-patrol
+Task: 2026-10-19 00:05 cron 巡检
+
+Work Log:
+- dump-db 首跑报「workflow dump 无效」（mariadbd 在跑但数据半导入）；四链路 a/b/c=000 + d=200 假绿（no such table: SYS_USER）→ 重供给 #73
+- 双 recover 并发二现（PID 1092 + 1237）+「无 jar→mvn」误报分支二现（backups/jar/ 被重供给清掉）
+- pkill 双实例+mvn+bun/node 占位 → 四卷重拼 md5 e369839b ✓ → timeout 180 recover rc=0 真绿（跳过 mvn）
+- 四测全过：auth 真绿 ✓ hostLocal=200 ✓ node 探针 200 ✓
+- 40s 复验 200×4（vite PID 1272 自行就绪，3000 零干预恢复）
+- 收口 dump 20261018-160756 (workflow=260K v6=4.0K)，commit 43f9fcb9 推送 ✓
+
+Stage Summary:
+- 重供给累计 73 次（本窗口 r107-r125 共 16 次），全部单轮恢复，零人工接管；零 mvn 57 次
+- 双 recover 并发 + 误报分支均已二现（r124/r125 连续两轮）——recover 起始加分卷重拼 + PID 锁的授权请求已连续多轮未回应，本轮仍是手工兜底
+- 内存 3.46GB，oom_kill=0

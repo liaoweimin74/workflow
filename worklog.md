@@ -8989,3 +8989,19 @@ Stage Summary:
 - 重供给累计 74 次（本窗口 r107-r127 共 17 次），全部单轮恢复；零 mvn 58 次
 - 双 recover 并发 r124/r125/r127 三连现，误报分支同步三现——手工兜底模式已完全成熟但治本修复仍待授权
 - 内存 3.28GB，oom_kill=0
+
+---
+Task ID: r128
+Agent: ops-patrol
+Task: 2026-10-19 03:05 cron 巡检
+
+Work Log:
+- dump 首跑无效（半导入）；四链路 200×4 但 auth=no such table → 重供给 #75
+- 双 recover 并发第四次连续出现（PID 1091 + 1269）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.52GB→3.54GB 超 3.5GB 线：vite RSS 834MB / Java 正常驻；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 75 次（本窗口 r107-r128 共 18 次），全部单轮恢复；零 mvn 59 次
+- 双 recover 并发四连现；内存本窗口首次超 3.5GB 线（此前最高 3.46GB）
+- 治本修复（分卷重拼+PID 锁）待授权

@@ -8721,3 +8721,22 @@ Stage Summary:
 - 重供给 #60 已恢复，零 mvn 第 44 次（jar 分卷命中）
 - recover 挂起+「无 jar 备份」误报+hostLocal 500 竞态均已连续三轮出现，模式高度固化：①recover ~30s 完成真功能 ②脚本尾部挂起需强杀 ③recover 拉起的 Java 存在域名 Host 竞态需手动重启一次即愈。整套恢复等效于「recover(30s)+Java 重启」，累计三轮验证一致
 - 建议（待用户裁决）：授权一次性修复 recover-dplus.sh（尾部挂起 + jar 检测误报）
+
+---
+Task ID: r110
+Agent: main (cron ops loop)
+Task: 2026-10-18 08:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑报「workflow dump 无效」放弃（重供给库空，预期）
+- 8080 真伪核验 no such table: SYS_USER = 重供给 #61（累计 60→61）
+- 标准流水线：pkill 占位 → checkout 分卷 → 重拼 md5 e369839b 校验通过
+- recover timeout 180 本轮 rc=0 正常退出——连续三轮挂起未再现！且 hostLocal 200 无竞态（Java 重启步骤省略）
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261018-000736 成功，git commit f8b81cc9 已推送
+- 内存 2.80GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #61 已恢复，零 mvn 第 45 次
+- recover 挂起行为修正认知：非确定性必现，r107-r109 三轮连续挂起，r110 正常退出（rc=0）——疑与环境状态相关（本轮 mariadbd 无需重建路径？待后续轮次积累样本）。执行策略维持 timeout 180 + 事后三测，兼顾两种情况
+- hostLocal 500 竞态亦非必现（三轮连续后本轮未出现）

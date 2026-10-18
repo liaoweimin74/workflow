@@ -8831,3 +8831,19 @@ Work Log:
 Stage Summary:
 - 重供给 #66 已恢复，零 mvn 第 50 次（里程碑：分卷策略后零人工 mvn 接管达 50 次）
 - node 半死探针纳入标准流程（recover 后必测），本轮验证有效
+
+---
+Task ID: r116
+Agent: main (cron ops loop)
+Task: 2026-10-18 14:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（060539，mariadbd 幸存型）；8080 真伪核验 no such table = 重供给 #67（累计 66→67）
+- 标准流水线：pkill 占位 → 分卷重拼 md5 e369839b → recover rc=0，四测全过（直连/auth/hostLocal/node 探针）免 Java 重启
+- 四链路 200×4 + 40s 稳定复验 200×4
+- 收口 dump 20261018-060742 成功，git commit 6fec8ba4 已推送
+- 内存 2.79GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #67 已恢复，零 mvn 第 51 次
+- mariadbd 幸存型连续三轮（r115-r116-r117 早段）稳定 rc=0 快速路径，流水线耗时 <3 分钟

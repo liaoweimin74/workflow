@@ -9037,3 +9037,19 @@ Stage Summary:
 - 重供给累计 77 次（本窗口 r107-r130 共 20 次），全部单轮恢复；零 mvn 61 次
 - 双 recover 并发六连现；内存超线三连现
 - 治本修复待授权
+
+---
+Task ID: r131
+Agent: ops-patrol
+Task: 2026-10-19 06:05 cron 巡检
+
+Work Log:
+- dump 首跑无效（半导入）；四链路 200×4 但 auth=no such table → 重供给 #78
+- 双 recover 并发第七次连续出现（PID 1077 + 1271）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.54GB 超 3.5GB 线（四连现）；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 78 次（本窗口 r107-r131 共 21 次），全部单轮恢复；零 mvn 62 次
+- 双 recover 并发七连现；内存超线四连现
+- 治本修复待授权

@@ -8814,3 +8814,20 @@ Stage Summary:
 - 重供给 #65 已恢复，零 mvn 第 49 次
 - **新故障模式确诊并登记**：Java 半死状态（curl 真绿但 node/vite 路径挂起）。检出特征=c 链路 000 而 d 直连 200/auth 真绿。处置=重启 Java 即愈（本轮 + r108 两例验证）。启示：真伪核验通过≠vite 链路健康，c 链路 000 应直接触发 Java 重启而非 vite 重拉
 - 本轮走弯路备案：两次无效 vite 重拉（vite 本身无辜）；start-r95.sh 会连带拉 Java（8080 被占时自退出，无害）
+
+---
+Task ID: r115
+Agent: main (cron ops loop)
+Task: 2026-10-18 13:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（050541，mariadbd 幸存型）；8080 真伪核验 no such table = 重供给 #66（累计 65→66）
+- 标准流水线：pkill 占位 → 分卷重拼 md5 e369839b → recover rc=0 快速退出
+- 四项检测全过：直连 200 / auth 真绿 / hostLocal 200 / node 半死探针 200（r114 新增检测项首次实战，免 Java 重启）
+- 四链路 200×4 + 40s 稳定复验 200×4
+- 收口 dump 20261018-050736 成功，git commit 00eab89d 已推送
+- 内存 2.92GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #66 已恢复，零 mvn 第 50 次（里程碑：分卷策略后零人工 mvn 接管达 50 次）
+- node 半死探针纳入标准流程（recover 后必测），本轮验证有效

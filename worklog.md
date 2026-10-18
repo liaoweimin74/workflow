@@ -8933,3 +8933,24 @@ Stage Summary:
 - r123 沙箱故障 catchup 闭环；重供给 #72 已恢复，零 mvn 第 56 次（mvn 半途产物反成损坏源）
 - **新故障模式登记**：recover 的 mvn 分支被 timeout 打断后 target 留下**半途损坏 jar**（大小±4KB），后续 Java 拉起必失败且难排查（大小/ md5 不匹配）。处置法已验证：恢复 Java 前必校验 target jar md5=e369839b，不符即用 backups/jar 覆盖
 - v6 库本轮 dump 仅 4.0K（正常 128K）——v6 数据疑被重供给清空，workflow 主库正常（260K 含 SYS_USER 等全表）；下轮持续观察 v6
+
+---
+Task ID: r124
+Agent: ops-patrol
+Task: 2026-10-18 23:05 cron 巡检（catchup r123 沙箱故障空窗）
+
+Work Log:
+- dump-db 首跑：3306 不在线跳过；四链路 200×4 但 auth=no such table: SYS_USER → 假绿确诊，重供给 #72
+- 发现双 recover 并发（PID 1077 etime=29s + 1334 etime=14s，r113 同款；apt-get download mariadb 佐证冷启动自动触发）
+- recover.log 显示误报分支「无 jar 备份→mvn 构建」已触发（backups/jar/ 重拼产物被重供给清掉）
+- pkill 双实例+mvn → checkout parts 四卷重拼 → md5 e369839b (121300861B) ✓
+- timeout 180 recover-dplus.sh：rc=0 幸存型干净退出，「从 backups/jar 恢复 jar（跳过 mvn 构建）」，t+5s 真绿
+- 四测：auth 真绿 ✓ hostLocal=200 ✓ node 探针 200 ✓；40s 复验四链路 200×4 真绿
+- 收口 dump 20261018-150804 (workflow=260K v6=4.0K)，commit 78f14def 推送 ✓
+
+Stage Summary:
+- 重供给 #58-#72 累计 72 次，本窗口 r107-r124 共 15 次，全部单轮恢复，零人工接管
+- 零 mvn 恢复累计 56 次
+- 双 recover 并发第 2 次处置成功（r113 模式复用：杀双实例→重拼→前台 recover）
+- 内存 3.46GB（未超 3.5GB 线），oom_kill=0
+- 待裁决清单不变：recover 起始加分卷重拼+PID 锁（本轮双并发+误报再次验证必要性）

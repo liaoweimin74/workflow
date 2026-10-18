@@ -8972,3 +8972,20 @@ Stage Summary:
 - 重供给累计 73 次（本窗口 r107-r125 共 16 次），全部单轮恢复，零人工接管；零 mvn 57 次
 - 双 recover 并发 + 误报分支均已二现（r124/r125 连续两轮）——recover 起始加分卷重拼 + PID 锁的授权请求已连续多轮未回应，本轮仍是手工兜底
 - 内存 3.46GB，oom_kill=0
+
+---
+Task ID: r127
+Agent: ops-patrol
+Task: 2026-10-19 02:05 cron 巡检（catchup r126 沙箱故障空窗）
+
+Work Log:
+- r126 沙箱启动失败（第 7 次）未执行，本轮双窗口覆盖
+- dump-db 首跑无效（mariadb 半导入）；四链路 200×4 但 auth=no such table: SYS_USER → 重供给 #74
+- 双 recover 并发第三次连续出现（PID 1095 + 1262）→ pkill 双实例+占位 → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿（跳过 mvn）；四测全过（auth 真绿/hostLocal=200/node 探针 200）
+- 40s 复验 200×4 真绿；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 74 次（本窗口 r107-r127 共 17 次），全部单轮恢复；零 mvn 58 次
+- 双 recover 并发 r124/r125/r127 三连现，误报分支同步三现——手工兜底模式已完全成熟但治本修复仍待授权
+- 内存 3.28GB，oom_kill=0

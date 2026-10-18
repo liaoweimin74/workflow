@@ -9005,3 +9005,19 @@ Stage Summary:
 - 重供给累计 75 次（本窗口 r107-r128 共 18 次），全部单轮恢复；零 mvn 59 次
 - 双 recover 并发四连现；内存本窗口首次超 3.5GB 线（此前最高 3.46GB）
 - 治本修复（分卷重拼+PID 锁）待授权
+
+---
+Task ID: r129
+Agent: ops-patrol
+Task: 2026-10-19 04:05 cron 巡检
+
+Work Log:
+- dump 首跑 3306 不在线；四链路 200×4 但 auth=no such table → 重供给 #76
+- 双 recover 并发第五次连续出现（PID 1078 + 1334）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿（跳过 mvn）；四测全过；40s 复验 200×4 真绿
+- 内存 3.55GB 超 3.5GB 线（连续第二轮）；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 76 次（本窗口 r107-r129 共 19 次），全部单轮恢复；零 mvn 60 次
+- 双 recover 并发五连现（每晚必现）；内存超线二连现
+- 治本修复待授权

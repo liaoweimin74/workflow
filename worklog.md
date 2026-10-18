@@ -8913,3 +8913,23 @@ Work Log:
 
 Stage Summary:
 - 重供给 #71 已恢复，零 mvn 第 55 次；流水线全绿路径连续稳定（r115-r122 无新增异常模式）
+
+---
+Task ID: r124 (catchup r123)
+Agent: main (cron ops loop)
+Task: 2026-10-18 21:05(r123 沙箱故障未执行) + 22:05(r124) 合并巡检
+
+Work Log:
+- r123（21:05）沙箱 failed to start 未执行（工具故障史第 6 次），本轮 catchup
+- dump-db 首跑「OK」但仅 44K/4K（近空库被误接受）= 重供给 #72（累计 71→72）
+- **新处置**：剔除无效 dump 140542（git rm --cached + rm），确保 recover 选中最后有效 dump 120729
+- 流水线：重拼 md5 e369839b → recover 180s rc=2 超时（mariadb 重建路径本轮变长），但日志确认导入 120729 完成；**target jar 损坏**（121305191B ≠ 正确 121300861B，mvn 分支半途产物）致 Java 8080=000
+- 补刀：cp backups/jar 正确 jar 覆盖 target（md5 e369839b 核实）→ 手动 daemon 拉起 Java → 28s 四测全过（直连/auth 真绿/hostLocal/node 探针）
+- 四链路 200×4 + 40s 稳定复验 200×4
+- 收口 dump 20261018-141121（workflow 260K 恢复正常，v6 4.0K 待观察）已推送 9e901898
+- 内存 2.85GB，oom_kill=0
+
+Stage Summary:
+- r123 沙箱故障 catchup 闭环；重供给 #72 已恢复，零 mvn 第 56 次（mvn 半途产物反成损坏源）
+- **新故障模式登记**：recover 的 mvn 分支被 timeout 打断后 target 留下**半途损坏 jar**（大小±4KB），后续 Java 拉起必失败且难排查（大小/ md5 不匹配）。处置法已验证：恢复 Java 前必校验 target jar md5=e369839b，不符即用 backups/jar 覆盖
+- v6 库本轮 dump 仅 4.0K（正常 128K）——v6 数据疑被重供给清空，workflow 主库正常（260K 含 SYS_USER 等全表）；下轮持续观察 v6

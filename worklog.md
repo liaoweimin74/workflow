@@ -8740,3 +8740,21 @@ Stage Summary:
 - 重供给 #61 已恢复，零 mvn 第 45 次
 - recover 挂起行为修正认知：非确定性必现，r107-r109 三轮连续挂起，r110 正常退出（rc=0）——疑与环境状态相关（本轮 mariadbd 无需重建路径？待后续轮次积累样本）。执行策略维持 timeout 180 + 事后三测，兼顾两种情况
 - hostLocal 500 竞态亦非必现（三轮连续后本轮未出现）
+
+---
+Task ID: r111
+Agent: main (cron ops loop)
+Task: 2026-10-18 09:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑成功（010547，mariadbd 幸存本轮重供给且库有数据）
+- 8080 真伪核验 no such table: SYS_USER = 重供给 #62（累计 61→62）
+- 标准流水线：pkill 占位 → checkout 分卷 → 重拼 md5 e369839b 校验通过
+- recover rc=0 正常退出（连续第二轮不挂起，r110 同模式），hostLocal 200 无竞态，免 Java 重启
+- 四链路 200×4 + 40s 稳定复验 200×4 + accessToken 真绿
+- 收口 dump 20261018-010744 成功，git commit 4232f878 已推送
+- 内存 2.99GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #62 已恢复，零 mvn 第 46 次
+- recover 挂起样本更新：r107-r109 连续 3 轮挂起 → r110-r111 连续 2 轮正常退出（rc=0）。挂起与重供给后 mariadbd 重建路径相关假设进一步支持（本轮 dump 首跑成功=mariadbd 幸存=recover 无需重建→快速干净退出；r107-r109 dump 首跑失败=mariadbd 需重建→挂起）。timeout 180 策略保持

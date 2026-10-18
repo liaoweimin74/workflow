@@ -8795,3 +8795,22 @@ Stage Summary:
 - 重供给 #64 已恢复，零 mvn 第 48 次（mvn 中途被杀，未计入接管）
 - 「无 jar 备份」误报根因最终定位：backups/jar 重拼产物被 ':!backups/jar' git 排除 → 重供给后不存在 → 自动/抢先 recover 判定无备份。修复方案（待授权）：dump-db.sh 或 recover-dplus.sh 起始处加分卷重拼逻辑（checkout parts + cat + md5 校验）
 - 新风险登记：环境冷启动自动触发 recover 与 cron 轮次恢复可并发（本轮实证双实例）→ mvn 分支互踩。建议授权在 recover 起始加 PID 锁
+
+---
+Task ID: r114
+Agent: main (cron ops loop)
+Task: 2026-10-18 12:05 轻量运维巡检
+
+Work Log:
+- dump-db 首跑报 3306 不在线（mariadbd 进程在但 socket 检测失败，疑重供给后 socket 时序）；8080 真伪核验 no such table = 重供给 #65（累计 64→65）
+- 标准流水线：pkill 占位 → 分卷重拼 md5 e369839b → recover rc=0 快速退出，直连真绿 + hostLocal 200
+- 但 c 链路 000（vite 静态 200 /api 挂死）持续——三轮 vite 重拉无效（start-r95.sh + 手动 daemon 两种）
+- 深度诊断：curl→8080 全通（含 --noproxy 双栈），node http→8080 TCP 1ms 建连后永不响应（raw socket 复现，与 Host 头/keepalive 无关）→ 确诊 Java「半死」状态：Tomcat accept TCP 但对 Node 客户端请求不回 HTTP（vite 代理即此路径受害者）
+- 处置：pkill Java + daemon 重拉 → 28s 后 node 测试 200 → c 链路自愈 → 四链路 200×4 + 40s 稳定复验通过
+- 收口 dump 20261018-041408 成功，git commit fef3c68f 已推送
+- 内存 2.58GB，oom_kill=0
+
+Stage Summary:
+- 重供给 #65 已恢复，零 mvn 第 49 次
+- **新故障模式确诊并登记**：Java 半死状态（curl 真绿但 node/vite 路径挂起）。检出特征=c 链路 000 而 d 直连 200/auth 真绿。处置=重启 Java 即愈（本轮 + r108 两例验证）。启示：真伪核验通过≠vite 链路健康，c 链路 000 应直接触发 Java 重启而非 vite 重拉
+- 本轮走弯路备案：两次无效 vite 重拉（vite 本身无辜）；start-r95.sh 会连带拉 Java（8080 被占时自退出，无害）

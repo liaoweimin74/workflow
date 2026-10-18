@@ -8847,3 +8847,21 @@ Work Log:
 Stage Summary:
 - 重供给 #67 已恢复，零 mvn 第 51 次
 - mariadbd 幸存型连续三轮（r115-r116-r117 早段）稳定 rc=0 快速路径，流水线耗时 <3 分钟
+
+---
+Task ID: r118 (catchup r117)
+Agent: main (cron ops loop)
+Task: 2026-10-18 15:05(r117 沙箱故障未执行) + 16:05(r118) 合并巡检
+
+Work Log:
+- r117（15:05）沙箱 failed to start 未执行任何探查（与 r90 同型，Bash 工具故障史第 4 次），本轮 catchup
+- dump-db 首跑报 3306 不在线（mariadbd 进程在但 socket 检测失败，r114 同型）；8080 真伪核验 no such table = 重供给 #68（累计 67→68，覆盖 r117-r118 双小时窗口）
+- 标准流水线：pkill 占位 → 分卷重拼 md5 e369839b → recover rc=0（mariadb 重建型亦快速完成），四测全过免 Java 重启
+- 四链路 200×4 + 40s 稳定复验 200×4
+- 收口 dump 20261018-080728 成功，git commit 921337cd 已推送
+- 内存 3.01GB，oom_kill=0
+
+Stage Summary:
+- r117 沙箱故障由 r118 catchup 闭环（无数据/服务损失，2 小时空窗内唯一影响=少一轮快照）
+- 重供给 #68 已恢复，零 mvn 第 52 次
+- dump 3306 检测与 mariadbd 存活矛盾现象二现（r114/r118）：socket 文件新鲜但 mariadb 客户端连接失败，recover 内部重建路径反而正常——疑 dump-db 的检测方式（mysql ping 走 socket）在重供给后首次调用时序敏感，非阻塞问题（recover 导入正常）

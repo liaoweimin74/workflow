@@ -99,3 +99,15 @@ describe('非 GET 方法不受影响', () => {
     expect(state.calls).toBe(2)
   })
 })
+
+describe('R 业务码透传（HTTP 200 + code≠200）', () => {
+  it('拒绝的 Error 携带 body.code，调用方可区分 404/403/409', async () => {
+    const { adapter } = createCountingAdapter(() => ({ code: 404, data: null, msg: '物料不存在: ghost' }))
+    const err: Error & { code?: number } = await http
+      .get('/biz/404', { adapter, headers: { 'X-Skip-Error-Toast': '1' } })
+      .catch((e) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect(err.message).toBe('物料不存在: ghost')
+    expect(err.code).toBe(404)
+  })
+})

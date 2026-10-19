@@ -3,6 +3,76 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+// 【远程物料 import map（change: remote-materials，design D2）】
+// 物料 bundle 里 import 的是裸模块名（vue / element-plus / @platform/sdk），
+// 浏览器按 index.html 的 import map 把它们解析到宿主自身的模块 URL：
+// - dev：直接指向 shim 源文件，vite 按普通模块编译（'vue' 走同一份预优化依赖 → 单实例）
+// - build：shim 作为额外 entry 被打包，取实际产出的 chunk 文件名（带 hash）写入 map
+const MATERIAL_HOST_SHIMS: Record<string, string> = {
+  'vue': 'src/platform/hosts/vue-host.ts',
+  'element-plus': 'src/platform/hosts/element-plus-host.ts',
+  '@platform/sdk': 'src/platform/hosts/sdk-host.ts'
+}
+
+function materialImportMap(): PluginOption {
+  return {
+    name: 'material-import-map',
+    config(config) {
+      // 把 shim 注册为额外构建 entry（保留 index.html 作为默认 entry）
+      const input: Record<string, string> = { main: 'index.html' }
+      for (const [spec, file] of Object.entries(MATERIAL_HOST_SHIMS)) {
+        input[spec.replace('@', '').replace('/', '-')] = path.resolve(__dirname, file)
+      }
+      void config
+      return {
+        build: {
+          // preserveEntrySignatures 是 input 级选项（放 output 下会被忽略）：
+          // shim entry 必须保留 re-export 签名，否则物料 import { ref } from 'vue' 取不到导出
+          rollupOptions: {
+            input,
+            preserveEntrySignatures: 'allow-extension'
+          }
+        }
+      }
+    },
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, ctx) {
+        const imports: Record<string, string> = {}
+        if (ctx.server) {
+          for (const [spec, file] of Object.entries(MATERIAL_HOST_SHIMS)) {
+            imports[spec] = '/' + file
+          }
+        } else {
+          const bundle = ctx.bundle
+          if (!bundle) return []
+          for (const [spec, file] of Object.entries(MATERIAL_HOST_SHIMS)) {
+            const chunk = Object.values(bundle).find(
+              (item) =>
+                item.type === 'chunk' &&
+                !!item.facadeModuleId &&
+                item.facadeModuleId.replace(/\\/g, '/').endsWith(file)
+            )
+            if (!chunk) {
+              this.error(`物料 import map 缺少宿主 chunk: ${file}`)
+            }
+            imports[spec] = '/' + (chunk as { fileName: string }).fileName
+          }
+        }
+        return [
+          {
+            tag: 'script',
+            attrs: { type: 'importmap' },
+            // map 必须先于任何 module 脚本出现
+            injectTo: 'head-prepend',
+            children: JSON.stringify({ imports })
+          }
+        ]
+      }
+    }
+  }
+}
+
 // 【D+ 架构（用户 2026-10-08 定调）：低代码 vite 独占 3000】
 // - Next.js 门户（next-server）按方案不再启动，节省约 1.5GB 内存；
 //   原 reviveNextDev 看门狗随之移除（它的职责是把 next dev 拉回来，与方案相悖）。
@@ -19,7 +89,7 @@ export default defineConfig({
   css: {
     postcss: {}
   },
-  plugins: [vue(), tailwindcss()],
+  plugins: [vue(), tailwindcss(), materialImportMap()],
   optimizeDeps: {
     // @codemirror/lang-javascript 的 npm dist 预打包了 @codemirror/state/language 的完整副本；
     // esbuild 依赖预优化在特定分块形态下会把它内联成零 import 的自包含 chunk，

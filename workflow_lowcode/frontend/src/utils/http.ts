@@ -71,7 +71,11 @@ http.interceptors.response.use(
       if (!response.config.headers?.['X-Skip-Error-Toast']) {
         ElMessage.error(data.msg || '请求失败')
       }
-      return Promise.reject(new Error(data.msg))
+      // 业务码挂到 error 上：R 约定 HTTP 200 + body.code 承载状态，
+      // 调用方需要区分 404/403/409 时只能从这里取（如物料加载器的错误态分类）
+      const bizError = new Error(data.msg || '请求失败') as Error & { code?: number }
+      bizError.code = data.code
+      return Promise.reject(bizError)
     }
     return data
   },

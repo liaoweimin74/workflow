@@ -183,6 +183,21 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '页面' }
       },
       {
+        // 远程物料管理页（remote-materials 6.3）：V57 预置菜单「物料管理」指向此路由
+        path: 'material',
+        name: 'MaterialList',
+        component: () => import('@/views/material/MaterialListPage.vue'),
+        meta: { title: '物料管理' }
+      },
+      {
+        // 远程物料页面（change: remote-materials）：菜单 component=material:<key>，
+        // 运行时 import() 加载物料 bundle 渲染（与 PageRenderer 同挂载方式）
+        path: 'material/:materialKey',
+        name: 'MaterialRenderer',
+        component: () => import('@/views/material/MaterialRenderer.vue'),
+        meta: { title: '物料页面' }
+      },
+      {
         path: 'data-source/list',
         name: 'DataSourceList',
         component: () => import('@/views/dataSource/DataSourceListPage.vue'),

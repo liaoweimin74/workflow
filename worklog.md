@@ -9085,3 +9085,20 @@ Stage Summary:
 - 重供给累计 80 次（本窗口 r107-r133 共 23 次），全部单轮恢复；零 mvn 64 次
 - 双 recover 并发九连现
 - 治本修复待授权
+
+---
+Task ID: r134
+Agent: ops-patrol
+Task: 2026-10-19 09:05 cron 巡检
+
+Work Log:
+- dump 首跑 3306 不在线；四链路 a/b/c=000 + d=200 假绿 → 重供给 #81（环境 bun install 进行中）
+- 双 recover 并发第十次连续出现（PID 1088 + 1292）→ pkill（含 bun install 占位）→ 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过
+- 40s 复验 200×4 真绿（3000 随环境依赖装完自行就绪，零干预）；内存 3.54GB 超线
+- 收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 81 次（本窗口 r107-r134 共 24 次），全部单轮恢复；零 mvn 65 次
+- 双 recover 并发十连现
+- 治本修复待授权

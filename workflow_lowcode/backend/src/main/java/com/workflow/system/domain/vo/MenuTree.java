@@ -12,5 +12,6 @@ public record MenuTree(
         String permission,
         String icon,
         Integer sortOrder,
+        Integer status,
         List<MenuTree> children) {
 }

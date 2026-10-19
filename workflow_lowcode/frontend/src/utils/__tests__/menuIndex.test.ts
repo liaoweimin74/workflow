@@ -13,7 +13,6 @@ function node(partial: Partial<MenuTree>): MenuTree {
     permission: '',
     icon: '',
     sortOrder: 0,
-    visible: 1,
     status: 1,
     children: [],
     ...partial,

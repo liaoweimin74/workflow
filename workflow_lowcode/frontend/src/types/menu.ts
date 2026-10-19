@@ -8,7 +8,7 @@ export interface MenuTree {
   permission: string
   icon: string
   sortOrder: number
-  visible: number
+  /** 1 启用（侧边栏可见）/ 0 停用；sys_menu 无 visible 列，可见性由此字段承载 */
   status: number
   children: MenuTree[]
 }
@@ -22,7 +22,8 @@ export interface MenuCreateForm {
   permission?: string
   icon?: string
   sortOrder?: number
-  visible?: number
+  /** 后端 MenuCreateRequest.status（1 启用/0 停用） */
+  status?: number
 }
 
 export interface MenuUpdateForm {
@@ -32,6 +33,5 @@ export interface MenuUpdateForm {
   permission?: string
   icon?: string
   sortOrder?: number
-  visible?: number
   status?: number
 }

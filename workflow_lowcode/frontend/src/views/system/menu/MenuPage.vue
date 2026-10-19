@@ -62,7 +62,7 @@ async function ensurePublishedPages() {
 
 // ---------- 新增子菜单 ----------
 function handleAddChild(parentId: number) {
-  searchTableRef.value?.openFormDialog({ parentId, menuType: 1, sortOrder: 0, visible: 1 })
+  searchTableRef.value?.openFormDialog({ parentId, menuType: 1, sortOrder: 0, status: 1 })
 }
 
 // ---------- 操作按钮 ----------
@@ -87,7 +87,7 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
         const isButton = val === 2
         fApi.updateRule('path', { hidden: isButton })
         fApi.updateRule('icon', { hidden: isButton })
-        fApi.updateRule('visible', { hidden: isButton })
+        fApi.updateRule('status', { hidden: isButton })
         fApi.updateRule('component', { hidden: !isMenu })
         fApi.updateRule('permission', { hidden: isDir })
         fApi.updateRule('linkedPage', { hidden: !isMenu })
@@ -126,12 +126,16 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
       props: { placeholder: 'Element Plus 图标名' },
     },
     {
-      type: 'radio', field: 'visible', title: '可见',
+      type: 'radio', field: 'status', title: '可见',
       options: [{ label: '显示', value: 1 }, { label: '隐藏', value: 0 }],
     },
     {
       type: 'input', field: 'component', title: '组件路径',
-      props: { placeholder: 'views/system/user/UserPage' },
+      props: {
+        placeholder: 'views/system/user/UserPage 或 material:<物料key>',
+      },
+      // 远程物料页面（remote-materials）：component 填 material:<key>、path 填 /material/<key>
+      info: '远程物料页面：组件路径填 material:<物料key>，路由路径填 /material/<物料key>',
     },
     {
       type: 'input', field: 'permission', title: '权限标识',

@@ -183,7 +183,7 @@ async function handleLogout() {
 
 function visibleMenus(menuList: any[]): any[] {
   return menuList
-    .filter((m: any) => m.menuType !== 2 && m.visible !== 0 && m.status !== 0)
+    .filter((m: any) => m.menuType !== 2 && m.status !== 0)
     .map((item: any) => ({ ...item, children: item.children ? visibleMenus(item.children) : [] }))
     .filter((item: any) => item.menuType === 1 || item.children.length > 0)
 }

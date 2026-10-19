@@ -15,4 +15,7 @@ public interface SysMenuRepository extends JpaRepository<SysMenu, Long>,
     long countByParentId(Long parentId);
 
     List<SysMenu> findByPathAndIsDeleted(String path, int isDeleted);
+
+    /** 物料删除前置检查：按 component（material:&lt;key&gt;）找出引用该物料的菜单。 */
+    List<SysMenu> findByComponentAndIsDeleted(String component, int isDeleted);
 }

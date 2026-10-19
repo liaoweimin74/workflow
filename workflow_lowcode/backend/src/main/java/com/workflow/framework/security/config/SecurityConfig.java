@@ -43,6 +43,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login").permitAll()
                 // SSE 端点：浏览器 EventSource 无法自定义 header，通过 query token 自行认证
                 .requestMatchers("/api/v1/notifications/sse").permitAll()
+                // 物料 bundle：ESM import() 无法携带 Authorization 头，公开读（design D3）；
+                // 管理接口（上传/启停/删除）仍要求 material:manage
+                .requestMatchers("/api/materials/*/bundle").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

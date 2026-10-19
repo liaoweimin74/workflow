@@ -18,7 +18,7 @@
 2. **useMetadataColumns 模式**: PageDataTable 新增 flag 控制列来源（metaColumns vs props.columns），watch(resolvedRefId) 切换数据源时自动刷新
 3. **page 参数保护**: 后端 BizDataQueryRequest.page 默认 0（0-based），前端 SearchTable page 1-based，加 `Math.max(0, params.page - 1)` 防负数
 4. **管理页面标题移除**: FormListPage、PageListPage、DataSourceListPage 的 header 标题移除
-5. **formContainer 重命名**: "容器" → "数据容器"
+5. **formContainer 重命名**: "容器" → "数据容器"（2026-10-18 再改为"表单容器"，与英文类型名对齐）
 6. **运行时 bug 修复**: formDsBindingsStore 安全写入（非空优先覆盖），修复运行时数据源不存在
 7. **DsBindingEngine 运行时集成**: resolveRefId() + 3 API 修复
 8. **DsBindingConfigDialog 表模式**: tableMode prop 支持

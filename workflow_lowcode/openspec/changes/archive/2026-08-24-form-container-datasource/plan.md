@@ -81,7 +81,7 @@ Expected: FAIL（module not found / test not found）
 import { localeProps } from '../../utils'
 import uniqueId from '@form-create/utils/lib/unique'
 
-const label = '数据表单容器'
+const label = '表单容器'
 const name = 'formContainer'
 
 export default {
@@ -904,14 +904,14 @@ Expected: FAIL（triggerOptions 未定义）
 
 ```ts
 designerRef.value?.addComponent({
-  label: '数据表单容器',
+  label: '表单容器',
   name: 'formContainer',
   icon: 'icon-group',
   menu: 'main',
   rule: () => ({
     type: 'formContainer',
     field: 'fc' + Date.now(),
-    title: '数据表单容器',
+    title: '表单容器',
     props: { dataSourceId: '', recordLocator: { type: 'current-record' } },
     children: [],
   }),

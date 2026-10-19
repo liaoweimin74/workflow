@@ -43,35 +43,35 @@
 
 ### Requirement: open-container-action
 
-事件流 SHALL 支持 `open-container` 动作，用于打开数据容器组件。
+事件流 SHALL 支持 `open-container` 动作，用于打开表单容器组件。
 
 #### Scenario: 执行 open-container 动作
 
 - **WHEN** 事件流执行 `open-container` 动作
-- **THEN** 系统 SHALL 打开目标数据容器组件
+- **THEN** 系统 SHALL 打开目标表单容器组件
 
 #### Scenario: open-container 支持 displayMode 参数
 
 - **WHEN** `open-container` 动作包含 `displayMode` 参数
-- **THEN** 系统 SHALL 使用指定的显示模式打开数据容器
+- **THEN** 系统 SHALL 使用指定的显示模式打开表单容器
 
 ### Requirement: load-record-action
 
-事件流 SHALL 支持 `load-record` 动作，用于加载记录到数据容器组件。
+事件流 SHALL 支持 `load-record` 动作，用于加载记录到表单容器组件。
 
 #### Scenario: 执行 load-record 动作
 
 - **WHEN** 事件流执行 `load-record` 动作，包含记录ID
-- **THEN** 系统 SHALL 从数据源加载指定记录，并填充到目标数据容器
+- **THEN** 系统 SHALL 从数据源加载指定记录，并填充到目标表单容器
 
 ### Requirement: save-container-action
 
-事件流 SHALL 支持 `save-container` 动作，用于保存数据容器组件中的数据。
+事件流 SHALL 支持 `save-container` 动作，用于保存表单容器组件中的数据。
 
 #### Scenario: 执行 save-container 动作
 
 - **WHEN** 事件流执行 `save-container` 动作
-- **THEN** 系统 SHALL 调用数据源保存接口，保存目标数据容器中的数据
+- **THEN** 系统 SHALL 调用数据源保存接口，保存目标表单容器中的数据
 
 #### Scenario: 保存成功后同步表格
 
@@ -85,12 +85,12 @@
 
 ### Requirement: close-container-action
 
-事件流 SHALL 支持 `close-container` 动作，用于关闭数据容器组件。
+事件流 SHALL 支持 `close-container` 动作，用于关闭表单容器组件。
 
 #### Scenario: 执行 close-container 动作
 
 - **WHEN** 事件流执行 `close-container` 动作
-- **THEN** 系统 SHALL 关闭目标数据容器组件
+- **THEN** 系统 SHALL 关闭目标表单容器组件
 
 ## Risks
 

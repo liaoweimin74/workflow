@@ -35,7 +35,7 @@
 
 ## 1. Wins
 
-- [evidence: 7b6d34f] 抽取共享数据容器运行时机制（`DsBindingEngine.ts` + `useLinkageContainer.ts` + `ContainerButtons.vue`），使 FormRenderer 与 PageRendererPage 复用同一套容器逻辑，消除重复实现。
+- [evidence: 7b6d34f] 抽取共享表单容器运行时机制（`DsBindingEngine.ts` + `useLinkageContainer.ts` + `ContainerButtons.vue`），使 FormRenderer 与 PageRendererPage 复用同一套容器逻辑，消除重复实现。
 - [evidence: c60dadb、6be7adb] FormRenderer 与 PageRendererPage 均接入共享 `useLinkageContainer`，两处显示模式（dialog/newTab/inline）与按钮行为保持一致。
 - [evidence: 4fffa38] 页面设计器（PageDesigner）复用表单设计器的数据源配置流（`DsBindingConfigDialog` 的 formContainer、DataPicker/LookupPicker 配置弹窗），设计时配置体验统一。
 - [evidence: bca13db + 测试] 数据组件旧协议兼容（`sourceFormKey` 回退、`fetch` 输出、targetForms/targetColumns 回退）确保既有 schema 不破坏；过时测试重写为 `dataSourceId` 数据源路径后全部通过。

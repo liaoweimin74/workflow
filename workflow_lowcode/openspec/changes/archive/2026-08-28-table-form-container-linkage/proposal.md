@@ -1,7 +1,7 @@
 ## Why
 
 ### 现况痛点
-当前页面设计器中的数据表格（PageDataTable）和数据容器（formContainer）组件是独立的，缺乏联动能力。用户在表格中点击编辑/查看按钮时，无法自动加载对应记录到formContainer中进行编辑。这导致用户体验不佳，需要手动操作多个组件。
+当前页面设计器中的数据表格（PageDataTable）和表单容器（formContainer）组件是独立的，缺乏联动能力。用户在表格中点击编辑/查看按钮时，无法自动加载对应记录到formContainer中进行编辑。这导致用户体验不佳，需要手动操作多个组件。
 
 ### 为什么现在处理
 随着业务复杂度增加，用户对数据表格和表单的联动需求越来越强烈。现有架构已经具备事件总线（DsActionBus）和数据源绑定（DsBindingEngine）能力，可以在此基础上扩展实现联动功能。
@@ -40,9 +40,9 @@
 ## Capabilities
 
 ### New Capabilities
-- `table-container-linkage`: 数据表格和数据容器组件联动功能，支持事件流驱动的记录加载、编辑和保存
-- `form-container-display-mode`: 数据容器组件的多种显示形式支持（弹出窗口、新开页签、页面内嵌）
-- `form-container-button-config`: 数据容器组件的按钮配置功能（默认按钮+自定义按钮）
+- `table-container-linkage`: 数据表格和表单容器组件联动功能，支持事件流驱动的记录加载、编辑和保存
+- `form-container-display-mode`: 表单容器组件的多种显示形式支持（弹出窗口、新开页签、页面内嵌）
+- `form-container-button-config`: 表单容器组件的按钮配置功能（默认按钮+自定义按钮）
 
 ### Modified Capabilities
 - `page-data-table`: 页面数据表格组件，新增事件触发能力

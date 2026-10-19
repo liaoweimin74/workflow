@@ -41,7 +41,7 @@
 // 伪代码骨架
 export default {
   menu: 'subform',
-  label: '数据表单容器',
+  label: '表单容器',
   name: 'formContainer',
   subForm: 'object',          // 一条记录 = 一个对象
   input: true,
@@ -50,7 +50,7 @@ export default {
   dragBtn: true,
   loadRule(rule) { rule.children = rule.props.rule || []; rule.type = 'FcRow'; delete rule.props.rule; },
   parseRule(rule) { rule.props.rule = rule.children; rule.type = 'formContainer'; delete rule.children; },
-  rule({t}) { return { type: 'fcRow', field: uniqueId(), title: '数据表单容器', props: { dataSourceId: '', recordLocator: { type: 'current-record' } }, children: [] }; },
+  rule({t}) { return { type: 'fcRow', field: uniqueId(), title: '表单容器', props: { dataSourceId: '', recordLocator: { type: 'current-record' } }, children: [] }; },
   props(_, {t}) { /* 属性面板：dataSourceId 下拉（全局数据源）+ recordLocator 配置 */ }
 }
 ```

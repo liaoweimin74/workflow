@@ -31,22 +31,22 @@ DsActionBus SHALL 支持执行表格-容器联动的动作，包括 `open-contai
 #### Scenario: 执行 open-container 动作
 
 - **WHEN** 事件流执行 `open-container` 动作
-- **THEN** DsActionBus SHALL 打开目标数据容器组件
+- **THEN** DsActionBus SHALL 打开目标表单容器组件
 
 #### Scenario: 执行 load-record 动作
 
 - **WHEN** 事件流执行 `load-record` 动作
-- **THEN** DsActionBus SHALL 从数据源加载指定记录，并填充到目标数据容器
+- **THEN** DsActionBus SHALL 从数据源加载指定记录，并填充到目标表单容器
 
 #### Scenario: 执行 save-container 动作
 
 - **WHEN** 事件流执行 `save-container` 动作
-- **THEN** DsActionBus SHALL 调用数据源保存接口，保存目标数据容器中的数据
+- **THEN** DsActionBus SHALL 调用数据源保存接口，保存目标表单容器中的数据
 
 #### Scenario: 执行 close-container 动作
 
 - **WHEN** 事件流执行 `close-container` 动作
-- **THEN** DsActionBus SHALL 关闭目标数据容器组件
+- **THEN** DsActionBus SHALL 关闭目标表单容器组件
 
 ## Risks
 

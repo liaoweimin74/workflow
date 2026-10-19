@@ -1,6 +1,6 @@
 ## Design Summary
 
-数据表格（PageDataTable）和数据容器（formContainer）组件联动功能，支持事件流驱动的记录加载、编辑和保存。
+数据表格（PageDataTable）和表单容器（formContainer）组件联动功能，支持事件流驱动的记录加载、编辑和保存。
 
 ### 核心功能
 1. **表格-容器联动**：点击表格的编辑/查看按钮或行点击，formContainer加载对应记录

@@ -29,7 +29,7 @@ remap(parsedSchema, idMap) → { schema: parsedSchema', report }
 | # | 槽位 | 位置 | 证据 |
 |---|---|---|---|
 | D0 | `dataSources[].id` | schema 顶层 | ID 权威集合（PageDesigner.vue:377–383） |
-| D1 | `props.dataSourceId` | 任意 rule 节点（含嵌套子节点） | 7 类数据容器 + dataPicker/LookupPicker（PageDesigner.vue:776–1038；option-datasource.ts:116） |
+| D1 | `props.dataSourceId` | 任意 rule 节点（含嵌套子节点） | 7 类数据组件 + dataPicker/LookupPicker（PageDesigner.vue:776–1038；option-datasource.ts:116） |
 | D2 | `actions[].source`、`actions[].steps[].target` | 总线动作 | pageActionCatalog.ts:51,70；PageRendererPage.vue:567,581 |
 | D3 | 链动作 `params[key='target'].value` | **委托类容器动作**（open-container / close-container / load-record / save-container，即 `CHAIN_ACTIONS` 中 `delegated=true` 的 4 个） | PageDataTable.vue:1077；候选目录来自设计器 dataSources（PageDesigner.vue:398–404） |
 | D4 | 链动作 `params[key='recordId'].value` 内模板 | load-record，如 `$row.ds_` 前缀不存在则天然不涉及；仅当模板变量段恰为旧 ID 时改写（防御性，预期 0 命中） | PageDataTable.vue:957–960 |

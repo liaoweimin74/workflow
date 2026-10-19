@@ -41,6 +41,9 @@ import DashFilter from '@/views/dashboard/components/DashFilter.vue'
 import DashGoal from '@/views/dashboard/components/DashGoal.vue'
 import DashLeaderboard from '@/views/dashboard/components/DashLeaderboard.vue'
 import DashAlert from '@/views/dashboard/components/DashAlert.vue'
+// 待办清单：不走数据源，数据为当前登录用户的任务
+import DashTodo from '@/views/dashboard/components/DashTodo.vue'
+import DashNotice from '@/views/dashboard/components/DashNotice.vue'
 // 环比指标卡（Task 3-h）：DashKpi 同族，双实例注册
 import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import App from './App.vue'
@@ -48,6 +51,8 @@ import router from './router'
 import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
 import { permission } from './directives/permission'
 import './style.css'
+// 仪表盘高度档「撑满」：把栅格列高度传到卡片根（:has 反选祖先，必须全局生效）
+import '@/views/dashboard/components/dash-fill-height.css'
 
 const app = createApp(App)
 app.use(createPinia())
@@ -102,6 +107,9 @@ FcDesigner.component('dash-filter', DashFilter)
 FcDesigner.component('dash-goal', DashGoal)
 FcDesigner.component('dash-leaderboard', DashLeaderboard)
 FcDesigner.component('dash-alert', DashAlert)
+FcDesigner.component('dash-todo', DashTodo)
+// 公告栏（无数据源，取用户端消息接口的公告）
+FcDesigner.component('dash-notice', DashNotice)
 // 环比指标卡（Task 3-h）：DashKpi 同族
 FcDesigner.component('dash-kpi-trend', DashKpiTrend)
 app.use(formCreate)

@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-kpi" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-kpi" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <div class="dash-kpi-head">
       <span class="dash-kpi-title">{{ title || '指标' }}</span>
       <span
@@ -75,7 +75,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, isDashFillHeight, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -142,6 +142,7 @@ const layoutStyle = computed<Record<string, string>>(() => {
   return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 
 const value = ref<number | null>(null)
 const prevValue = ref<number | null>(null)

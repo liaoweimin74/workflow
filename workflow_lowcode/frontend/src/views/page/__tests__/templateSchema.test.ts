@@ -93,6 +93,28 @@ describe('remapPageSchema — 结构性引用改写（D0–D3）', () => {
     expect(refs.filter((r) => r.value === 'ds_b' && r.path.includes('props.columns[0].rule'))).toHaveLength(1)
   })
 
+  it('D1：数据容器自身的绑定与 props.rule 内的子组件一起改写', () => {
+    const s = baseSchema()
+    s.rule = [
+      {
+        type: 'page-data-container',
+        field: 'dc1',
+        props: {
+          dataSourceId: 'ds_a',
+          rule: [
+            { type: 'div', native: true, children: ['共 {rows.length} 条'] },
+            { type: 'dash-kpi', field: 'k1', props: { dataSourceId: 'ds_b' } },
+          ],
+        },
+      },
+    ]
+    const { schema } = remapPageSchema(s, bindings)
+    expect(schema.rule[0].props.dataSourceId).toBe('ds_new1')
+    const kids = schema.rule[0].props.rule
+    expect(kids[0].children).toEqual(['共 {rows.length} 条']) // 文案里的 {rows.x} 是语义引用，不参与改写
+    expect(kids[1].props.dataSourceId).toBe('ds_new2')
+  })
+
   it('D2：总线 actions 的 source 与 steps[].target 改写；未配置的 source 不动', () => {
     const s = baseSchema()
     s.actions = [

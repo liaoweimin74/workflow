@@ -83,9 +83,15 @@ export const DASH_SPAN_OPTIONS: ReadonlyArray<{ value: number; label: string }> 
   { value: 0, label: '自定义栅格…' },
 ]
 
-/** 显示高度：'' = 自适应（随内容伸缩），'custom' = 自定义输入，其余为 CSS 高度值 */
+/**
+ * 显示高度档位：
+ *   '' = 自适应（随内容伸缩）
+ *   '100%' = 撑满所在栅格行（与同行最高组件等高，见 dash-fill-height.css）
+ *   'custom' = 自定义输入，其余为 CSS 高度值
+ */
 export const DASH_HEIGHT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: '', label: '自适应' },
+  { value: '100%', label: '撑满(100%)' },
   { value: '120px', label: '紧凑 (120px)' },
   { value: '200px', label: '矮 (200px)' },
   { value: '260px', label: '标准 (260px)' },
@@ -133,10 +139,20 @@ export function dashSpanGapStyle(span: number | undefined): Record<string, strin
 
 /**
  * Task 123 显示高度：'' / 'auto' = 自适应（返回 null，不加内联样式）；
- * 纯数字自动补 px；其余原样（支持 '260px' / '50vh' 等 CSS 高度值）。
+ * 纯数字自动补 px；其余原样（支持 '260px' / '50vh' / '100%' 等 CSS 高度值）。
  */
 export function dashHeightStyle(height: string | undefined | null): { height: string } | null {
   const raw = String(height ?? '').trim()
   if (!raw || raw === 'auto') return null
   return { height: /^\d+$/.test(raw) ? `${raw}px` : raw }
+}
+
+/**
+ * 撑满档判定：props.height === '100%'。
+ * 组件根据此挂 `is-fill-height`，dash-fill-height.css 用 :has() 把栅格列的高度
+ * 逐层传到卡片，实现「与同行最高组件等高」；卡片内部靠既有 is-fixed-height 的
+ * flex 链路让画布/列表填满卡片剩余空间。
+ */
+export function isDashFillHeight(height: unknown): boolean {
+  return String(height ?? '').trim() === '100%'
 }

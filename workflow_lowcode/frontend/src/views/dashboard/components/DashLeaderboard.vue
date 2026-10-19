@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-leaderboard" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-leaderboard" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <div class="dash-leaderboard-head">
       <span class="dash-leaderboard-title">{{ title || '排行榜' }}</span>
       <span v-if="rows.length > 0" class="dash-leaderboard-meta">Top {{ rows.length }}</span>
@@ -44,7 +44,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, isDashFillHeight, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -96,6 +96,7 @@ const layoutStyle = computed<Record<string, string>>(() => {
   return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 const rawRows = ref<Array<{ key: string; value: number }>>([])
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))
 const extraConditions = ref<DashCondition[]>([])

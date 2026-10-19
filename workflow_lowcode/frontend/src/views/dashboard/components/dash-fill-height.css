@@ -1,0 +1,19 @@
+/**
+ * 高度档「撑满(100%)」的高度传递（props.height = '100%'）。
+ *
+ * 层级链：el-row（flex，默认 align-items: stretch）> el-col.fc-form-col
+ *         > el-form-item > el-form-item__content > 组件根（内联 height:100%）
+ * 栅格列已被 flex 拉伸到「所在行」的确定高度，但中间两层是 auto 高度，
+ * 组件根的 100% 会退化成内容高；这里把这两层补成 100%，卡片才真的与同行最高组件等高。
+ *
+ * 不给 .fc-form-col 本身写 height:100%：el-row 换行时百分比是按整个 row 的高度算的，
+ * 会让第一行的卡片长到跨两行；靠 flex 的 stretch 得到「按行」的高度即可。
+ *
+ * 用 :has() 反选「这一列里有撑满的卡片」——CSS 无法向上选祖先。
+ * 浏览器不支持 :has() 时整块规则失效，退化为自适应，不会错位。
+ * 设计器画布里每个组件独占一条拖拽容器（非同一 flex 行），撑满按自适应显示，运行页才等高。
+ */
+.fc-form-col:has(.is-fill-height) > .el-form-item,
+.fc-form-col:has(.is-fill-height) > .el-form-item > .el-form-item__content {
+  height: 100%;
+}

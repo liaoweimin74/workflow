@@ -40,10 +40,13 @@ vi.mock('@form-create/element-ui', () => {
         h('div', { class: 'fc-stub' }, [
           ...(props.rule || []).map((node: any, i: number) => {
             if (node?.type === 'page-table' || node?.type === 'page-list-cards' || node?.type === 'page-tree') {
+              // 取处理器要按 @form-create/core toProps 的真实规则：事件名先 camelCase，再用这个键回 rule.on 取值。
+              // 桩若直接读 rule.on['row-click']，宿主写成连字符键（会被库读成 undefined）这种 bug 就永远照不出来。
+              const onKey = 'rowClick'
               return h('button', {
                 key: i,
                 class: 'stub-row-click',
-                onClick: () => node.on?.['row-click']?.({ id: 'R1', name: '张三' }),
+                onClick: () => node.on?.[onKey]?.({ id: 'R1', name: '张三' }),
               }, 'row-click')
             }
             return h('div', { key: i, class: 'fc-node' }, JSON.stringify(node))
@@ -252,6 +255,39 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     expect(dialog.props('modelValue')).toBe(true)
   })
 
+  /** 同数据源两个 dialog 容器（地址 FC1 / FC2），用于验证按地址精确寻址 */
+  function makeTwoContainersSchema(target: string) {
+    const schema = makePageSchema('dialog')
+    schema.actions = [{ trigger: 'row-click', steps: [{ op: 'open-container', target }] }]
+    schema.rule.push({
+      type: 'formContainer',
+      field: 'FC2',
+      title: '员工查看',
+      props: { dataSourceId: 'dsForm', displayMode: 'dialog', tabTitle: '查看员工', rule: [] },
+    })
+    return schema
+  }
+
+  it('同数据源两容器：target 填容器地址精确打开第二个', async () => {
+    const wrapper = await mountPage(makeTwoContainersSchema('FC2'))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialogs = wrapper.findAllComponents(ElDialogStub)
+    expect(dialogs).toHaveLength(2)
+    expect(dialogs[0].props('modelValue')).toBe(false)
+    expect(dialogs[1].props('modelValue')).toBe(true)
+    expect(dialogs[1].props('title')).toBe('查看员工')
+  })
+
+  it('同数据源两容器：target 填数据源标识（留空语义）打开画布靠前的容器', async () => {
+    const wrapper = await mountPage(makeTwoContainersSchema('dsForm'))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialogs = wrapper.findAllComponents(ElDialogStub)
+    expect(dialogs[0].props('modelValue')).toBe(true)
+    expect(dialogs[1].props('modelValue')).toBe(false)
+  })
+
   it('组件级动作链经 bus.runStep 委托：页面级未配动作也能打开容器', async () => {
     const schema = makePageSchema('dialog')
     schema.actions = []
@@ -330,13 +366,14 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
 
     expect(openSpy).toHaveBeenCalledTimes(1)
     const url = openSpy.mock.calls[0][0] as string
-    expect(url).toContain('container=dsForm')
+    // 深链携带容器地址（节点 field），不是数据源标识
+    expect(url).toContain('container=FC1')
     openSpy.mockRestore()
   })
 
-  it('页面加载时 query.container 自动打开对应容器（newTab 落地页场景）', async () => {
+  it('页面加载时 query.container（容器地址）自动打开对应容器（newTab 落地页场景）', async () => {
     const wrapper = await mountPage(makePageSchema('dialog'), {
-      container: 'dsForm',
+      container: 'FC1',
       recordId: 'R100',
     })
     await flushPromises()

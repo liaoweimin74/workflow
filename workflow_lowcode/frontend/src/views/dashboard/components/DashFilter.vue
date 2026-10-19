@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-filter" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-filter" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <span v-if="label" class="dash-filter-label">{{ label }}</span>
     <el-date-picker
       v-if="filterType === 'date-range'"
@@ -61,7 +61,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useFullscreen } from '@/composables/useFullscreen'
-import { dashSpanGapStyle, dashHeightStyle } from './dash-shared'
+import { dashSpanGapStyle, dashHeightStyle, isDashFillHeight } from './dash-shared'
 
 const props = withDefaults(
   defineProps<{
@@ -107,6 +107,8 @@ const layoutStyle = computed<Record<string, string>>(() => {
   if (isFullscreen.value) return {}
   return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
+/** 撑满档：根节点挂 is-fill-height，由 dash-fill-height.css 补齐祖先高度链 */
+const fillHeight = computed(() => isDashFillHeight(props.height))
 const dateRange = ref<[string, string] | null>(null)
 const selectValue = ref<string | null>(null)
 const keyword = ref('')

@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <div class="dash-chart-head">
       <div v-if="title" class="dash-chart-title">{{ title }}</div>
       <button
@@ -45,7 +45,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ensureEcharts, DASH_PALETTE, cssVar, canvasAvailable } from './useEcharts'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, dashSpanGapStyle, dashHeightStyle, isDashFillHeight, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -123,6 +123,7 @@ const DEFAULT_DRAWING_HEIGHT = '260px'
 /** 固定显示高度时画布撑满卡片剩余空间，自适应时用缺省绘图高度 */
 const CANVAS_FILL_STYLE: Record<string, string> = { flex: '1 1 auto', minHeight: '0' }
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 const canvasStyle = computed<Record<string, string>>(() =>
   fixedHeight.value ? CANVAS_FILL_STYLE : { height: DEFAULT_DRAWING_HEIGHT },
 )

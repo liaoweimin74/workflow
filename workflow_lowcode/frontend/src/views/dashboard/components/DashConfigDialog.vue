@@ -7,7 +7,7 @@
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
     <el-alert
-      v-if="formDataSources.length === 0 && mode !== 'filter'"
+      v-if="formDataSources.length === 0 && needsDataSource"
       type="warning"
       :closable="false"
       show-icon
@@ -37,6 +37,53 @@
         <el-form-item v-if="form.filterType === 'select'" label="枚举项">
           <el-input v-model="form.options" placeholder="逗号分隔，如：running,completed" maxlength="200" />
         </el-form-item>
+      </template>
+
+      <!-- 待办清单：数据来自工作流任务接口，无数据源依赖；查询身份固定当前登录用户，故这里没有身份配置项 -->
+      <template v-else-if="mode === 'todo'">
+        <el-form-item label="标题">
+          <el-input v-model="form.title" placeholder="如：我的待办" maxlength="30" />
+        </el-form-item>
+        <el-form-item label="视图">
+          <el-radio-group v-model="form.view">
+            <el-radio-button value="todo">待办</el-radio-button>
+            <el-radio-button value="done">已办</el-radio-button>
+          </el-radio-group>
+          <div class="field-hint">列表只包含当前登录用户自己的任务，不提供查询他人的入口</div>
+        </el-form-item>
+        <el-form-item label="列表条数">
+          <el-input-number v-model="form.limit" :min="1" :max="50" :step="1" style="width: 100%" />
+          <div class="field-hint">卡片内最多显示的任务条数（右上角计数为总数）</div>
+        </el-form-item>
+        <el-form-item v-if="form.view === 'todo'" label="排序">
+          <el-select v-model="form.orderBy" style="width: 100%">
+            <el-option value="priority" label="优先级高的在前" />
+            <el-option value="" label="最新接收的在前" />
+          </el-select>
+        </el-form-item>
+      </template>
+
+      <!-- 公告栏：数据来自用户端消息接口（公告=公开消息），无数据源依赖；可见范围由后端登录态判定，故这里没有身份配置项 -->
+      <template v-else-if="mode === 'notice'">
+        <el-form-item label="标题">
+          <el-input v-model="form.title" placeholder="如：公司公告" maxlength="30" />
+        </el-form-item>
+        <el-form-item label="显示方式">
+          <el-radio-group v-model="form.display">
+            <el-radio-button value="list">列表</el-radio-button>
+            <el-radio-button value="carousel">轮播</el-radio-button>
+          </el-radio-group>
+          <div class="field-hint">列表在卡片内滚动，轮播一条一屏（轮播需配合固定高度）</div>
+        </el-form-item>
+        <el-form-item v-if="form.display === 'carousel'" label="切换间隔">
+          <el-input-number v-model="form.interval" :min="1000" :max="60000" :step="500" style="width: 100%" />
+          <div class="field-hint">单位毫秒，自动切换到下一条公告</div>
+        </el-form-item>
+        <el-form-item label="列表条数">
+          <el-input-number v-model="form.limit" :min="1" :max="50" :step="1" style="width: 100%" />
+          <div class="field-hint">卡片内最多显示的公告条数（右上角计数为总数）</div>
+        </el-form-item>
+        <div class="field-hint notice-scope-hint">只显示当前登录账号收到的公告，不提供查看他人公告的入口</div>
       </template>
 
       <template v-else>
@@ -230,7 +277,9 @@
 <script setup lang="ts">
 /**
  * 仪表盘组件配置弹窗（Task 119 → Task 120 扩展）：
- * kpi / chart / goal（目标进度）/ alert（告警）/ leaderboard（排行榜）/ filter（筛选器）。
+ * kpi / chart / goal（目标进度）/ alert（告警）/ leaderboard（排行榜）/ filter（筛选器）
+ * / todo（待办清单：不选数据源，只配视图/条数/排序，查询身份固定当前登录用户）
+ * / notice（公告栏：不选数据源，只配标题/条数/显示方式，可见范围由后端登录态判定）。
  *
  * 数据源选择范围 = 页面级绑定（schema.dataSources），与 page-table 的
  * DsBindingConfigDialog 同一模型：组件只引用页内逻辑 id，refId 由渲染层解析。
@@ -243,14 +292,21 @@ import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import DashSizeFields from './DashSizeFields.vue'
 import { clampDashSpan } from './dash-shared'
 
-export type DashConfigMode = 'kpi' | 'chart' | 'goal' | 'alert' | 'leaderboard' | 'filter' | 'kpiTrend'
+export type DashConfigMode = 'kpi' | 'chart' | 'goal' | 'alert' | 'leaderboard' | 'filter' | 'kpiTrend' | 'todo' | 'notice'
 
 export interface DashConfigResult {
   mode: DashConfigMode
-  dataSourceId: string
+  /** 无数据源的成员（filter / todo）不带该键 */
+  dataSourceId?: string
   title: string
-  agg: string
-  metric: string | null
+  agg?: string
+  metric?: string | null
+  /** todo（待办清单，数据来自工作流任务接口） */
+  view?: 'todo' | 'done'
+  orderBy?: string
+  /** notice（公告栏，数据来自用户端消息接口） */
+  display?: 'list' | 'carousel'
+  interval?: number
   /** chart / leaderboard */
   chartType?: string
   group?: string
@@ -314,8 +370,12 @@ const DIALOG_TITLES: Record<DashConfigMode, string> = {
   leaderboard: '排行榜配置',
   filter: '筛选器配置',
   kpiTrend: '环比指标卡配置',
+  todo: '待办清单配置',
+  notice: '公告栏配置',
 }
 const dialogTitle = computed(() => DIALOG_TITLES[props.mode] || '组件配置')
+/** 是否依赖页面数据源：筛选器、待办清单与公告栏都不依赖（后两者的数据来自任务/消息接口） */
+const needsDataSource = computed(() => props.mode !== 'filter' && props.mode !== 'todo' && props.mode !== 'notice')
 /** 单值型（KPI/目标/告警/环比卡共用单位/格式段） */
 const isKpiLike = computed(() => props.mode === 'kpi' || props.mode === 'goal' || props.mode === 'alert' || props.mode === 'kpiTrend')
 
@@ -352,6 +412,12 @@ const form = reactive({
   label: '',
   placeholder: '',
   options: '',
+  // todo（待办清单）
+  view: 'todo' as 'todo' | 'done',
+  orderBy: 'priority',
+  // notice（公告栏）
+  display: 'list' as 'list' | 'carousel',
+  interval: 4000,
   // 宽高（档位事实源 dash-shared；spanMode 由 DashSizeFields 内部维护）
   span: 24 as number,
   height: '' as string,
@@ -375,7 +441,14 @@ watch(
     form.timeGrain = p.timeGrain || ''
     form.sort = p.sort || 'key'
     form.order = p.order || 'asc'
-    form.limit = Number(p.limit || (props.mode === 'leaderboard' ? 5 : 0))
+    form.limit = Number(
+      p.limit ||
+        (props.mode === 'leaderboard' ? 5 : props.mode === 'todo' ? 8 : props.mode === 'notice' ? 6 : 0),
+    )
+    form.view = p.view === 'done' ? 'done' : 'todo'
+    form.orderBy = p.orderBy ?? 'priority'
+    form.display = p.display === 'carousel' ? 'carousel' : 'list'
+    form.interval = Number(p.interval || 4000)
     form.unit = p.unit || ''
     form.subtitle = p.subtitle || ''
     form.numberFormat = p.numberFormat || ''
@@ -399,12 +472,12 @@ watch(
     // 宽高回填（生效值直存 props.span / props.height，档位归一在 DashSizeFields 内部）
     form.span = clampDashSpan(p.span ?? 24)
     form.height = String(p.height ?? '')
-    if (props.mode !== 'filter') void loadColumns()
+    if (needsDataSource.value) void loadColumns()
   },
 )
 
 watch(() => form.dataSourceId, () => {
-  if (props.mode !== 'filter') void loadColumns()
+  if (needsDataSource.value) void loadColumns()
 })
 
 watch(
@@ -437,6 +510,8 @@ const dateColumns = computed(() =>
 )
 
 const canConfirm = computed(() => {
+  // 待办清单与公告栏：不依赖数据源，也无必填项
+  if (props.mode === 'todo' || props.mode === 'notice') return true
   if (props.mode === 'filter') {
     return form.field.trim() !== ''
   }
@@ -469,7 +544,29 @@ async function loadColumns(): Promise<void> {
 }
 
 function confirm(): void {
-  if (props.mode === 'filter') {
+  if (props.mode === 'todo') {
+    // 已办视图不支持排序（服务端固定按办结时间倒序），不回落成脏参数
+    emit('confirm', {
+      mode: 'todo',
+      title: form.title,
+      view: form.view,
+      limit: form.limit,
+      orderBy: form.view === 'done' ? '' : form.orderBy,
+      span: form.span,
+      height: form.height,
+    })
+  } else if (props.mode === 'notice') {
+    // 列表形态不吃轮播间隔，但仍把生效值原样带回，避免下次打开弹窗丢配置
+    emit('confirm', {
+      mode: 'notice',
+      title: form.title,
+      limit: form.limit,
+      display: form.display,
+      interval: form.interval,
+      span: form.span,
+      height: form.height,
+    })
+  } else if (props.mode === 'filter') {
     emit('confirm', {
       mode: 'filter',
       dataSourceId: '',

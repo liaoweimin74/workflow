@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-kpi-trend" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-kpi-trend" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <div class="dash-kpi-trend-head">
       <span class="dash-kpi-trend-title">{{ title || '指标' }}</span>
       <span class="dash-kpi-trend-compare" :class="trendClass">
@@ -68,7 +68,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, isDashFillHeight, type DashCondition } from './dash-shared'
 import { periodRangeCondition, computeComparePercent, formatComparePercent, type KpiCompareOffset, type KpiTrendColorScheme } from './kpiTrendShared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
@@ -138,6 +138,7 @@ const layoutStyle = computed<Record<string, string>>(() => {
   return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 
 /** 数据下发模式：current prop 已显式传入（含 null）即视为下发，跳过自取数 */
 const dataPushMode = computed(() => props.current !== undefined)

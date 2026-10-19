@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-alert" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-alert': alerting, 'is-ok': !alerting && value !== null, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div ref="rootEl" class="dash-alert" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-alert': alerting, 'is-ok': !alerting && value !== null, 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <div class="dash-alert-head">
       <span class="dash-alert-title">{{ title || '指标监控' }}</span>
       <span class="dash-alert-state" :class="{ alerting }">
@@ -45,7 +45,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, isDashFillHeight, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -97,6 +97,7 @@ const layoutStyle = computed<Record<string, string>>(() => {
   return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
 })
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 const value = ref<number | null>(null)
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))
 const extraConditions = ref<DashCondition[]>([])

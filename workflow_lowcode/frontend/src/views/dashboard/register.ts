@@ -7,6 +7,8 @@
  *
  * Task 120 组件族：dash-filter（筛选器）/ dash-goal（目标进度）/
  * dash-leaderboard（排行榜）/ dash-alert（告警标记）。
+ * dash-todo（待办清单）与 dash-notice（公告栏）不走数据源：前者取工作流任务接口，
+ * 后者取用户端消息接口。
  */
 
 export const DASH_KPI_NAME = 'dash-kpi'
@@ -15,6 +17,8 @@ export const DASH_FILTER_NAME = 'dash-filter'
 export const DASH_GOAL_NAME = 'dash-goal'
 export const DASH_LEADERBOARD_NAME = 'dash-leaderboard'
 export const DASH_ALERT_NAME = 'dash-alert'
+export const DASH_TODO_NAME = 'dash-todo'
+export const DASH_NOTICE_NAME = 'dash-notice'
 
 /** KPI 指标卡拖入 rule（props 与 DashKpi.vue 对齐；Task 120 增加趋势/迷你图；Task 123 增加宽高） */
 export function dashKpiRule(): Record<string, unknown> {
@@ -152,12 +156,64 @@ export function dashAlertRule(): Record<string, unknown> {
   }
 }
 
-/** 属性面板注入的配置按钮（与 page-table 的数据源按钮同款式） */
-export function dashConfigButton(label: string, onClick: () => void): Record<string, unknown> {
+/**
+ * 待办清单卡拖入 rule（props 与 DashTodo.vue 对齐）。
+ *
+ * 与组件族其余成员不同：它不配 `dataSourceId`/`agg`，数据来自工作流任务接口，
+ * 查询身份（待办 assignee / 已办 userId）由组件内部取当前登录用户，
+ * 因此这里也绝不出现身份槽位——一旦进 props，就等于任何看仪表盘的人都能查别人的任务。
+ */
+export function dashTodoRule(): Record<string, unknown> {
+  return {
+    type: DASH_TODO_NAME,
+    field: 'todo' + Date.now(),
+    title: '待办清单',
+    col: { span: 24 },
+    props: {
+      title: '',
+      view: 'todo',
+      limit: 8,
+      orderBy: 'priority',
+      span: 24,
+      height: '',
+    },
+  }
+}
+
+/**
+ * 公告栏拖入 rule（props 与 DashNotice.vue 对齐）。
+ *
+ * 与待办清单同族：不配 `dataSourceId`/`agg`，数据来自用户端消息接口
+ * （messageType=PUBLIC 即管理员发布的公告）。可见范围由后端按登录态判定，
+ * 所以这里同样没有身份槽位——一旦能配「接收人」，任何看这页的人都能读到别人的公告。
+ */
+export function dashNoticeRule(): Record<string, unknown> {
+  return {
+    type: DASH_NOTICE_NAME,
+    field: 'notice' + Date.now(),
+    title: '公告栏',
+    col: { span: 24 },
+    props: {
+      title: '',
+      limit: 6,
+      display: 'list',
+      interval: 4000,
+      span: 24,
+      height: '',
+    },
+  }
+}
+
+/**
+ * 属性面板注入的配置按钮（与 page-table 的数据源按钮同款式）。
+ * `panelTitle` = 表单项标签，默认「数据源」；无数据源的成员（统计图按用户要求不带标签、
+ * 待办清单压根没有数据源）传空串，避免面板上出现误导性的「数据源」字样。
+ */
+export function dashConfigButton(label: string, onClick: () => void, panelTitle = '数据源'): Record<string, unknown> {
   return {
     type: 'button',
     field: 'dashConfigTrigger',
-    title: label === '配置图表' ? '' : '数据源',
+    title: panelTitle,
     children: [label],
     native: true,
     style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },

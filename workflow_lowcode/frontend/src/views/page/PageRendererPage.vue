@@ -101,6 +101,8 @@ import PageNoticeCarousel from './components/PageNoticeCarousel.vue'
 import PageCalendar from './components/PageCalendar.vue'
 import PageTimeline from './components/PageTimeline.vue'
 import PageSteps from './components/PageSteps.vue'
+import PageDataContainer from './components/PageDataContainer.vue'
+import { PAGE_DATA_CONTAINER_NAME, normalizeDataContainerForRender } from './dataContainer'
 import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
@@ -132,6 +134,8 @@ formCreate.component('page-steps', PageSteps)
 formCreate.component('dash-kpi', DashKpi)
 formCreate.component('dash-chart', DashChart)
 formCreate.component('dash-kpi-trend', DashKpiTrend)
+// 数据容器：容器自己起内嵌 form-create 渲染子规则，主树到此为止（见 transformComponent）
+formCreate.component('page-data-container', PageDataContainer)
 
 /** 宿主（PageRenderer）已加载的页面定义；传入时直接使用不自行请求，缺省回退按 pageKey 加载 */
 const props = defineProps<{ definition?: PageDefinitionDetailDTO }>()
@@ -151,14 +155,15 @@ provide(ACTION_BUS_KEY, {
     componentRefs[dataSourceId] = instance
     aiRegisterList(dataSourceId, instance)
   },
-  /** 表格按钮默认行为：是否存在同数据源的数据容器（自动关联，无需动作链即可打开容器表单） */
-  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && !!findContainer(dataSourceId),
-  /** 打开同数据源的数据容器：按容器展示方式（表格 formMode 解析）显示；view=只读 */
+  /** 表格按钮默认行为：是否存在同数据源的表单容器（自动关联，无需动作链即可打开容器表单） */
+  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && findByDsId(dataSourceId).length > 0,
+  /** 打开同数据源的表单容器：按容器展示方式（表格 formMode 解析）显示；view=只读 */
   openLinkedContainer: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => {
-    const c = findContainer(dataSourceId)
+    // 同源多容器取画布靠前的一个（要精确指定另一个，请在动作链里用容器地址）
+    const c = findByDsId(dataSourceId)[0]
     if (!c) return
     const rid = mode === 'create' ? '' : String(row?.id ?? '')
-    openContainer(dataSourceId, rid, undefined, mode === 'view')
+    openContainer(c, rid, undefined, mode === 'view')
   },
   /**
    * 组件级动作链（表格/卡片按钮）的容器动作委托：容器渲染只在本宿主，
@@ -303,8 +308,8 @@ const {
   containers,
   dialogContainers,
   inlineContainers,
-  containerModes,
-  findContainer,
+  resolveContainer,
+  findByDsId,
   extractContainers,
   openContainer,
   loadRecord: loadContainerRecord,
@@ -334,10 +339,10 @@ const {
       executeStep(step, eventData)
     }
   },
-  findComponent: (key) => componentRefs[key] as any,
+  findComponent: (dataSourceId) => componentRefs[dataSourceId] as any,
   // 联动容器展示方式/尺寸以数据表格配置为准（formMode 映射 + viewDetail.width/height）
-  resolveContainerStyle: (target) => {
-    const props = tableViewConfigs[target]
+  resolveContainerStyle: (dataSourceId) => {
+    const props = tableViewConfigs[dataSourceId]
     const detail = props?.viewDetail
     if (!detail) return undefined
     const fm = detail.formMode || 'popup'
@@ -408,7 +413,7 @@ async function load() {
   }
 }
 
-  // 路由 query 自动打开容器（newTab 落地页场景或深链）。
+  // 路由 query 自动打开容器（newTab 落地页场景或深链）；query.container = 容器地址（表单容器 field）。
   // 仅当前激活实例响应：keep-alive 缓存实例共享全局 route，其他页签 query 变化不应触发本实例容器
   watch(
     () => [route.query.container as string | undefined, route.query.recordId as string | undefined, containers.value.length] as const,
@@ -477,7 +482,33 @@ function transformComponent(node: any): any {
   // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
   if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
-  const DASH_DATA_TYPES = new Set(['dash-kpi', 'dash-chart', 'dash-goal', 'dash-leaderboard', 'dash-alert', 'dash-kpi-trend'])
+  // 数据容器（page-data-container）：子规则收进 props.childRules，交给容器自己起内嵌 form-create 渲染。
+  // 交接必须在这里发生——插值要在容器取到数之后，而主树递归时数据还没回来。
+  // 子规则仍过一遍 transformComponent：容器里的数据组件照旧注入 dsRefId、照旧上报实例，
+  // 容器只多给一层 {rows} / {row} 文案作用域。
+  if (next.type === PAGE_DATA_CONTAINER_NAME) {
+    const normalized = normalizeDataContainerForRender(next)
+    // 标题由容器自己渲染；置空避免 form-create 再包一层 form-item 标签
+    normalized.title = ''
+    normalized.info = ''
+    if (normalized.props.dataSourceId) {
+      const ds = pageSchema.dataSources.find((d) => d.id === normalized.props.dataSourceId)
+      if (ds && ds.refId) normalized.props.dsRefId = ds.refId
+    }
+    normalized.props.childRules = normalized.props.childRules.map(transformComponent)
+    normalized.on['ready'] = (instance: any) => {
+      if (!instance) return
+      dashInstances.add(instance)
+      // 两个键都登记：dataSourceId 是页面轨的既有寻址口径（不动它，老页面的动作照旧生效），
+      // field 是容器独有地址——同源还有表格/KPI 时，只有它能把 refresh / set-filter 指到这一个容器上。
+      if (normalized.field) componentRefs[normalized.field] = instance
+      if (normalized.props.dataSourceId) {
+        componentRefs[normalized.props.dataSourceId] = instance
+      }
+    }
+    return normalized
+  }
+  const DASH_DATA_TYPES = new Set(['dash-kpi', 'dash-chart', 'dash-goal', 'dash-leaderboard', 'dash-alert', 'dash-kpi-trend', 'dash-todo', 'dash-notice'])
   if (DASH_DATA_TYPES.has(String(next.type)) || next.type === 'dash-filter') {
     // 仪表盘组件族（Task 119/120）：注入 dsRefId + 实例上报（动作总线 refresh/set-filter）
     // 标题在组件内部渲染（图表标题样式）；置空避免 form-create 再包一层 form-item 标签
@@ -491,7 +522,9 @@ function transformComponent(node: any): any {
     }
     if (next.type === 'dash-filter') {
       // 筛选器：filter-change → 全页广播（autoBroadcast）+ 动作总线可编程响应
-      next.on['filter-change'] = (payload: { field: string; op: string; value: unknown }) => {
+      // 处理器键必须写 camelCase：form-create 的 toProps 把连字符键先 toCase 后再回 rule.on 取值，
+      // 于是 filter-change 这个键会被读成 undefined，$emit('filter-change') 找不到 onFilterChange（实测广播静默失效）。
+      next.on['filterChange'] = (payload: { field: string; op: string; value: unknown }) => {
         if (payload && payload.field) {
           broadcastDashFilter(payload.field, payload.op, payload.value)
           dispatchActions('filter-change', payload)
@@ -536,7 +569,7 @@ function transformComponent(node: any): any {
     // 数据组件事件 → 动作总线（node-click 等）
     // el-tree/el-table 事件第一参数是业务数据（含 id），包装为 { node, row }
     const source = next.props.dataSourceId as string | undefined
-    next.on['node-click'] = (data: any) => {
+    next.on['nodeClick'] = (data: any) => {
       // 更新当前记录 ID 并触发 record-change
       currentRecordId.value = data?.id
       lastRecord.value = data
@@ -544,7 +577,7 @@ function transformComponent(node: any): any {
       dispatchActions('node-click', { node: data, row: data, record: data, source })
       dispatchActions('record-change', { node: data, row: data, record: data, source })
     }
-    next.on['row-click'] = (data: any) => {
+    next.on['rowClick'] = (data: any) => {
       linkDetailLoad(source, data)
       dispatchActions('row-click', { node: data, row: data, source })
     }
@@ -613,12 +646,13 @@ function executeStep(step: any, eventData: any, trigger?: string) {
     // 写回数据源：强制完成未竟防抖写入
     void pageEngine.value?.flush()
   } else if (op === 'open-container') {
-    // 打开联动容器：newTab 用本地 router.open；dialog/drawer/inline 用共享 openContainer
+    // 打开联动容器：target = 容器地址（表单容器节点的 field），填数据源标识或留空（渲染器按本组件数据源兜）时
+    // 由 resolveContainer 回退到该数据源画布靠前的容器；newTab 用本地 router.open，dialog/drawer/inline 用共享 openContainer
     // 展示方式以数据表格配置（formMode）为准（resolveContainerStyle 已解析），step.displayMode 不再覆盖
-    const c = findContainer(target)
+    const c = resolveContainer(target)
     if (!c) return
     if (c.displayMode === 'newTab') {
-      // newTab：浏览器新标签页打开，query 传递容器 key 记录 ID
+      // newTab：浏览器新标签页打开，query 传递容器地址与记录 ID
       const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
       const resolved = router.resolve({
         query: { ...route.query, container: c.key, ...(rid ? { recordId: rid } : {}) },
@@ -627,7 +661,7 @@ function executeStep(step: any, eventData: any, trigger?: string) {
     } else {
       // dialog/drawer/inline：共享 openContainer（用容器解析后的 displayMode）；row-view 触发 → 只读查看
       const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-      openContainer(target, rid, undefined, trigger === 'row-view')
+      openContainer(c, rid, undefined, trigger === 'row-view')
     }
   } else if (op === 'load-record') {
     // 加载记录到容器：用共享 loadContainerRecord；回退给页面引擎

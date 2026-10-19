@@ -22,7 +22,6 @@
         {{ statusLabel(formStatus) }}
       </el-tag>
       <div class="toolbar-right">
-        <el-button plain :icon="Grid" @click="insertLeftTreeRightTableTemplate">左树右表</el-button>
         <el-button plain @click="dsDialogVisible = true">
           数据源配置（{{ schema.dataSources.length }}）
         </el-button>
@@ -56,6 +55,8 @@
         :enabledDataSources="enabledDataSources"
         :actions="schema.actions"
         :row-fields="currentFieldKeys"
+        :container-targets="containerTargetOptions"
+        :data-targets="dataContainerTargets"
         @update:dataSources="updateDataSources"
         @update:actions="updateActions"
       />
@@ -85,6 +86,14 @@
       @confirm="handleDashConfirm"
     />
 
+    <!-- 数据容器配置：数据源 + 取数形态 + 宽高（子规则在画布上直接往里拖） -->
+    <DataContainerConfigDialog
+      v-model="dataContainerDialogVisible"
+      :binding-props="currentDataContainerProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, name: dsNameOf(ds) }))"
+      @confirm="handleDataContainerConfirm"
+    />
+
     <!-- 图表配置（Task 3-e）：维度/指标/类型 -->
     <PageChartConfigDialog
       v-model="chartDialogVisible"
@@ -112,7 +121,7 @@
       @confirm="handleLightDsConfirm"
     />
 
-    <!-- 数据表单容器配置：与表单设计器复用同一套非表格模式绑定弹窗 -->
+    <!-- 表单容器配置：与表单设计器复用同一套非表格模式绑定弹窗 -->
     <DsBindingConfigDialog
       v-model="formContainerDialogVisible"
       :current-fields="[]"
@@ -262,7 +271,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, View, Document, Menu, Grid, Collection } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, View, Document, Menu, Collection } from '@element-plus/icons-vue'
 import FcDesigner from '@form-create/designer'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataCards from './components/PageDataCards.vue'
@@ -291,6 +300,7 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import DataContainerConfigDialog from './components/DataContainerConfigDialog.vue'
 import DashConfigDialog, { type DashConfigMode } from '@/views/dashboard/components/DashConfigDialog.vue'
 import { clampDashSpan } from '@/views/dashboard/components/dash-shared'
 import {
@@ -300,16 +310,27 @@ import {
   DASH_GOAL_NAME,
   DASH_LEADERBOARD_NAME,
   DASH_ALERT_NAME,
+  DASH_TODO_NAME,
+  DASH_NOTICE_NAME,
   dashKpiRule,
   dashChartRule,
   dashFilterRule,
   dashGoalRule,
   dashLeaderboardRule,
   dashAlertRule,
+  dashTodoRule,
+  dashNoticeRule,
   dashConfigButton,
 } from '@/views/dashboard/register'
+import {
+  PAGE_DATA_CONTAINER_NAME,
+  collectDataContainerTargets,
+  pageDataContainerRule,
+  loadDataContainerRule,
+  saveDataContainerRule,
+} from './dataContainer'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, collectContainerTargets, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
 import { appendGeneratedRules } from '@/composables/useDataSourceCrud'
 import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
@@ -611,13 +632,26 @@ const designerRule = computed<any[]>(() => {
 /** 计算公式可视化编辑器字段来源（Task 145）：实时收集同层可引用字段（懒调用，registry 已兜底） */
 setFormulaFieldProvider(() => collectFormulaRefFields(designerRef.value?.getRule() || []))
 
-/** 动作链参数上下文：容器 target 候选（绑定层 dataSources 条目，同 refId 多条各自成候选）与行字段（$row./row. 补全） */
+/** 画布内表单容器候选：值=容器地址（表单容器节点的 field），动作 target 选它 */
+const containerTargetOptions = computed(() =>
+  collectContainerTargets(designerRule.value).map((c) => ({
+    value: c.field,
+    label: `${c.title}（${c.field}）`,
+  })),
+)
+
+/** 数据容器候选：refresh / set-filter 等同源动作按容器地址（field）寻址，避免被同源其他组件抢位 */
+const dataContainerTargets = computed(() =>
+  collectDataContainerTargets(designerRule.value).map((c) => ({
+    value: c.field,
+    label: `${c.title}（${c.field}）`,
+  })),
+)
+
+/** 动作链参数上下文：容器 target 候选与行字段（$row./row. 补全） */
 setChainParamContextProvider(() => ({
-  containerTargets: schema.dataSources.map((ds) => {
-    const name = dsNameOf(ds)
-    return { value: ds.id, label: name ? `${name}（${ds.id}）` : ds.id }
-  }),
-  rowFields: [...new Set(collectFieldKeys(designerRef.value?.getRule() || []))],
+  containerTargets: containerTargetOptions.value,
+  rowFields: [...new Set(collectFieldKeys(designerRule.value))],
 }))
 
 /** 页面画布中的全部字段，供筛选条件选择表单字段 */
@@ -746,9 +780,9 @@ function enableCardDesignMode(rules: any[]): any[] {
   })
 }
 
-// ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
+// ===== 页面表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
-/** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
+/** 表单容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
 // ==================== 仪表盘组件配置（Task 119 → Task 120 组件族） ====================
 const dashDialogVisible = ref(false)
 const dashDialogMode = ref<DashConfigMode>('chart')
@@ -760,6 +794,8 @@ const DASH_CONFIG_TYPES: Record<DashConfigMode, string> = {
   leaderboard: DASH_LEADERBOARD_NAME,
   filter: DASH_FILTER_NAME,
   kpiTrend: DASH_KPI_TREND_NAME,
+  todo: DASH_TODO_NAME,
+  notice: DASH_NOTICE_NAME,
 }
 const currentDashType = computed(() => DASH_CONFIG_TYPES[dashDialogMode.value] || '')
 const currentDashProps = computed(() => {
@@ -784,6 +820,29 @@ function handleDashConfirm(patch: Record<string, any>) {
     active.props.span = spanNum
     active.col = { ...(active.col || {}), span: spanNum }
   }
+}
+
+// ===== 数据容器配置（page-data-container）=====
+// 与仪表盘弹窗分开：容器在画布里的实际类型是行容器（fcRow），DashConfigDialog 那套
+// 「active.type === 组件类型」的判定套不上，这里按容器独有的配置项特征识别。
+const dataContainerDialogVisible = ref(false)
+const currentDataContainerProps = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props && 'queryMode' in active.props ? active.props : {}
+})
+function openDataContainerConfig() {
+  dataContainerDialogVisible.value = true
+}
+function handleDataContainerConfirm(patch: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.props) return
+  const { span, ...propsPatch } = patch
+  Object.assign(active.props, propsPatch)
+  // 画布上的容器是行容器，标题读的是节点 title，不跟着改就会出现「弹窗改了、画布还是旧名」
+  if (typeof propsPatch.title === 'string') active.title = propsPatch.title
+  const spanNum = clampDashSpan(span ?? 24)
+  active.props.span = spanNum
+  active.col = { ...(active.col || {}), span: spanNum }
 }
 /** 页级数据源显示名（绑定列表无 name 时回退全局源名） */
 function dsNameOf(ds: { id: string; refId: string }): string {
@@ -848,47 +907,6 @@ function handleLightDsConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据源配置已保存')
 }
 
-// ==================== 左树右表一键模板（Task 3-h） ====================
-/** 向画布追加 page-tree（左 8 栅格）+ page-table（右 16 栅格），联动由用户在事件链中配置 node-click → set-filter */
-function insertLeftTreeRightTableTemplate() {
-  const designer = designerRef.value as any
-  if (!designer || typeof designer.setRule !== 'function') return
-  const ts = Date.now()
-  const treeRule = {
-    type: 'page-tree',
-    field: 'tree' + ts,
-    title: '左树',
-    col: { span: 8 },
-    props: {
-      dataSourceId: '',
-      'node-key': 'id',
-      props: { label: 'name', children: 'children' },
-      highlightCurrent: true,
-      defaultExpandAll: true,
-    },
-  }
-  const tableRule = {
-    type: 'page-table',
-    field: 'table' + ts,
-    title: '右表',
-    col: { span: 16 },
-    props: {
-      dataSourceId: '',
-      border: true,
-      stripe: true,
-      columns: [],
-      sortable: false,
-      filterable: false,
-      pagination: true,
-      selectionMode: 'none',
-      actionColumnWidth: 0,
-    },
-  }
-  const rules = (typeof designer.getRule === 'function' ? designer.getRule() : []) || []
-  designer.setRule([...rules, treeRule, tableRule])
-  ElMessage.success('已插入左树右表模板：请分别配置两个组件的数据源，并为左树配置 node-click → set-filter 联动到右表')
-}
-
 function isContainerRule(active: any): boolean {
   return !!active && (active.type === 'formContainer' || active.type === 'FcRow')
 }
@@ -908,14 +926,14 @@ function handleFormContainerConfirm(newProps: Record<string, any>) {
     if (generateColumns?.length > 0) {
       // 按字段生成组件：getRule→追加→setRule 重建画布（经 vendor makeRule 包装，生成组件可选中配置）
       const { added, skipped } = appendGeneratedRules(designerRef.value as any, active?._fc_id, generateColumns)
-      ElMessage.success(skipped > 0 ? `数据表单容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `数据表单容器配置已保存，已生成 ${added} 个字段组件`)
+      ElMessage.success(skipped > 0 ? `表单容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `表单容器配置已保存，已生成 ${added} 个字段组件`)
       return
     }
   }
-  ElMessage.success('数据表单容器配置已保存')
+  ElMessage.success('表单容器配置已保存')
 }
 
-/** 当前选中数据容器子树内已存在的字段 key（配置弹窗禁选判定） */
+/** 当前选中表单容器子树内已存在的字段 key（配置弹窗禁选判定） */
 const containerFieldKeys = computed<string[]>(() => {
   const active = designerRef.value?.activeRule as any
   if (!isContainerRule(active)) return []
@@ -1110,7 +1128,7 @@ function registerPageComponents() {
   })
   designerRef.value?.setComponentRuleConfig(
     DASH_CHART_NAME,
-    () => [dashConfigButton('配置图表', () => openDashConfig('chart'))],
+    () => [dashConfigButton('配置图表', () => openDashConfig('chart'), '')],
     true,
   )
 
@@ -1164,6 +1182,57 @@ function registerPageComponents() {
   designerRef.value?.setComponentRuleConfig(
     DASH_ALERT_NAME,
     () => [dashConfigButton('配置告警', () => openDashConfig('alert'))],
+    true,
+  )
+
+  // 待办清单：仪表盘里唯一的「过程/清单」件，取工作流任务接口，无数据源配置
+  designerRef.value?.addComponent({
+    label: '待办清单',
+    name: DASH_TODO_NAME,
+    icon: 'icon-documents',
+    menu: 'chart',
+    rule: () => dashTodoRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_TODO_NAME,
+    () => [dashConfigButton('配置待办', () => openDashConfig('todo'), '')],
+    true,
+  )
+
+  // 公告栏：与待办清单同为「无数据源」清单件，取用户端消息接口的公告（messageType=PUBLIC）
+  designerRef.value?.addComponent({
+    label: '公告栏',
+    name: DASH_NOTICE_NAME,
+    icon: 'icon-bulletin',
+    menu: 'chart',
+    rule: () => dashNoticeRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_NOTICE_NAME,
+    () => [dashConfigButton('配置公告', () => openDashConfig('notice'), '')],
+    true,
+  )
+
+  // 数据容器：绑一个数据源取一次数，内部组件用 {rows}/{row} 渲染文案，不再各自取数。
+  // 画布形态是 form-create 的行容器（拖入子组件的判定看节点 children，与 formContainer 同路），
+  // 保存/载入靠 loadRule/parseRule 在两种形态之间往返。
+  designerRef.value?.addComponent({
+    label: '数据容器',
+    name: PAGE_DATA_CONTAINER_NAME,
+    icon: 'icon-group',
+    menu: 'main',
+    inside: false,
+    drag: true,
+    dragBtn: true,
+    mask: false,
+    input: true,
+    loadRule: loadDataContainerRule,
+    parseRule: saveDataContainerRule,
+    rule: () => pageDataContainerRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    PAGE_DATA_CONTAINER_NAME,
+    () => [dashConfigButton('配置容器', () => openDataContainerConfig(), '')],
     true,
   )
 
@@ -1524,7 +1593,7 @@ function registerPageComponents() {
     },
   })
 
-  // formContainer（数据表单容器）：配置入口复用 DsBindingConfigDialog，避免维护第二套字段
+  // formContainer（表单容器）：配置入口复用 DsBindingConfigDialog，避免维护第二套字段
   designerRef.value?.setComponentRuleConfig(
     'formContainer',
     () => [

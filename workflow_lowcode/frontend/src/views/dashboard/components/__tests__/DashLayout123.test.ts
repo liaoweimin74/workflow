@@ -25,6 +25,7 @@ import {
   dashHeightStyle,
   dashSpanGapStyle,
   dashSpanModeOf,
+  isDashFillHeight,
 } from '../dash-shared'
 import {
   dashKpiRule,
@@ -33,6 +34,7 @@ import {
   dashGoalRule,
   dashLeaderboardRule,
   dashAlertRule,
+  dashTodoRule,
 } from '../../register'
 
 vi.mock('@/api/data-source', () => ({
@@ -59,6 +61,18 @@ describe('dash-shared 布局工具', () => {
     expect(dashHeightStyle('300')).toEqual({ height: '300px' })
     expect(dashHeightStyle('300px')).toEqual({ height: '300px' })
     expect(dashHeightStyle('50vh')).toEqual({ height: '50vh' })
+    // 撑满档：就是 100% 高度，靠 dash-fill-height.css 补齐祖先链才等高
+    expect(dashHeightStyle('100%')).toEqual({ height: '100%' })
+  })
+
+  it('isDashFillHeight：只有 100%（含首尾空白）算撑满，其余档位与自定义值都不算', () => {
+    expect(isDashFillHeight('100%')).toBe(true)
+    expect(isDashFillHeight(' 100% ')).toBe(true)
+    expect(isDashFillHeight('')).toBe(false)
+    expect(isDashFillHeight('auto')).toBe(false)
+    expect(isDashFillHeight('260px')).toBe(false)
+    expect(isDashFillHeight('50vh')).toBe(false)
+    expect(isDashFillHeight(undefined)).toBe(false)
   })
 
   it('clampDashSpan：越界与非法值回缺省（1-24，非法 = 24）', () => {
@@ -75,6 +89,7 @@ describe('dash-shared 布局工具', () => {
     expect(dashHeightModeOf('')).toBe('')
     expect(dashHeightModeOf('260px')).toBe('260px')
     expect(dashHeightModeOf('260')).toBe('260px')
+    expect(dashHeightModeOf('100%')).toBe('100%')
     expect(dashHeightModeOf('280px')).toBe('custom')
   })
 })
@@ -83,6 +98,7 @@ describe('宽高档位唯一事实源', () => {
   it('高度档位含自适应与自定义，宽度档位含撑满与自定义栅格', () => {
     expect(DASH_HEIGHT_OPTIONS.map((o) => o.value)).toEqual([
       '',
+      '100%',
       '120px',
       '200px',
       '260px',
@@ -193,10 +209,10 @@ describe('配置链路源码锚点', () => {
     expect(chartDialog).toContain('<DashSizeFields')
   })
 
-  it('设计器：仪表盘与数据图表都把 span 双写 props 镜像与 rule.col', () => {
+  it('设计器：仪表盘、数据图表与数据容器都把 span 双写 props 镜像与 rule.col', () => {
     expect(designer).toContain('active.props.span = spanNum')
     expect(designer).toContain('active.col = { ...(active.col || {}), span: spanNum }')
-    expect((designer.match(/active\.col = \{ \.\.\.\(active\.col \|\| \{\}\), span: spanNum \}/g) || []).length).toBe(2)
+    expect((designer.match(/active\.col = \{ \.\.\.\(active\.col \|\| \{\}\), span: spanNum \}/g) || []).length).toBe(3)
   })
 })
 

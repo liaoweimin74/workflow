@@ -1,0 +1,25 @@
+{
+  "key": "stat-card",
+  "name": "指标卡（组件物料示例）",
+  "type": "WIDGET",
+  "sdkVersion": "1",
+  "meta": [
+    { "field": "title", "label": "标题", "type": "text", "default": "本月新增" },
+    { "field": "value", "label": "指标值", "type": "number", "default": 128 },
+    { "field": "unit", "label": "单位", "type": "text", "default": "条" },
+    {
+      "field": "trend",
+      "label": "趋势",
+      "type": "select",
+      "default": "up",
+      "options": [
+        { "label": "上升", "value": "up" },
+        { "label": "下降", "value": "down" }
+      ]
+    },
+    { "field": "refreshInterval", "label": "刷新间隔(秒)", "type": "number", "default": 30 },
+    { "field": "autoRefresh", "label": "自动刷新", "type": "switch", "default": false },
+    { "field": "remark", "label": "备注", "type": "textarea", "default": "数据每日 06:00 更新" },
+    { "field": "accent", "label": "强调色", "type": "color-picker", "default": "#2E73FF" }
+  ]
+}

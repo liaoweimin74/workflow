@@ -9118,3 +9118,19 @@ Stage Summary:
 - 重供给累计 82 次（本窗口 r107-r135 共 25 次），全部单轮恢复；零 mvn 66 次
 - 双 recover 并发十一连现
 - 治本修复待授权
+
+---
+Task ID: r136
+Agent: ops-patrol
+Task: 2026-10-19 11:05 cron 巡检
+
+Work Log:
+- dump 首跑 3306 不在线；四链路 200×4 但 auth=no such table → 重供给 #83
+- 双 recover 并发第十二次连续出现（PID 1076 + 1304）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.58GB 超 3.5GB 线（本窗口新高）；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 83 次（本窗口 r107-r136 共 26 次），全部单轮恢复；零 mvn 67 次
+- 双 recover 并发十二连现
+- 治本修复待授权

@@ -52,7 +52,7 @@
 - [x] 6.2 导入 POST /materials/import：预检同 key 冲突、覆盖/跳过选择、结果报告
 - [x] 6.3 管理界面：物料列表页（上传 bundle+manifest、启停、删除含 409 强制删除、挂到系统菜单）
 - [x] 6.4 跨项目端到端验证：A 项目导出 → B 项目导入 → 菜单挂载可用
-- [x] 6.5 导出模块附带「物料工程模板 zip」下载：骨架 + 示例源码 + README 教程 + MATERIAL_SPEC 规范
+- [x] 6.5 导出模块附带「物料工程模板 zip」下载：骨架 + 示例源码 + 开发教程 README（场景判断/环境要求/两类物料分步流程/依赖与产物规范全收在教程里）
 
 > 6.3 说明：导出/导入入口随 6.1/6.2 一并补上；挂菜单走通用 `POST /api/menus`
 > （component=material:<key>、path=/material/<key>），已在浏览器实测
@@ -71,4 +71,5 @@
 > 6.5 说明：模板真源是 `material-scaffold/`，`scripts/sync-material-scaffold.mjs` 同步进
 > `backend/src/main/resources/material-scaffold/`，运行时由 `MaterialScaffoldService` 按写死的
 > 清单组 zip（清单缺文件直接失败，不给残缺工程）；脚本会比对两边清单，防两处各说各话。
+> 教程与规范合并为单一 README（见 design D12）：规范不再单独成文，清单去掉 MATERIAL_SPEC.md。
 

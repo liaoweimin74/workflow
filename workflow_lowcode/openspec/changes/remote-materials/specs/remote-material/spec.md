@@ -148,7 +148,12 @@
 
 ### Requirement: 物料工程模板下载
 
-系统 SHALL 提供 `GET /api/materials/scaffold-template`，返回可直接构建的物料工程模板 zip：工程骨架（依赖清单与锁文件、页面型/组件型两套 vite 配置、构建后校验脚本）、PAGE 与 WIDGET 两类示例物料源码及 manifest、`@platform/sdk` 类型声明、开发教程（README）与物料规范说明（MATERIAL_SPEC，含依赖 external 白名单与范围、单文件 ESM 产物与语法限制、`meta` 数组协议、Node 与构建工具版本下限、安全约定）。模板内容 SHALL 与仓库内脚手架真源一致；清单中任一文件读取不到时 SHALL 整体失败并报错，SHALL NOT 返回残缺工程。该接口 SHALL 要求 `material:manage` 权限。
+系统 SHALL 提供 `GET /api/materials/scaffold-template`，返回可直接构建的物料工程模板 zip：工程骨架（依赖清单与锁文件、页面型/组件型两套 vite 配置、构建后校验脚本）、PAGE 与 WIDGET 两类示例物料源码及 manifest、`@platform/sdk` 类型声明，以及开发教程（README）。教程 SHALL 单独成文即够开发者完成从判断到交付的全过程，至少覆盖：适用与不适用场景及利弊、开发与构建环境要求（Node/包管理器/vite/plugin-vue 版本下限、vue 与 element-plus 仅作开发依赖、SDK 主版本协商）、manifest 字段与 key 规则、产物形态与依赖 external 白名单及语法限制、`meta` 数组协议、页面型与组件型各自的分步流程与排错、跨项目导出导入与安全约定。模板内容 SHALL 与仓库内脚手架真源一致；清单中任一文件读取不到时 SHALL 整体失败并报错，SHALL NOT 返回残缺工程。该接口 SHALL 要求 `material:manage` 权限。
+
+#### Scenario: 只看模板内文档即可完成开发
+- **WHEN** 开发者只依据模板 zip 内的教程开发物料
+- **THEN** 教程能回答"该不该用物料""环境要装什么""页面型与组件型分别怎么一步步做"
+- **AND** 按其依赖范围与产物限制构建出的包可通过上传并被运行时加载
 
 #### Scenario: 下载模板并直接构建
 - **WHEN** 管理员下载工程模板解压后执行依赖安装与两条构建命令

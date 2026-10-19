@@ -34,7 +34,7 @@ public class MaterialScaffoldService {
     /** 下载文件名前缀。 */
     public static final String TEMPLATE_NAME = "material-scaffold";
 
-    /** 模板内容清单：工程骨架 + 两类物料示例 + SDK 类型声明 + 教程与规范。 */
+    /** 模板内容清单：工程骨架 + 两类物料示例 + SDK 类型声明 + 开发教程（规范并入教程）。 */
     public static final String[] TEMPLATE_FILES = {
             RESOURCE_PREFIX + "package.json",
             RESOURCE_PREFIX + "pnpm-lock.yaml",
@@ -50,7 +50,6 @@ public class MaterialScaffoldService {
             RESOURCE_PREFIX + "types/platform-sdk.d.ts",
             RESOURCE_PREFIX + ".gitignore",
             RESOURCE_PREFIX + "README.md",
-            RESOURCE_PREFIX + "MATERIAL_SPEC.md",
     };
 
     private static final DateTimeFormatter FILE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");

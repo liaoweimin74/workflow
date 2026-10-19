@@ -160,7 +160,7 @@ export async function exportMaterials(ids: number[]): Promise<Blob> {
   return resp
 }
 
-/** 物料工程模板（骨架 + 示例源码 + README/MATERIAL_SPEC），zip Blob。 */
+/** 物料工程模板（骨架 + 两类示例源码 + 开发教程 README），zip Blob。 */
 export async function downloadScaffoldTemplate(): Promise<Blob> {
   const resp = (await http.get('/materials/scaffold-template', {
     responseType: 'blob'

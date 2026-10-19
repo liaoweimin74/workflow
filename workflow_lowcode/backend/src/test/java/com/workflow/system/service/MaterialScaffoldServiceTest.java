@@ -19,7 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>模板真源在仓库 material-scaffold/，构建前由 scripts/sync-material-scaffold.mjs 同步进
  * classpath:material-scaffold/。这里守住两件事：模板一个都不能少（少一个下载回来就是残缺工程），
- * 以及规范文档必须随包走（离线开发物料的人不看 README 就会写出加载不了的包）。
+ * 以及开发教程必须随包走且内容够全（离线开发物料的人只看这一份文档，缺了场景判断和依赖范围
+ * 就会写出上传得了、跑不起来的包）。
  */
 class MaterialScaffoldServiceTest {
 
@@ -43,7 +44,7 @@ class MaterialScaffoldServiceTest {
     }
 
     @Test
-    void 模板zip含工程骨架示例源码与两份文档() throws Exception {
+    void 模板zip含工程骨架示例源码与开发教程() throws Exception {
         MaterialScaffoldService.Template template = service.build();
 
         assertThat(template.fileName()).startsWith("material-scaffold-").endsWith(".zip");
@@ -64,22 +65,28 @@ class MaterialScaffoldServiceTest {
                 "material-scaffold/src/StatCardWidget.vue",
                 "material-scaffold/material.json",
                 "material-scaffold/material-widget.json");
-        // 教程 + 规范
-        assertThat(entries.get("material-scaffold/README.md")).contains("pnpm build");
-        assertThat(entries.get("material-scaffold/MATERIAL_SPEC.md")).contains("external");
+        // 规范不再单独成文，全部收在教程里
+        assertThat(entries).doesNotContainKey("material-scaffold/MATERIAL_SPEC.md");
+        assertThat(MaterialScaffoldService.TEMPLATE_FILES)
+                .noneSatisfy(p -> assertThat(p).endsWith("MATERIAL_SPEC.md"));
     }
 
     @Test
-    void 规范文档写清依赖范围与构建环境限制() throws Exception {
+    void 教程写清适用场景依赖范围与构建环境限制() throws Exception {
         Map<String, String> entries = unzip(service.build().zipBytes());
-        String spec = entries.get("material-scaffold/MATERIAL_SPEC.md");
+        String readme = entries.get("material-scaffold/README.md");
 
+        // 场景判断：什么时候该写物料、什么时候不该
+        assertThat(readme).contains("适合写物料").contains("不适合写物料").contains("利：").contains("弊");
+        // 两类物料各自的分步流程
+        assertThat(readme).contains("页面物料（PAGE）").contains("组件物料（WIDGET）");
+        assertThat(readme).contains("pnpm build").contains("pnpm build:widget");
         // 依赖白名单：物料只能 import 这三个
-        assertThat(spec).contains("@platform/sdk").contains("element-plus").contains("不要 import");
-        // 语法/产物限制
-        assertThat(spec).contains("单文件").contains("meta").contains("数组");
-        // 编译环境版本限制
-        assertThat(spec).contains("Node").contains("sdkVersion");
+        assertThat(readme).contains("@platform/sdk").contains("element-plus").contains("不要 import");
+        // 语法/产物限制与 meta 协议
+        assertThat(readme).contains("单文件").contains("meta").contains("数组");
+        // 编译环境与 SDK 版本限制
+        assertThat(readme).contains("Node").contains("sdkVersion").contains("vite");
     }
 
     @Test

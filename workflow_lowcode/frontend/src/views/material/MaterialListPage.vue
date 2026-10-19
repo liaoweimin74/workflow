@@ -466,7 +466,7 @@ async function submitTemplate() {
   try {
     const blob = await downloadScaffoldTemplate()
     saveBlob(blob, 'material-scaffold.zip')
-    ElMessage.success('工程模板已下载（含示例源码、README 与 MATERIAL_SPEC 规范）')
+    ElMessage.success('工程模板已下载（含两类物料示例源码与开发教程 README）')
   } catch (e) {
     ElMessage.error((e as Error).message || '模板下载失败')
   } finally {

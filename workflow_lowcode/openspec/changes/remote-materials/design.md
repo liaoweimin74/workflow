@@ -165,8 +165,13 @@ ESM `import()` 受 CORS 约束。生产部署物料文件由后端服务（或�
 
 `GET /api/materials/scaffold-template` 返回 zip：工程骨架（`package.json`/`pnpm-lock.yaml`/两份 vite 配置/
 `scripts/gen-manifest.mjs`/`.gitignore`）+ 两类物料示例源码与 manifest + SDK 类型声明 +
-`README.md`（教程）+ `MATERIAL_SPEC.md`（规范：manifest 字段、依赖 external 白名单与范围、产物与语法限制、
-Node/vite/plugin 版本下限、meta 数组协议、安全约定）。
+`README.md`（开发教程，规范全部收在这份里：适用与不适用场景与利弊、Node/vite/plugin-vue 与
+vue/element-plus 的版本要求、manifest 字段与 key 规则、依赖 external 白名单与产物语法限制、
+meta 数组协议、PAGE 与 WIDGET 各自的分步流程与排错表、跨项目导出导入与安全约定）。
+
+教程与规范**合并成一份 README**（2026-10-19 用户要求）：早期拆成 README + MATERIAL_SPEC 两份，
+同一件事（依赖范围、meta 协议、版本下限）在两处各写一遍，改一处漏一处的风险比"文档略长"更糟；
+开发者也只会在教程里从头读到尾，不会先翻规范再回来。故不再单独提供规范文件。
 
 真源是仓库根的 `material-scaffold/`（可本地 `pnpm build` 验证），`scripts/sync-material-scaffold.mjs`
 把它同步进 `backend/src/main/resources/material-scaffold/`；打包侧 `MaterialScaffoldService`

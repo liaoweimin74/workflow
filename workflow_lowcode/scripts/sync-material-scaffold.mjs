@@ -33,7 +33,6 @@ const FILES = [
   'types/platform-sdk.d.ts',
   '.gitignore',
   'README.md',
-  'MATERIAL_SPEC.md',
 ]
 
 // 防漂移：后端清单与本脚本清单必须完全一致

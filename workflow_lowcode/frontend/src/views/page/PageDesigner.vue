@@ -294,6 +294,8 @@ import { pageTemplateApi, type PageTemplateDTO } from '@/api/page-template'
 import { skeletonizePageSchema } from './templateSkeleton'
 import { collectDsRefs } from './templateSchema'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
+import { listEnabledWidgets } from '@/api/material'
+import { registerMaterialWidgetsToDesigner } from '@/platform/designerMaterialWidgets'
 import { useAuthStore } from '@/stores/auth'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
@@ -1618,6 +1620,26 @@ function registerPageComponents() {
   )
 }
 
+/**
+ * 组件型物料接入设计器（remote-materials 二期 5.2/5.4）：
+ * 拉启用列表 → 注册真实组件供画布预览 → 面板「自定义物料」分组 + meta 属性面板。
+ * 物料组件名一律带 material: 前缀，不会与内置组件撞名；分组在内置分组之后追加。
+ */
+async function registerMaterialWidgets(schemaRules: unknown) {
+  if (!designerRef.value) return
+  try {
+    const res = await listEnabledWidgets()
+    await registerMaterialWidgetsToDesigner({
+      designer: designerRef.value,
+      registry: FcDesigner,
+      widgets: res.data || [],
+      schemaRules,
+    })
+  } catch {
+    // 物料不可用时面板不出现该项即可，页面设计照常
+  }
+}
+
 onMounted(async () => {
   // 注册页面数据组件到 FcDesigner 拖拽面板（数据源配置入口在表单配置页签底部）
   registerPageComponents()
@@ -1639,6 +1661,8 @@ onMounted(async () => {
     pageName.value = def.name
     pageKey.value = def.key
     formStatus.value = def.status || 'DRAFT'
+    let parsedRule: any[] = []
+    let parsedOption: Record<string, unknown> = {}
     if (def.schema) {
       try {
         const parsed = JSON.parse(def.schema)
@@ -1647,20 +1671,24 @@ onMounted(async () => {
         // 否则依赖运行态残留才显示（先开运行页再开设计页才有数据）
         setActiveDsBindings(schema.dataSources as any)
         schema.actions = parsed.actions || []
-        // 设置 FcDesigner rule（等待设计器就绪后 setRule）
-        if (designerRef.value) {
-          designerRef.value.setRule(ensureRuleProps(enableCardDesignMode(parsed.rule || [])))
-          designerRef.value.setOption(parsed.option || {})
-          // 从已保存的 rule 中恢复静态筛选到 tableFilterStore
-          const rules = parsed.rule || []
-          for (const r of rules) {
-            if (r.props?.filter && r.props?.dataSourceId) {
-              tableFilterStore[r.props.dataSourceId] = r.props.filter
-            }
-          }
-        }
+        parsedRule = parsed.rule || []
+        parsedOption = parsed.option || {}
       } catch {
         // 解析失败用默认
+      }
+    }
+    // 组件物料：注册画布组件与面板「自定义物料」分组，必须先于 setRule，
+    // 否则已保存的 material:<key> 节点解析不到组件、画布一片空白
+    await registerMaterialWidgets(parsedRule)
+    // 设置 FcDesigner rule（等待设计器就绪后 setRule）
+    if (designerRef.value) {
+      designerRef.value.setRule(ensureRuleProps(enableCardDesignMode(parsedRule)))
+      designerRef.value.setOption(parsedOption)
+      // 从已保存的 rule 中恢复静态筛选到 tableFilterStore
+      for (const r of parsedRule) {
+        if (r.props?.filter && r.props?.dataSourceId) {
+          tableFilterStore[r.props.dataSourceId] = r.props.filter
+        }
       }
     }
     // 已发布页面加载已挂菜单（按钮显示"已挂接 N 个菜单"）

@@ -113,6 +113,7 @@ import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { useLinkageContainer } from '@/views/form/composables/useLinkageContainer'
 import { registerAiComponent, unregisterAiComponent } from '@/utils/aiPageBridge'
+import { collectWidgetKeys, registerWidgetComponents } from '@/platform/materialWidgets'
 import { CONTAINER_OPS, type ActionStep } from '@/types/pageActionCatalog'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
@@ -400,6 +401,12 @@ async function load() {
     const resolvedRule = hasOptionDatasource(mainRule)
       ? await resolveOptionRules(mainRule, pageSchema.dataSources as any)
       : mainRule
+    // 组件型物料（二期 5.1）：先注册再渲染。缺失/停用/版本不符的物料注册占位错误块，
+    // 只有引用它的那一段渲染错误块，页面其余部分照常。
+    const widgetKeys = collectWidgetKeys(parsed.rule || [])
+    if (widgetKeys.length) {
+      await registerWidgetComponents(formCreate, widgetKeys)
+    }
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
     rule.value = normalizeForRender(resolvedRule).map((r: any) => transformComponent(r))
     // 渲染选项：保留设计器布局配置，但强制隐藏 form-create 默认提交/重置按钮（页面非表单提交场景）。

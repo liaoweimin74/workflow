@@ -9134,3 +9134,20 @@ Stage Summary:
 - 重供给累计 83 次（本窗口 r107-r136 共 26 次），全部单轮恢复；零 mvn 67 次
 - 双 recover 并发十二连现
 - 治本修复待授权
+
+---
+Task ID: r138
+Agent: ops-patrol
+Task: 2026-10-19 13:05 cron 巡检（catchup r137 沙箱故障空窗）
+
+Work Log:
+- r137 沙箱启动失败（第 8 次）未执行，本轮双窗口覆盖
+- dump 首跑 OK 但 auth=no such table → 重供给 #84
+- 双 recover 并发第十三次连续出现（PID 1076 + 1274）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.54GB 超 3.5GB 线；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 84 次（本窗口 r107-r138 共 27 次），全部单轮恢复；零 mvn 68 次
+- 双 recover 并发十三连现
+- 治本修复待授权

@@ -22,16 +22,30 @@ import org.springframework.web.client.RestClient;
 /**
  * Flowable 引擎及后端业务逻辑执行组件的装配配置。
  *
- * <p>通过 {@link ProcessEngineConfigurationConfigurer} 注册全局 {@link BackendLogicEventListener}，
+ * <p>通过 {@link ProcessEngineConfigurationConfigurer} 注册全局事件监听器：
+ * 平台自身监听器（{@link BackendLogicEventListener}）在前，业务系统实现的
+ * {@code FlowableEventListener} Bean（SPI 扩展点）按 @Order 排序追加在后，
  * 并在容器中装配后端逻辑执行链路所需的 Bean（解析器、执行器、白名单注册表等）。
  */
 @Configuration
 public class FlowableEngineConfig {
 
-    /** 注册 Flowable 全局事件监听器，驱动节点后端逻辑执行。 */
+    /**
+     * 注册 Flowable 全局事件监听器，驱动节点后端逻辑执行；
+     * 业务系统注册为 Spring Bean 的 {@code FlowableEventListener} 实现自动纳入
+     * （排在平台监听器之后派发，勿与平台监听器重复注册）。
+     */
     @Bean
-    public ProcessEngineConfigurationConfigurer processEngineConfigurer(BackendLogicEventListener listener) {
-        return configuration -> configuration.setEventListeners(java.util.List.of(listener));
+    public ProcessEngineConfigurationConfigurer processEngineConfigurer(
+            BackendLogicEventListener listener,
+            org.springframework.beans.factory.ObjectProvider<org.flowable.common.engine.api.delegate.event.FlowableEventListener> customListeners) {
+        java.util.List<org.flowable.common.engine.api.delegate.event.FlowableEventListener> listeners =
+                new java.util.ArrayList<>();
+        listeners.add(listener);
+        customListeners.orderedStream()
+                .filter(l -> l != listener)
+                .forEach(listeners::add);
+        return configuration -> configuration.setEventListeners(listeners);
     }
 
     @Bean

@@ -9215,3 +9215,20 @@ Stage Summary:
 - 重供给累计 88 次（本窗口 r107-r142 共 31 次），全部单轮恢复；零 mvn 72 次
 - 双 recover 并发十七连现
 - 治本修复待授权
+
+---
+Task ID: r144
+Agent: ops-patrol
+Task: 2026-10-19 19:05 cron 巡检（catchup r143 沙箱故障空窗）
+
+Work Log:
+- r143 沙箱启动失败（第 9 次）未执行，本轮双窗口覆盖
+- dump 首跑 OK 但 auth=no such table → 重供给 #89
+- 双 recover 并发第十八次连续出现（PID 1056 + 1216）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.42GB 回落至线下；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 89 次（本窗口 r107-r144 共 32 次），全部单轮恢复；零 mvn 73 次
+- 双 recover 并发十八连现
+- 治本修复待授权

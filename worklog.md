@@ -9300,3 +9300,18 @@ Work Log:
 Stage Summary:
 - 重供给累计 #93；零 mvn 77 次；全绿 200×4 真绿，内存 3.27GB，oom 0
 - 沙箱故障率上升：近 8 轮 5 次失败（r147-r150、r152），用户尚未重启会话
+
+---
+Task ID: r154
+Agent: cron-ops-loop
+Task: 2026-10-20 06:05 巡检
+
+Work Log:
+- dump-db 首跑报「workflow dump 无效，放弃本轮」（重供给后空库被有效性检测正确拦截，未污染快照库）
+- 四链路 200×4 但 auth=no such table SYS_USER → 重供给 #94（Node 假绿，Java 未拉起，内存 3.27GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1394 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 重供给累计 #94；零 mvn 78 次；全绿 200×4 真绿，内存 3.27GB，oom 0
+- dump-db 有效性检测首次实际拦截污染快照，机制有效

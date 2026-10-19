@@ -9264,3 +9264,23 @@ Stage Summary:
 - 重供给累计 91 次（本窗口 r107-r146 共 34 次），全部单轮恢复；零 mvn 75 次
 - 双 recover 并发二十连现
 - 治本修复待授权
+
+---
+Task ID: r147-r151
+Agent: cron-ops-loop
+Task: 2026-10-19 22:05 ~ 10-20 03:05 五轮巡检（r147-r150 沙箱故障空窗 + r151 catchup 恢复执行）
+
+Work Log:
+- r147(10/19 22:05) r148(23:05) r149(10/20 00:05) r150(10/20 02:05)：沙箱连续 4 轮启动失败（累计第 10-13 次，catchup 自愈首次失效后彻底失效），零执行，已连续 4 轮回复建议用户重启会话
+- r151(10/20 03:05)：沙箱恢复。组合探活：dump OK 20261019-190544（workflow=260K v6=4.0K）；四链路 200×4 但 auth=`no such table: SYS_USER` → 重供给 #92 确认（Node 假绿占 8080，Java 未拉起，mariadb 在线为重置空库，内存 3.29GB，oom 0，bun/node 占位在场）
+- 恢复流水线：pkill 双 recover 实例+占位 → git checkout jar-parts + 四卷重拼 md5 e369839b/121300861B ✓ → timeout 180 recover-dplus.sh 前台执行超时被杀（Bash 200s 上限）
+- recover 日志核验：mariadbd 启动 + 导入 db-workflow-full-20261019-130736.sql 成功；脚本误入「无 jar 备份→mvn」分支（已知误报 bug，重拼明明在 recover 前完成）+ Access denied ERROR 1045，但 Java 幸存型拉起
+- 40 秒复验：四链路 200×4 + auth accessToken 真绿 + node 探针 200；ss 确认 8080=java pid 1513、3000=vite pid 1153
+- v6 库 1555B 与 130736/190544 历史基线完全一致，非数据丢失（虚惊核验）
+- 收口：dump 20261019-191128 + commit + push af3463e9 ✓
+
+Stage Summary:
+- 重供给累计 #92；零 mvn 达 76 次（recover 虽误入 mvn 分支提示但实际未完成 mvn 构建，Java 以现有 jar 拉起）
+- 双 recover 并发本窗口未现（重供给发生在沙箱空窗内，冷启动自触发）；「无 jar 备份」误报 bug 再次实锤（重拼先于 recover 仍误判），待授权修复
+- 全绿：200×4 真绿，内存 3.29GB，oom 0
+- 最新有效恢复源快照：db-workflow-full-20261019-130736.sql；HEAD af3463e9

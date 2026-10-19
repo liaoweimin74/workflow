@@ -9284,3 +9284,19 @@ Stage Summary:
 - 双 recover 并发本窗口未现（重供给发生在沙箱空窗内，冷启动自触发）；「无 jar 备份」误报 bug 再次实锤（重拼先于 recover 仍误判），待授权修复
 - 全绿：200×4 真绿，内存 3.29GB，oom 0
 - 最新有效恢复源快照：db-workflow-full-20261019-130736.sql；HEAD af3463e9
+
+---
+Task ID: r152-r153
+Agent: cron-ops-loop
+Task: 2026-10-20 04:05(r152 沙箱失败) + 05:05(r153 catchup 巡检)
+
+Work Log:
+- r152(04:05)：沙箱第 14 次失败，零执行
+- r153(05:05)：沙箱恢复。dump OK 20261019-210541；四链路 200×4 但 auth=no such table SYS_USER → 重供给 #93（Node 假绿，Java 未拉起，内存 3.27GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1451 拉起，导入 db-workflow-full-20261019-191128.sql
+- 「无 jar 备份→mvn」误报 bug 第 N 次实锤（重拼先于 recover 仍误判），Access denied 1045 同现
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 重供给累计 #93；零 mvn 77 次；全绿 200×4 真绿，内存 3.27GB，oom 0
+- 沙箱故障率上升：近 8 轮 5 次失败（r147-r150、r152），用户尚未重启会话

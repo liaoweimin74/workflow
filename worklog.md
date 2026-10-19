@@ -9199,3 +9199,19 @@ Stage Summary:
 - 重供给累计 87 次（本窗口 r107-r141 共 30 次），全部单轮恢复；零 mvn 71 次
 - 双 recover 并发十六连现
 - 治本修复待授权
+
+---
+Task ID: r142
+Agent: ops-patrol
+Task: 2026-10-19 17:05 cron 巡检
+
+Work Log:
+- dump 首跑 OK 但 auth=no such table → 重供给 #88；dump-db 内部 push FAILED
+- 双 recover 并发第十七次连续出现（PID 1055 + 1194）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.57GB 超 3.5GB 线；收口 dump + rebase 补推闭环 ✓
+
+Stage Summary:
+- 重供给累计 88 次（本窗口 r107-r142 共 31 次），全部单轮恢复；零 mvn 72 次
+- 双 recover 并发十七连现
+- 治本修复待授权

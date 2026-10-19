@@ -1,0 +1,10 @@
+{
+  "key": "demo-board",
+  "name": "示例物料看板",
+  "type": "PAGE",
+  "sdkVersion": "1",
+  "menu": {
+    "title": "示例物料看板",
+    "icon": "Grid"
+  }
+}

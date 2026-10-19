@@ -133,13 +133,13 @@ function findRuleByFcid(rules: unknown[], fcid: string): Record<string, any> | n
 }
 
 /**
- * 数据容器「按字段生成组件」：在 getRule() 解析树中把勾选列生成的 rule 追加进目标容器的
+ * 表单容器「按字段生成组件」：在 getRule() 解析树中把勾选列生成的 rule 追加进目标容器的
  * 子规则列表（解析态 formContainer 的 props.rule），再 setRule() 重建画布 —— 重建会让
  * 全部规则经 vendor loadRule/makeRule 重新包装（DragTool/_fc_id/_menu），保证生成组件
  * 与拖拽产物一样可选中、可配置。同名字段（容器子树内任意位置）已存在则跳过。
  *
  * @param designer     FcDesigner 组件实例（需暴露 getRule/setRule）
- * @param containerFcid 画布当前选中数据容器的 _fc_id
+ * @param containerFcid 画布当前选中表单容器的 _fc_id
  */
 export function appendGeneratedRules(
   designer: { getRule?: () => unknown[]; setRule?: (rules: unknown[]) => void } | null | undefined,

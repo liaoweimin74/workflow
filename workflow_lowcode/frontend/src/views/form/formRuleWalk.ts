@@ -71,6 +71,43 @@ export function collectFieldOptions(rules: RuleLike[] | undefined): { field: str
 }
 
 /**
+ * 收集联动容器候选（动作链 target 下拉用）。
+ *
+ * `field` 即容器地址（运行时 LinkageContainer.key），`props.dataSourceId` 只是它绑定的数据源。
+ * 遍历门槛与 useLinkageContainer.extractContainers 逐条对齐，否则设计器会给出运行时根本
+ * 不存在、点了也打不开的死地址：
+ * - 须同时有 `field` 与 `props.dataSourceId` 才算联动容器
+ * - 命中 formContainer 后不再下钻其 `props.rule`（容器整体移出主树，内层容器同样不被提取）
+ */
+export function collectContainerTargets(
+  rules: RuleLike[] | undefined,
+): { field: string; title: string; dataSourceId: string }[] {
+  const out: { field: string; title: string; dataSourceId: string }[] = []
+  const visit = (list: RuleLike[] | undefined): void => {
+    if (!list) return
+    for (const rule of list) {
+      if (!rule || typeof rule !== 'object') continue
+      if (rule.type === 'formContainer') {
+        if (rule.field && rule.props?.dataSourceId) {
+          out.push({
+            field: rule.field,
+            // 展示名只取节点标题（设计器里用户认的那个名字）。不用 props.tabTitle：
+            // 它只是弹窗「编辑态」的标题栏文案，查看态运行时会被换成「详情」，跟容器名不是一个东西。
+            title: rule.title || '表单容器',
+            dataSourceId: rule.props.dataSourceId,
+          })
+        }
+        continue
+      }
+      visit(rule.children)
+      visit(rule.props?.rule)
+    }
+  }
+  visit(rules)
+  return out
+}
+
+/**
  * 收集计算公式（FormulaField）可引用的字段候选（Task 145）。
  *
  * 与 collectFieldOptions 的差异：

@@ -69,7 +69,15 @@
                   >
                     <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
                   </el-select>
-                  <el-button class="event-action-remove" link type="danger" @click="removeAction(ai)">移除</el-button>
+                  <el-button
+                    class="event-action-remove"
+                    link
+                    type="danger"
+                    :icon="Delete"
+                    aria-label="移除动作"
+                    title="移除动作"
+                    @click="removeAction(ai)"
+                  />
                 </div>
 
                 <!-- 参数区由动作契约驱动：固定参数只读参数名，只有 set-filter 这类动态参数动作可增删 -->
@@ -105,10 +113,11 @@
                       class="param-remove"
                       link
                       type="danger"
+                      :icon="Delete"
+                      aria-label="删除参数"
+                      title="删除参数"
                       @click="removeParam(ai, pi)"
-                    >
-                      删
-                    </el-button>
+                    />
                   </div>
                   <el-button
                     v-if="paramsEditable(action.type)"
@@ -215,7 +224,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, Delete } from '@element-plus/icons-vue'
 import ExpressionEditor from '@/components/expression/ExpressionEditor.vue'
 import type { ColumnViewConfig } from './schemaTypes'
 import { chainActionOptions, chainParamKeyOptions, chainParamKind, chainParamOptions, chainParamView, chainParamsEditable, retargetActionParams, syncActionParams } from '@/types/pageActionCatalog'

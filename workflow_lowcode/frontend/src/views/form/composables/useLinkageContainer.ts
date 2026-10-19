@@ -21,8 +21,14 @@ export interface ContainerButtons {
  * （dialog=弹窗 / inline=页内区域 / newTab=新页签）。
  */
 export interface LinkageContainer {
-  /** 页面内数据源标识（动作 target = props.dataSourceId） */
+  /**
+   * 容器地址（动作链 target 用它寻址）= 节点自带的 `rule.field`。
+   * 与设计器面板生成的容器一一唯一（formContainer.js 的 rule() 显式 `field: uniqueId()`，
+   * 复制/粘贴路径会批量重写），因此不再拿 dataSourceId 当地址——那会让同数据源多容器撞 key。
+   */
   key: string
+  /** 容器绑定的页面级数据源标识（取数、样式解析、联动刷新表格都按它查） */
+  dataSourceId: string
   displayMode: ContainerDisplayMode
   /** 原始 formContainer 节点（保存格式，引擎 mount 用） */
   node: Record<string, any>
@@ -66,8 +72,8 @@ export interface UseLinkageContainerOptions {
   openNewTab?: (c: LinkageContainer | undefined, rid: string) => void
   /** 确认保存策略（默认 flush；可覆盖为 saveAll/createData 等） */
   saveContainer?: (c: LinkageContainer) => Promise<boolean>
-  /** 按容器 key 找关联组件（确认/删除/复制后智能刷新表格用） */
-  findComponent?: (key: string) => ContainerComponentRef | undefined
+  /** 按数据源找关联组件（确认/删除/复制后智能刷新同数据源的表格；与容器地址无关） */
+  findComponent?: (dataSourceId: string) => ContainerComponentRef | undefined
   /** 自定义按钮动作执行（默认仅提示；Page 版可执行 step 链） */
   onCustomAction?: (c: LinkageContainer, btn: ContainerButtons['custom'][number]) => void
   /** inline 容器是否保留在主规则树；默认 false（Form 独立渲染），Page 可开启页内渲染 */
@@ -78,13 +84,19 @@ export interface UseLinkageContainerOptions {
   getRenderOption?: () => Record<string, any>
   /**
    * 解析联动容器展示样式（以数据表格配置为准）。
-   * 数据容器（formContainer）不再独立配置显示方式/尺寸，运行时取关联数据表格的 viewDetail
+   * 表单容器（formContainer）不再独立配置显示方式/尺寸，运行时取关联数据表格的 viewDetail
    * （formMode 映射：popup→dialog、drawer→drawer、inline→inline；宽度/高度取 viewDetail.width/height）。
    * 返回 undefined 时回退容器 props（dialogWidth/dialogHeight/displayMode）或默认值。
    */
-  resolveContainerStyle?: (target: string) =>
+  resolveContainerStyle?: (dataSourceId: string) =>
     { displayMode?: ContainerDisplayMode; width?: string; height?: string } | undefined
 }
+
+/**
+ * 容器寻址入参：动作链/深链传容器地址字符串（LinkageContainer.key），
+ * 表格自动关联传已解析出的容器对象（宿主按 dataSourceId 查得）。
+ */
+export type ContainerTarget = string | LinkageContainer
 
 /**
  * 表格-容器联动统一机制（FormRenderer 与 PageRendererPage 复用）。
@@ -98,21 +110,45 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
   )
   const inlineContainers = computed(() => containers.value.filter((c) => c.displayMode === 'inline'))
 
-  /** 各容器显示模式索引（dataSourceId → displayMode），动作分发用 */
-  const containerModes = new Map<string, ContainerDisplayMode>()
-
+  /** 按容器地址查找（动作链 target、深链 query.container） */
   function findContainer(target: string): LinkageContainer | undefined {
     return containers.value.find((c) => c.key === target)
+  }
+
+  /**
+   * 按数据源查找容器（表格按钮自动关联的查找语义）。
+   * 返回全部命中：自动关联的定义是「用户没配 target」，宿主此刻只有自己的 dataSourceId，
+   * 拿不到任何容器地址，所以这条查找与兼容性无关、不能省。
+   */
+  function findByDsId(dataSourceId: string): LinkageContainer[] {
+    return containers.value.filter((c) => c.dataSourceId === dataSourceId)
+  }
+
+  /**
+   * 动作 target 解析：先按容器地址精确命中，未命中回退按数据源取画布靠前的容器。
+   * 回退不是历史兼容垫片——渲染器把容器动作的 target 写成 `target || 本组件 dataSourceId`
+   * （用户在动作链里留空的语义就是「打开本组件关联的容器」），此刻宿主手里只有数据源标识。
+   * 地址优先同时保证：填了容器地址可精确到同源的第 2、3 个容器；
+   * 某容器的地址恰好等于另一个的数据源标识时按地址走，不被回退抢位。
+   */
+  function resolveContainer(target: string): LinkageContainer | undefined {
+    return findContainer(target) ?? findByDsId(target)[0]
+  }
+
+  /** 寻址入参归一：容器对象直接用，字符串走 resolveContainer（地址优先，回退数据源） */
+  function resolveTarget(target: ContainerTarget): LinkageContainer | undefined {
+    return typeof target === 'string' ? resolveContainer(target) : target
   }
 
   /** 构造联动容器运行时状态 */
   function makeContainer(node: Record<string, any>, displayMode: ContainerDisplayMode): LinkageContainer {
     const props = node.props || {}
-    const key = props.dataSourceId
-    // 以数据表格配置为准（resolveContainerStyle 覆盖）；未命中回退容器 props/默认值
-    const style = options.resolveContainerStyle?.(key)
+    const dataSourceId = props.dataSourceId as string
+    // 以数据表格配置为准（resolveContainerStyle 按数据源解析）；未命中回退容器 props/默认值
+    const style = options.resolveContainerStyle?.(dataSourceId)
     return {
-      key,
+      key: node.field,
+      dataSourceId,
       displayMode: style?.displayMode || displayMode,
       node,
       title: props.tabTitle || node.title || '编辑记录',
@@ -174,14 +210,14 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
    */
   function extractContainers(rules: Rule[]): Rule[] {
     const found: LinkageContainer[] = []
-    containerModes.clear()
     const walk = (list: Rule[]): Rule[] =>
       list
         .filter((n) => {
           const node = n as Record<string, any>
-          if (node.type === 'formContainer' && node.props?.dataSourceId) {
+          // 无地址（field）的容器不参与联动：与「未绑数据源」同样保留在主树，
+          // 避免出现一批 key=undefined 的容器互相撞地址
+          if (node.type === 'formContainer' && node.props?.dataSourceId && node.field) {
             const c = makeContainer(node, (node.props.displayMode as ContainerDisplayMode) || 'dialog')
-            containerModes.set(c.key, c.displayMode)
             found.push(c)
             return c.displayMode === 'inline' && options.keepInlineOnTree === true // 可选保留 inline；其他从树移除
           }
@@ -203,16 +239,16 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
   }
 
   /** 打开容器并加载触发行记录（open-container）；rid 来自事件行；readonly=查看场景（字段禁用、仅关闭） */
-  function openContainer(target: string, rid: string, displayMode?: ContainerDisplayMode, readonly?: boolean) {
-    const mode = displayMode || containerModes.get(target) || 'dialog'
+  function openContainer(target: ContainerTarget, rid: string, displayMode?: ContainerDisplayMode, readonly?: boolean) {
+    const c = resolveTarget(target)
+    const mode = displayMode || c?.displayMode || 'dialog'
     if (mode === 'newTab') {
-      options.openNewTab?.(findContainer(target) as LinkageContainer, rid)
+      options.openNewTab?.(c as LinkageContainer, rid)
       return
     }
+    if (!c) return
     if (mode === 'inline' && options.openInline === false) {
       // 页面 inline 容器平铺在主树，不控制 visible；只重置 formData/currentRecordId
-      const c = findContainer(target)
-      if (!c) return
       c.formData = {}
       c.currentRecordId = undefined
       if (readonly !== undefined) {
@@ -222,8 +258,6 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
       return
     }
     // dialog/drawer 模式：控制 visible
-    const c = findContainer(target)
-    if (!c) return
     c.formData = {}
     c.currentRecordId = undefined
     if (readonly !== undefined) {
@@ -246,9 +280,9 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
   }
 
   /** 加载记录到容器引擎（load-record）；无容器时回退调用方处理 */
-  function loadRecord(target: string, rid: string, fallback?: () => void) {
+  function loadRecord(target: ContainerTarget, rid: string, fallback?: () => void) {
     if (!rid) return
-    const c = findContainer(target)
+    const c = resolveTarget(target)
     if (c?.engine) {
       c.currentRecordId = rid
       void c.engine.loadRecord(rid)
@@ -258,21 +292,21 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
   }
 
   /** 保存容器数据（save-container）；无容器时回退调用方处理 */
-  function flushContainer(target: string, fallback?: () => void) {
-    const c = findContainer(target)
+  function flushContainer(target: ContainerTarget, fallback?: () => void) {
+    const c = resolveTarget(target)
     if (c?.engine) void c.engine.flush()
     else fallback?.()
   }
 
   /** 关闭容器（close-container） */
-  function closeContainer(target: string) {
-    const c = findContainer(target)
+  function closeContainer(target: ContainerTarget) {
+    const c = resolveTarget(target)
     if (c) c.visible = false
   }
 
-  /** 容器内数据源对应的全局 refId */
+  /** 容器绑定数据源对应的全局 refId（按 dataSourceId 查，与容器地址无关） */
   function containerRefId(c: LinkageContainer): string | undefined {
-    return options.dataSources().find((d) => d.id === c.key)?.refId
+    return options.dataSources().find((d) => d.id === c.dataSourceId)?.refId
   }
 
   /** footer 按钮区是否有任何可见按钮；无则整块 footer 不显示 */
@@ -311,7 +345,7 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
       }
       if (!ok) return
       // 智能同步：刷新容器关联的表格
-      options.findComponent?.(c.key)?.refresh?.()
+      options.findComponent?.(c.dataSourceId)?.refresh?.()
       c.visible = false
     } else if (action === 'delete') {
       const refId = containerRefId(c)
@@ -324,7 +358,7 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
       }
       try {
         await options.dsApi.deleteData(refId, c.currentRecordId)
-        options.findComponent?.(c.key)?.refresh?.()
+        options.findComponent?.(c.dataSourceId)?.refresh?.()
         c.visible = false
       } catch {
         // http 拦截器已提示
@@ -337,7 +371,7 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
       delete data.version
       try {
         await options.dsApi.createData(refId, data)
-        options.findComponent?.(c.key)?.refresh?.()
+        options.findComponent?.(c.dataSourceId)?.refresh?.()
         c.visible = false
       } catch {
         // http 拦截器已提示
@@ -354,8 +388,9 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
     containers,
     dialogContainers,
     inlineContainers,
-    containerModes,
     findContainer,
+    findByDsId,
+    resolveContainer,
     makeContainer,
     mountContainerEngine,
     extractContainers,

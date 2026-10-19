@@ -12,7 +12,7 @@
     <div v-for="(ev, idx) in props.modelValue" :key="idx" class="event-card">
       <div class="event-head">
         <span class="event-title">事件 {{ idx + 1 }}</span>
-        <el-button  type="danger" link :icon="Delete" @click="removeEvent(idx)">删除</el-button>
+        <el-button type="danger" link :icon="Delete" aria-label="删除事件" title="删除事件" @click="removeEvent(idx)" />
       </div>
       <el-form label-width="70px"  inline>
         <el-form-item label="触发器">
@@ -54,7 +54,15 @@
             >
               <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
             </el-select>
-            <el-button class="action-remove" type="danger" link @click="removeAction(idx, ai)">移除动作</el-button>
+            <el-button
+              class="action-remove"
+              type="danger"
+              link
+              :icon="Delete"
+              aria-label="移除动作"
+              title="移除动作"
+              @click="removeAction(idx, ai)"
+            />
           </div>
 
           <!-- 参数区由动作契约驱动：固定参数只读参数名，只有 set-filter 这类动态参数动作可增删 -->
@@ -90,10 +98,11 @@
                 class="param-remove"
                 link
                 type="danger"
+                :icon="Delete"
+                aria-label="删除参数"
+                title="删除参数"
                 @click="removeParam(idx, ai, pi)"
-              >
-                删
-              </el-button>
+              />
             </div>
             <el-button
               v-if="paramsEditable(action.type)"

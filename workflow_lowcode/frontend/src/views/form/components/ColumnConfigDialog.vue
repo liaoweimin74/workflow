@@ -414,7 +414,7 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
       continue
     }
-    // formContainer：数据源容器，子字段数据来自外部数据源，跳过
+    // formContainer：表单容器，子字段数据来自外部数据源，跳过
     // page-table：数据表格展示外部数据源，不生成子列，跳过
     if (type === 'formContainer' || type === 'page-table') {
       continue
@@ -526,7 +526,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
       continue
     }
-    // formContainer：数据源容器，子字段数据来自外部数据源，不参与当前表单列映射
+    // formContainer：表单容器，子字段数据来自外部数据源，不参与当前表单列映射
     // page-table：数据表格展示外部数据源，不生成数据列，整体忽略（不阻止发布）
     if (type === 'formContainer' || type === 'page-table' || type === 'page-list-cards') {
       continue

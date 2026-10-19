@@ -2,7 +2,7 @@
 // npx vitest run src/views/form/__tests__/formRuleWalk.test.ts
 
 import { describe, it, expect } from 'vitest'
-import { walkRules, collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps, type RuleLike } from '../formRuleWalk'
+import { walkRules, collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps, collectContainerTargets, type RuleLike } from '../formRuleWalk'
 
 /**
  * 主表单 schema：
@@ -256,5 +256,47 @@ describe('formRuleWalk — ensureRuleProps（setRule 前递归补齐 rule.props�
 
   it('undefined 输入返回空数组', () => {
     expect(ensureRuleProps(undefined)).toEqual([])
+  })
+})
+describe('collectContainerTargets：动作链容器 target 候选', () => {
+  const container = (field: string, dataSourceId: string, extra: Record<string, any> = {}): RuleLike => ({
+    type: 'formContainer',
+    field,
+    title: '员工编辑',
+    props: { dataSourceId, tabTitle: '编辑员工', rule: [{ type: 'input', field: 'name' }], ...extra },
+  })
+
+  it('候选值 = 容器地址（field），展示名取节点 title（不是弹窗标题 tabTitle）', () => {
+    const got = collectContainerTargets([container('FC1', 'dsForm')])
+    expect(got).toEqual([{ field: 'FC1', title: '员工编辑', dataSourceId: 'dsForm' }])
+  })
+
+  it('无节点 title 时兜底「表单容器」，不借用弹窗标题 tabTitle', () => {
+    const got = collectContainerTargets([
+      { type: 'formContainer', field: 'FC2', props: { dataSourceId: 'dsOrder', tabTitle: '订单详情弹窗' } },
+      { type: 'formContainer', field: 'FC3', props: { dataSourceId: 'dsOrder' } },
+    ])
+    expect(got.map((c) => c.title)).toEqual(['表单容器', '表单容器'])
+  })
+
+  it('穿透布局 children 与子表单 props.rule（与运行时提取范围一致）', () => {
+    const got = collectContainerTargets([
+      { type: 'row', children: [container('FC1', 'ds1')] },
+      { type: 'group', props: { rule: [container('FC2', 'ds2')] } },
+    ])
+    expect(got.map((c) => c.field)).toEqual(['FC1', 'FC2'])
+  })
+
+  it('未绑数据源 / 无地址的容器不进候选（运行时不会被提取）', () => {
+    const got = collectContainerTargets([
+      { type: 'formContainer', field: 'FC1', props: {} },
+      { type: 'formContainer', props: { dataSourceId: 'ds2' } },
+    ])
+    expect(got).toEqual([])
+  })
+
+  it('容器内层嵌套容器不进候选（外层已整体移出主树，内层同样不被提取）', () => {
+    const got = collectContainerTargets([container('FC1', 'ds1', { rule: [container('FC2', 'ds2')] })])
+    expect(got.map((c) => c.field)).toEqual(['FC1'])
   })
 })

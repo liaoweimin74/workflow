@@ -744,6 +744,30 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
   })
 
+  it('open-container 的 target 填容器地址（field）时按地址精确打开', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_addr',
+        title: '数据容器',
+        props: { dataSourceId: 'ds_addr', displayMode: 'dialog', rule: [] },
+      } as unknown as Rule,
+    ]
+    const actions = [
+      { trigger: 'row-edit', source: 'ds_addr', steps: [{ op: 'open-container', target: 'fc_addr' }] },
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions })
+    await nextTick()
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'r1' }, row: { id: 'r1' }, source: 'ds_addr' })
+    await nextTick()
+    expect(consumed).toBe(true)
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
+  })
+
   it('newTab 容器也注册进弹窗列表，容器 displayMode 优先于 step（step 存 dialog 仍按 newTab 派发）', async () => {
     const containerRule: Rule[] = [
       {
@@ -773,7 +797,8 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     // 容器 newTab 优先 → 派发 open-new-tab 事件（而非打开弹窗）
     const fired = wrapper.emitted('open-new-tab') as any[] | undefined
     expect(fired!.length).toBe(emittedBefore + 1)
-    expect(fired![fired!.length - 1][0]).toBe('ds_1')
+    // 深链载荷 = 容器地址（节点 field），落地页按它寻址容器
+    expect(fired![fired!.length - 1][0]).toBe('fc_tab')
     expect(fired![fired!.length - 1][1]).toBe('r9')
     // 不打开弹窗
     expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(false)
@@ -815,7 +840,7 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     const containers = (Array.isArray(setupState?.containers)
       ? setupState.containers
       : []) as Array<{ key: string; visible: boolean; formData: Record<string, unknown> }>
-    const c = containers.find((x: any) => x.key === 'ds_inline')
+    const c = containers.find((x: any) => x.key === 'fc_inline')
     expect(c).toBeTruthy()
     expect(c!.visible).toBe(true)
     expect(c!.formData.name).toBe('张三')
@@ -860,7 +885,7 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     const containers = (Array.isArray(setupState?.containers)
       ? setupState.containers
       : []) as Array<{ key: string; visible: boolean; formData: Record<string, unknown> }>
-    const c = containers.find((x: any) => x.key === 'ds_in2')
+    const c = containers.find((x: any) => x.key === 'fc_inline2')
     expect(c).toBeTruthy()
     expect(c!.visible).toBe(true)
     expect(c!.formData.city).toBe('北京')

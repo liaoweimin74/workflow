@@ -925,7 +925,7 @@ function handleActionClick(btn: any, row: any) {
     if (consumed) return
   }
   // 无事件 → 默认行为
-  // 存在同数据源的数据容器 → 打开容器表单（自动关联，无需动作链）；否则本地默认表单
+  // 存在同数据源的表单容器 → 打开容器表单（自动关联，无需动作链）；否则本地默认表单
   const dsId = props.dataSourceId
   const linked = actionBus?.hasLinkedContainer?.(dsId)
   if (btn.key === 'create') {

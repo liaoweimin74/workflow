@@ -229,8 +229,7 @@ const {
   containers,
   dialogContainers: dialogOnlyContainers, // dialog+drawer+newTab 容器（模板 el-dialog/el-drawer 渲染；newTab 落地页以弹窗回显）
   inlineContainers,                       // inline 容器（模板页内区域渲染：点击显示、可关闭、有按钮）
-  containerModes,
-  findContainer,
+  findByDsId,
   extractContainers,
   openContainer,
   loadRecord: loadContainerRecord,
@@ -250,11 +249,11 @@ const {
     },
   },
   openNewTab: (c, rid) => emit('open-new-tab', c.key, rid),
-  findComponent: (key) => componentRefs.get(key),
+  findComponent: (dataSourceId) => componentRefs.get(dataSourceId),
   onCustomAction: (c, btn) => ElMessage.info(`自定义按钮：${btn.label}`),
   // 联动容器展示方式/尺寸以数据表格配置为准（formMode 映射 + viewDetail.width/height）
-  resolveContainerStyle: (target) => {
-    const props = tableViewConfigs[target]
+  resolveContainerStyle: (dataSourceId) => {
+    const props = tableViewConfigs[dataSourceId]
     const detail = props?.viewDetail
     if (!detail) return undefined
     const fm = detail.formMode || 'popup'
@@ -684,13 +683,12 @@ function runStep(step: ActionStep, eventData: any, trigger?: string): boolean {
   const op = step.op
   const target = step.target
   if (op === 'open-container') {
-    // 容器 displayMode 优先（属性面板配置为准），step.displayMode 为兜底，默认 dialog
-    const mode = containerModes.get(target) || step.displayMode || 'dialog'
+    // target = 容器地址（rule.field）；显示方式由容器自身解析（表格配置为准，见 resolveContainerStyle）
     // 共享打开逻辑：dialog/inline 统一清空 formData + 显示 + 引擎 loadRecord；
     // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）；
     // row-view 触发 → 只读查看（字段禁用、仅关闭按钮）
     const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-    openContainer(target || '', rid, mode as any, trigger === 'row-view')
+    openContainer(target || '', rid, undefined, trigger === 'row-view')
     return true
   }
   if (op === 'load-record') {
@@ -748,10 +746,13 @@ const componentRefs = new Map<string, any>()
 /** 供表单内 PageDataTable 注入的动作总线 */
 provide('pageActionBus', {
   dispatch: dispatchAction,
-  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && !!findContainer(dataSourceId),
+  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && findByDsId(dataSourceId).length > 0,
   openLinkedContainer: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => {
+    // 自动关联按数据源取容器（此刻只有 dsId，没有地址可传）；同源多容器取画布靠前的一个
+    const c = findByDsId(dataSourceId)[0]
+    if (!c) return
     const rid = mode === 'create' ? '' : String(row?.id ?? '')
-    openContainer(dataSourceId, rid, containerModes.get(dataSourceId), mode === 'view')
+    openContainer(c, rid, undefined, mode === 'view')
   },
   register: (dataSourceId: string, instance: any) => {
     componentRefs.set(dataSourceId, instance)

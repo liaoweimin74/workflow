@@ -876,7 +876,7 @@ function handleConfirm() {
   color: var(--el-text-color-secondary);
   cursor: help;
 }
-/* 数据容器配置：label 独占一行并左对齐，控件占满下一行 */
+/* 表单容器配置：label 独占一行并左对齐，控件占满下一行 */
 .container-form :deep(.el-form-item__label) {
   display: flex;
   justify-content: flex-start;

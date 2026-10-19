@@ -52,6 +52,7 @@ vi.mock('element-plus', () => ({
 vi.mock('@element-plus/icons-vue', () => ({
   Plus: { template: '<span />', name: 'Plus' },
   InfoFilled: { template: '<span />', name: 'InfoFilled' },
+  Delete: { template: '<span />', name: 'Delete' },
 }))
 
 const mockDataSources: DataSourceDTO[] = [
@@ -445,5 +446,145 @@ describe('DataSourceConfigPanel', () => {
       '{source}',
     ])
     expect(getMetadataMock).not.toHaveBeenCalled()
+  })
+
+  // ==================== 容器类动作的 target（页面级总线也走容器寻址） ====================
+
+  /** 按 placeholder 取某个 select 的候选值 */
+  function optionValuesOf(wrapper: any, placeholder: string): string[] {
+    const sel = wrapper
+      .findAllComponents({ name: 'ElSelectStub' })
+      .find((s: any) => s.props('placeholder') === placeholder)
+    expect(sel, `未找到 placeholder=${placeholder} 的 select`).toBeTruthy()
+    return sel!.findAll('option').map((o: any) => o.attributes('value'))
+  }
+
+  const containerProps = {
+    dataSources: [{ id: 'dsForm', refId: 'g2' }],
+    containerTargets: [
+      { value: 'FC1', label: '编辑员工（FC1）' },
+      { value: 'FC2', label: '查看员工（FC2）' },
+    ],
+  }
+
+  it('容器类动作（open-container）的 target 下拉给画布容器候选，不再给数据源', () => {
+    const wrapper = mountPanel({
+      ...containerProps,
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: '' }] }],
+    })
+    expect(optionValuesOf(wrapper, '目标容器')).toEqual(['FC1', 'FC2'])
+  })
+
+  it('load-record / save-container / close-container 同属容器动作', () => {
+    for (const op of ['load-record', 'save-container', 'close-container']) {
+      const wrapper = mountPanel({
+        ...containerProps,
+        actions: [{ trigger: 'row-edit', steps: [{ op, target: '' }] }],
+      })
+      expect(optionValuesOf(wrapper, '目标容器'), op).toEqual(['FC1', 'FC2'])
+    }
+  })
+
+  it('非容器动作（refresh / set-filter）的 target 仍是数据源下拉', () => {
+    const wrapper = mountPanel({
+      ...containerProps,
+      actions: [{ trigger: 'row-click', steps: [{ op: 'refresh', target: 'dsForm' }] }],
+    })
+    expect(optionValuesOf(wrapper, '目标数据源')).toEqual(['dsForm'])
+  })
+
+  it('容器候选可搜索可手填（地址在人眼读不出时仍能贴进来）', () => {
+    const wrapper = mountPanel({
+      ...containerProps,
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'FC9' }] }],
+    })
+    const sel = wrapper
+      .findAllComponents({ name: 'ElSelectStub' })
+      .find((s: any) => s.props('placeholder') === '目标容器')!
+    expect(sel.props('filterable')).toBe(true)
+    expect(sel.props('allowCreate')).toBe(true)
+  })
+
+  it('无容器候选时容器动作不给数据源（避免又配一个打不开的 target）', () => {
+    const wrapper = mountPanel({
+      dataSources: [{ id: 'dsForm', refId: 'g2' }],
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: '' }] }],
+    })
+    expect(optionValuesOf(wrapper, '目标容器')).toEqual([])
+  })
+
+  it('新建动作默认 target 取第一个容器地址；无容器时回退第一个数据源', () => {
+    const withContainers = mountPanel({ ...containerProps, actions: [] })
+    ;(withContainers.vm as any).addAction()
+    expect((withContainers.vm as any).localActions[0].steps[0].target).toBe('FC1')
+
+    const withoutContainers = mountPanel({ dataSources: [{ id: 'dsForm', refId: 'g2' }], actions: [] })
+    ;(withoutContainers.vm as any).addAction()
+    expect((withoutContainers.vm as any).localActions[0].steps[0].target).toBe('dsForm')
+  })
+})
+
+describe('步骤参数宽度：只有最后一个参数占满行剩余宽度', () => {
+  const FILL = 'step-param-fill'
+
+  function selectClass(wrapper: any, placeholder: string): string {
+    const sel = wrapper
+      .findAllComponents({ name: 'ElSelectStub' })
+      .find((s: any) => s.props('placeholder') === placeholder)
+    expect(sel, `未找到 placeholder=${placeholder} 的 select`).toBeTruthy()
+    return sel!.element.className
+  }
+
+  const stepOf = (step: Record<string, any>) => ({
+    dataSources: [{ id: 'dsForm', refId: 'g2' }],
+    containerTargets: [{ value: 'FC1', label: '员工（FC1）' }],
+    actions: [{ trigger: 'row-edit', steps: [step] }],
+  })
+
+  it('单参数动作（open-container / refresh / save-record）：target 拉满', () => {
+    for (const step of [
+      { op: 'open-container', target: 'FC1' },
+      { op: 'close-container', target: 'FC1' },
+      { op: 'refresh', target: 'dsForm' },
+      { op: 'save-record', target: 'dsForm' },
+    ]) {
+      const wrapper = mountPanel(stepOf(step))
+      const placeholder = step.op.includes('container') ? '目标容器' : '目标数据源'
+      expect(selectClass(wrapper, placeholder), step.op).toContain(FILL)
+    }
+  })
+
+  it('三参数动作（set-filter）：只有末位 value 拉满，target/field 保持固定宽', () => {
+    const wrapper = mountPanel(stepOf({ op: 'set-filter', target: 'dsForm', field: 'status', value: '{row.id}' }))
+    expect(selectClass(wrapper, '目标数据源')).not.toContain(FILL)
+    expect(selectClass(wrapper, '过滤字段')).not.toContain(FILL)
+    // 唯一拉满的是行末的模板输入框
+    const filled = wrapper.findAll(`.step-row .${FILL}`)
+    expect(filled).toHaveLength(1)
+    expect(filled[0].classes()).toContain('expr-editor')
+  })
+
+  it('load-record：末位 recordId 拉满，容器 target 不拉满', () => {
+    const wrapper = mountPanel(stepOf({ op: 'load-record', target: 'FC1', recordId: '{row.id}' }))
+    expect(selectClass(wrapper, '目标容器')).not.toContain(FILL)
+    const filled = wrapper.findAll(`.step-row .${FILL}`)
+    expect(filled).toHaveLength(1)
+    expect(filled[0].classes()).toContain('expr-editor')
+  })
+})
+
+describe('动作行（触发器+来源）参数宽度', () => {
+  const FILL = 'step-param-fill'
+
+  it('来源数据源是动作行最后一个控件，拉满剩余宽度；触发器保持定宽', () => {
+    const wrapper = mountPanel({
+      dataSources: [{ id: 'dsTable', refId: 'g1' }],
+      actions: [{ trigger: 'row-click', source: 'dsTable', steps: [{ op: 'refresh', target: 'dsTable' }] }],
+    })
+    const selects = wrapper.findAll('.action-row select')
+    expect(selects).toHaveLength(2) // 触发器 + 来源
+    expect(selects[1].classes()).toContain(FILL)
+    const filled = wrapper.findAll(`.action-row .${FILL}`)
+    expect(filled).toHaveLength(1)
   })
 })

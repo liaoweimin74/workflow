@@ -48,7 +48,7 @@ export type BusStepField = 'target' | 'field' | 'value' | 'recordId'
 /** 单个总线动作步骤 */
 export interface ActionStep {
   op: BusOp
-  /** 目标数据源标识 */
+  /** 目标：数据组件动作填数据源标识；容器动作填容器地址（表单容器的 field），填数据源标识或留空则取该数据源关联的首个容器 */
   target: string
   /** set-filter / set-value 的字段名 */
   field?: string
@@ -234,7 +234,7 @@ export interface CellClickConfig {
   actions: EventAction[]
 }
 
-/** 参数值的输入形态：free=单行文本（$row./$param. 模板）；script=多行代码编辑器；target=容器数据源标识（候选来自设计器上下文，仍可手填） */
+/** 参数值的输入形态：free=单行文本（$row./$param. 模板）；script=多行代码编辑器；target=容器地址（候选来自设计器画布内的表单容器，仍可手填数据源标识） */
 export type ChainParamKind = 'free' | 'script' | 'target'
 
 /** 组件级动作的能力声明 */
@@ -317,7 +317,7 @@ export const CHAIN_ACTIONS: ChainActionMeta[] = [
     delegated: true,
     paramKeys: ['target'],
     paramKinds: { target: 'target' },
-    paramHint: 'target 为容器数据源标识，留空则用本组件自身数据源',
+    paramHint: 'target 填容器地址（同源第 2、3 个容器靠它区分），留空则打开本组件数据源关联的容器',
   },
   {
     value: 'close-container',

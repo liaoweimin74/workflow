@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { appendGeneratedRules, buildFieldRule } from '../useDataSourceCrud'
 
-describe('buildFieldRule（数据容器按字段生成组件）', () => {
+describe('buildFieldRule（表单容器按字段生成组件）', () => {
   it('componentType 存在时优先作为 rule.type（数据引用 dataPicker）', () => {
     const rule = buildFieldRule({ key: 'user_id', label: '所属用户', columnType: 'VARCHAR', componentType: 'dataPicker' })
     expect(rule.type).toBe('dataPicker')

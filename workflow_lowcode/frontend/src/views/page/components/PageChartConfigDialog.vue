@@ -32,7 +32,7 @@
               <el-option v-for="o in aggOptionsOf(row.key)" :key="o.value" :label="o.label" :value="o.value" />
             </el-select>
             <el-input v-model="row.label" placeholder="显示名（可选，用于图例/系列名）" style="width: 30%" />
-            <el-button type="danger" link @click="removeMeasure(i)">删除</el-button>
+            <el-button type="danger" link :icon="Delete" aria-label="删除指标" title="删除" @click="removeMeasure(i)" />
           </div>
           <el-button type="primary" link @click="addMeasure">+ 添加指标</el-button>
         </div>
@@ -73,6 +73,7 @@
  * 校验：维度列与至少一条有效指标齐备才可确认（确定按钮禁用，无需 ElMessage 打断）。
  */
 import { computed, reactive, watch } from 'vue'
+import { Delete } from '@element-plus/icons-vue'
 import DashSizeFields from '@/views/dashboard/components/DashSizeFields.vue'
 import { clampDashSpan } from '@/views/dashboard/components/dash-shared'
 import { aggregateOptionsOf } from './tableEnhance'

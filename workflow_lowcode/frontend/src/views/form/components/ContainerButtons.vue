@@ -19,7 +19,7 @@
 import type { LinkageContainer } from '@/views/form/composables/useLinkageContainer'
 
 /**
- * 共享数据容器按钮区（表单设计器与页面设计器的 dialog / inline 容器复用）。
+ * 共享表单容器按钮区（表单设计器与页面设计器的 dialog / inline 容器复用）。
  * 触发容器行为：new/copy/delete/cancel/confirm（默认按钮）与 custom（自定义按钮）。
  * footer 区是否渲染由调用方用 hasContainerButtons() 判断，不在此组件内。
  */

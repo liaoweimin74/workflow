@@ -83,7 +83,7 @@
       @confirm="handleLookupConfirm"
     />
 
-    <!-- 数据容器/数据表格 数据源配置 -->
+    <!-- 表单容器/数据表格 数据源配置 -->
     <DsBindingConfigDialog
       v-model="containerDialogVisible"
       :current-fields="currentFieldKeys"
@@ -116,6 +116,7 @@
         :enabledDataSources="enabledDataSources"
         :actions="formActions"
         :row-fields="currentFieldKeys"
+        :container-targets="containerTargetOptions"
         @update:dataSources="updateFormDataSources"
         @update:actions="updateFormActions"
       />
@@ -153,7 +154,7 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, collectFormulaRefFields, collectContainerTargets, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
 import { appendGeneratedRules } from '@/composables/useDataSourceCrud'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
@@ -246,6 +247,14 @@ const selectedPickerField = ref<string>('')
 
 /** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择），穿透子表内部 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
+
+/** 画布内表单容器候选：值=容器地址（表单容器节点的 field），总线容器类动作的 target 选它 */
+const containerTargetOptions = computed(() =>
+  collectContainerTargets(designerRule.value).map((c) => ({
+    value: c.field,
+    label: `${c.title}（${c.field}）`,
+  })),
+)
 
 /** 当前表单所有字段 {field,title}（供下拉候选显示中文名称），穿透子表内部 */
 const currentFieldOptions = computed<{ field: string; title?: string }[]>(() => collectFieldOptions(designerRule.value))
@@ -917,7 +926,7 @@ function handleLookupConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据源配置已保存')
 }
 
-// ===== 数据容器（formContainer）数据源配置 =====
+// ===== 表单容器（formContainer）数据源配置 =====
 const containerDialogVisible = ref(false)
 const currentContainerProps = computed<Record<string, any>>(() => {
   const active = designerRef.value?.activeRule as any
@@ -934,13 +943,13 @@ function handleContainerConfirm(newProps: Record<string, any>) {
   if (generateColumns?.length > 0 && active) {
     // 按字段生成组件：getRule→追加→setRule 重建画布（经 vendor makeRule 包装，生成组件可选中配置）
     const { added, skipped } = appendGeneratedRules(designerRef.value as any, active?._fc_id, generateColumns)
-    ElMessage.success(skipped > 0 ? `数据容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `数据容器配置已保存，已生成 ${added} 个字段组件`)
+    ElMessage.success(skipped > 0 ? `表单容器配置已保存，已生成 ${added} 个字段组件（跳过 ${skipped} 个已存在）` : `表单容器配置已保存，已生成 ${added} 个字段组件`)
     return
   }
-  ElMessage.success('数据容器配置已保存')
+  ElMessage.success('表单容器配置已保存')
 }
 
-/** 当前选中数据容器子树内已存在的字段 key（配置弹窗禁选判定） */
+/** 当前选中表单容器子树内已存在的字段 key（配置弹窗禁选判定） */
 const containerFieldKeys = computed<string[]>(() => {
   const active = designerRef.value?.activeRule as any
   if (!active || (active.type !== 'formContainer' && active.type !== 'FcRow')) return []

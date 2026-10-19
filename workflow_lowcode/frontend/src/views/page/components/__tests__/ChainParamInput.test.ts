@@ -89,26 +89,26 @@ describe('ChainParamInput', () => {
     wrapper.unmount()
   })
 
-  it('target 形态渲染容器候选下拉（可搜索可手建），选定 emit 数据源标识', async () => {
+  it('target 形态渲染容器候选下拉（可搜索可手建），选定 emit 容器地址', async () => {
     setChainParamContextProvider(() => ({
       containerTargets: [
-        { value: 'ds_a', label: '订单表（ds_a）' },
-        { value: 'ds_b', label: '客户表（ds_b）' },
+        { value: 'FC1', label: '订单编辑（FC1）' },
+        { value: 'FC2', label: '订单查看（FC2）' },
       ],
       rowFields: [],
     }))
-    const wrapper = createWrapper({ kind: 'target', modelValue: 'ds_a' })
+    const wrapper = createWrapper({ kind: 'target', modelValue: 'FC1' })
     await nextTick()
     const select = wrapper.find('.el-select')
     expect(select.exists()).toBe(true)
     // filterable 实现下选中标签渲染在 .el-select__placeholder（input 只承载过滤输入）
-    expect(select.find('.el-select__placeholder').text()).toBe('订单表（ds_a）')
+    expect(select.find('.el-select__placeholder').text()).toBe('订单编辑（FC1）')
     await select.trigger('click')
     await nextTick()
     const opts = [...document.querySelectorAll('.el-select-dropdown__item')].map((o) =>
       o.textContent?.trim(),
     )
-    expect(opts).toEqual(['订单表（ds_a）', '客户表（ds_b）'])
+    expect(opts).toEqual(['订单编辑（FC1）', '订单查看（FC2）'])
     wrapper.unmount()
   })
 

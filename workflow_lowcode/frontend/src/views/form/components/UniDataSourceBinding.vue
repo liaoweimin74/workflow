@@ -36,7 +36,7 @@
             <el-option v-for="field in currentFields" :key="field" :label="field" :value="field" />
           </el-select>
           <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
-          <el-button type="danger" link @click="draft.filterRows.splice(index, 1)">删除</el-button>
+          <el-button type="danger" link :icon="Delete" aria-label="删除筛选条件" title="删除" @click="draft.filterRows.splice(index, 1)" />
         </div>
         <el-button type="primary" link style="margin-top: 8px" @click="addFilter">+ 添加筛选条件</el-button>
       </div>
@@ -46,7 +46,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, Delete } from '@element-plus/icons-vue'
 import { columnOptionLabel } from '@/utils/columnOption'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'

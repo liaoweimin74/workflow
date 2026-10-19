@@ -54,7 +54,7 @@
                 <el-select v-model="row.target" placeholder="回填到当前表单字段" style="width: 40%">
                   <el-option v-for="f in fieldOptions" :key="f.field" :label="f.label" :value="f.field" />
                 </el-select>
-                <el-button type="danger" link @click="form.returnFieldsRows.splice(i, 1)">删除</el-button>
+                <el-button type="danger" link :icon="Delete" aria-label="删除回填映射" title="删除" @click="form.returnFieldsRows.splice(i, 1)" />
               </div>
               <el-button type="primary" link @click="form.returnFieldsRows.push({ source: '', target: '' })">+ 添加映射</el-button>
               <span class="form-tip">选中记录后把数据源字段值回填到当前表单字段</span>
@@ -73,6 +73,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import { Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { ColumnConfigItem } from '@/api/bizData'
 import { dataSourceApi } from '@/api/data-source'

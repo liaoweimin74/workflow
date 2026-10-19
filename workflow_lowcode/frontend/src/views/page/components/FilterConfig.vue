@@ -28,7 +28,7 @@
           <el-option label="不为空" value="isNotEmpty" />
         </el-select>
         <el-input v-model="row.value" placeholder="固定值" style="width: 35%" />
-        <el-button type="danger" link @click="removeCondition(i)">删除</el-button>
+        <el-button type="danger" link :icon="Delete" aria-label="删除筛选条件" title="删除" @click="removeCondition(i)" />
       </div>
     </div>
 
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, nextTick, watch } from 'vue'
+import { Delete } from '@element-plus/icons-vue'
 import { columnOptionLabel } from '@/utils/columnOption'
 
 interface FilterCondition {

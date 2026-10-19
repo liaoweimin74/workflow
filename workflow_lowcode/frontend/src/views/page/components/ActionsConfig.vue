@@ -54,9 +54,15 @@
                 >
                   <el-option v-for="a in actionTypeOptions" :key="a.value" :label="a.label" :value="a.value" />
                 </el-select>
-                <el-button class="event-action-remove" type="danger" link @click="removeEventAction(row.key, ai)">
-                  移除动作
-                </el-button>
+                <el-button
+                  class="event-action-remove"
+                  type="danger"
+                  link
+                  :icon="Delete"
+                  aria-label="移除动作"
+                  title="移除动作"
+                  @click="removeEventAction(row.key, ai)"
+                />
               </div>
 
               <!-- 参数区由动作契约驱动：固定参数只读参数名，只有 set-filter 这类动态参数动作可增删 -->
@@ -96,10 +102,11 @@
                     class="param-remove"
                     link
                     type="danger"
+                    :icon="Delete"
+                    aria-label="删除参数"
+                    title="删除参数"
                     @click="removeEventParam(row.key, ai, pi)"
-                  >
-                    删
-                  </el-button>
+                  />
                 </div>
                 <el-button
                   v-if="paramsEditable(action.type)"
@@ -210,9 +217,7 @@
       </el-table-column>
       <el-table-column label="操作" width="80" align="center">
         <template #default="{ row }">
-          <el-button  type="danger" link :icon="Delete" @click="removeButton(row.key)">
-            删除
-          </el-button>
+          <el-button link type="danger" :icon="Delete" aria-label="删除行内按钮配置" title="删除" @click="removeButton(row.key)" />
         </template>
       </el-table-column>
     </el-table>

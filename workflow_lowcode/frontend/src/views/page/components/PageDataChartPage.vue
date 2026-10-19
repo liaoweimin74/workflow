@@ -1,5 +1,5 @@
 <template>
-  <div class="page-chart" :class="{ 'is-fixed-height': fixedHeight }" :style="layoutStyle">
+  <div class="page-chart" :class="{ 'is-fixed-height': fixedHeight, 'is-fill-height': fillHeight }" :style="layoutStyle">
     <!-- 可选标题行 -->
     <div v-if="title" class="page-chart-title">{{ title }}</div>
     <!-- 已配置：交 PageDataChart 渲染（空数据/加载态/空态文案由其内部处理） -->
@@ -43,7 +43,7 @@ import { normalizeChartConfig, CHART_AGGS, type ViewChartConfig } from './chartD
 import type { PageChartConfig, PageChartMeasure } from './pageChartConfig'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { dashSpanGapStyle, dashHeightStyle } from '@/views/dashboard/components/dash-shared'
+import { dashSpanGapStyle, dashHeightStyle, isDashFillHeight } from '@/views/dashboard/components/dash-shared'
 import type { DataSourceBindingContext } from '@/components/business/types'
 
 const props = withDefaults(
@@ -95,6 +95,7 @@ const actionBus = inject<
 // ==================== 宽高布局（与仪表盘组件族同一套档位与语义） ====================
 
 const fixedHeight = computed(() => !!dashHeightStyle(props.height))
+const fillHeight = computed(() => isDashFillHeight(props.height))
 const layoutStyle = computed<Record<string, string>>(() => ({
   ...dashSpanGapStyle(props.span),
   ...(dashHeightStyle(props.height) || {}),

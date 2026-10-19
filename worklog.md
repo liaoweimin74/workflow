@@ -9248,3 +9248,19 @@ Stage Summary:
 - 重供给累计 90 次（本窗口 r107-r145 共 33 次），全部单轮恢复；零 mvn 74 次
 - 双 recover 并发十九连现
 - 治本修复待授权
+
+---
+Task ID: r146
+Agent: ops-patrol
+Task: 2026-10-19 21:05 cron 巡检
+
+Work Log:
+- dump 首跑 OK 但 auth=no such table → 重供给 #91
+- 双 recover 并发第二十次连续出现（PID 1053 + 1249）→ pkill → 重拼 md5 e369839b ✓
+- timeout 180 recover rc=0 真绿；四测全过；40s 复验 200×4 真绿
+- 内存 3.57GB 超 3.5GB 线；收口 dump 推送 ✓
+
+Stage Summary:
+- 重供给累计 91 次（本窗口 r107-r146 共 34 次），全部单轮恢复；零 mvn 75 次
+- 双 recover 并发二十连现
+- 治本修复待授权

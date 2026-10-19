@@ -82,10 +82,12 @@ import MarkdownIt from 'markdown-it'
 interface DocItem { label: string; file: string }
 interface DocGroup { title: string; items: DocItem[] }
 
+const HOME_FILE = 'README.md'
+
 const DOC_GROUPS: DocGroup[] = [
   {
     title: '总览',
-    items: [{ label: '帮助首页', file: 'README.md' }],
+    items: [{ label: '帮助首页', file: HOME_FILE }],
   },
   {
     title: '开发手册',
@@ -119,7 +121,7 @@ const DOC_GROUPS: DocGroup[] = [
 const route = useRoute()
 const router = useRouter()
 
-const currentFile = ref<string>((route.query.doc as string) || 'README.md')
+const currentFile = ref<string>((route.query.doc as string) || HOME_FILE)
 const rawMarkdown = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -241,7 +243,7 @@ let pendingAnchor: string | null = null
 
 watch(currentFile, (file) => {
   sectionsCollapsed.value = false
-  router.replace({ query: { ...route.query, doc: file === 'README.md' ? undefined : file } })
+  router.replace({ query: { ...route.query, doc: file === HOME_FILE ? undefined : file } })
   load(file)
 }, { immediate: true })
 </script>

@@ -7,14 +7,15 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'Login',
     component: () => import('@/views/login/LoginPage.vue'),
-    meta: { title: '登录' }
+    meta: { title: '登录', public: true }
   },
   {
-    // 帮助文档：独立全屏页（工具栏帮助图标新标签打开），固定入口不进 sys_menu、无需授权
+    // 帮助文档：独立全屏页（工具栏帮助图标新标签打开），固定入口不进 sys_menu
+    // meta.public：白名单路由，未登录直接可见（页面只读 public 下的静态 Markdown，不打业务接口）
     path: '/help',
     name: 'HelpCenter',
     component: () => import('@/views/help/HelpCenterPage.vue'),
-    meta: { title: '帮助文档', fullScreen: true }
+    meta: { title: '帮助文档', fullScreen: true, public: true }
   },
   {
     path: '/designer',
@@ -296,25 +297,26 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, _from, next) => {
+  // 白名单（meta.public）：免登录直达，也不因拉取用户信息失败被踢回登录页
+  if (to.meta.public) {
+    next()
+    return
+  }
   const token = localStorage.getItem('access_token')
-  if (to.name !== 'Login' && !token) {
+  if (!token) {
     next({ name: 'Login' })
     return
   }
-  if (token) {
-    const authStore = useAuthStore()
-    if (!authStore.user) {
-      try {
-        await authStore.fetchUserInfo()
-        await authStore.fetchMenus()
-      } catch {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        if (to.name !== 'Login') {
-          next({ name: 'Login' })
-          return
-        }
-      }
+  const authStore = useAuthStore()
+  if (!authStore.user) {
+    try {
+      await authStore.fetchUserInfo()
+      await authStore.fetchMenus()
+    } catch {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      next({ name: 'Login' })
+      return
     }
   }
   next()

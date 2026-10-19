@@ -10,6 +10,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录' }
   },
   {
+    // 帮助文档：独立全屏页（工具栏帮助图标新标签打开），固定入口不进 sys_menu、无需授权
+    path: '/help',
+    name: 'HelpCenter',
+    component: () => import('@/views/help/HelpCenterPage.vue'),
+    meta: { title: '帮助文档', fullScreen: true }
+  },
+  {
     path: '/designer',
     name: 'ProcessDesigner',
     component: () => import('@/views/designer/ProcessDesigner.vue'),

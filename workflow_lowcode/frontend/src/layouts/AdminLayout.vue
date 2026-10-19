@@ -82,6 +82,10 @@ function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
 
+function openHelpDocs() {
+  window.open(router.resolve({ path: '/help' }).href, '_blank')
+}
+
 function addTag(to: { path: string; meta?: { title?: string }; name?: string }) {
   // 优先使用菜单名称（菜单打开的路由标题=菜单名），回退路由 meta.title
   const menuPath = findMenuPath(authStore.menus, to.path)
@@ -331,6 +335,15 @@ onUnmounted(() => {
             </button>
           </div>
         </el-popover>
+        <!-- 帮助文档：新标签打开独立全屏页，不进菜单、无需授权 -->
+        <button
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
+          title="帮助文档"
+          aria-label="帮助文档"
+          @click="openHelpDocs"
+        >
+          <el-icon :size="18"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></el-icon>
+        </button>
         <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />

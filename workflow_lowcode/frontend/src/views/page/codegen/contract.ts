@@ -152,6 +152,12 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       filterable: { emit: 'drop', kind: 'ignored-by-runtime', note: '无运行时消费者' },
       designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器态标记' },
     },
+    /**
+     * 产物接管按钮语义的开关：为真时组件把 action/toolbar 按钮只 emit `button-click`，
+     * 不再派发 pageActionBus、也不再弹组件自带的兜底表单（那份表单按数据源业务表单生成，
+     * 跟页面配的容器不是同一个）。必须与 list.events 里的 button-click 成对出现。
+     */
+    constAttrs: { externalActions: true },
   },
   formContainer: {
     tag: 'el-drawer',
@@ -298,7 +304,10 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'page-list-cards',
     runtime: true,
     list: {
-      events: [{ on: 'row-click', handler: 'onRowClick' }],
+      events: [
+        { on: 'row-click', handler: 'onRowClick' },
+        { on: 'button-click', handler: 'onButtonClick' },
+      ],
       // 组件没有 defineExpose，产物拿不到 refresh()
       expose: 'none',
     },
@@ -329,12 +338,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       viewEvents: { emit: 'default', value: [], note: '空事件组不落模板' },
       designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器态标记' },
     },
-    requires: [
-      {
-        key: 'viewActions',
-        note: '卡片按钮不走 emit，组件内部 dispatch 到 pageActionBus（PageDataCards.vue:480）并把打开容器交给 hasLinkedContainer/openLinkedContainer(:464)；产物是裸 SFC 没有总线，按钮语义要人重写',
-      },
-    ],
+    constAttrs: { externalActions: true },
   },
 }
 

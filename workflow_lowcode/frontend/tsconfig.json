@@ -16,12 +16,14 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@lc/runtime/*": ["./src/lc-runtime/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
   "exclude": [
     "src/**/*.test.ts",
-    "src/views/page/codegen/__tests__/spike-contract/**"
+    "src/views/page/codegen/__tests__/spike-contract/**",
+    "src/views/page/codegen/probe/**"
   ]
 }

@@ -103,7 +103,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       // FcDesigner 使用项目内 vendor 源码（支持表单配置页签 formConfigExtra slot 扩展）
-      '@form-create/designer': path.resolve(__dirname, 'src/vendor')
+      '@form-create/designer': path.resolve(__dirname, 'src/vendor'),
+      // 【真机探测 spike，未合并】出码产物按 @lc/runtime/<tag> 引用 runtime 组件，
+      // @lc/runtime 包尚未抽出，先由 src/lc-runtime/ shim 指向现网真实组件
+      '@lc/runtime': path.resolve(__dirname, 'src/lc-runtime')
     }
   },
   server: {

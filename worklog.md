@@ -9315,3 +9315,18 @@ Work Log:
 Stage Summary:
 - 重供给累计 #94；零 mvn 78 次；全绿 200×4 真绿，内存 3.27GB，oom 0
 - dump-db 有效性检测首次实际拦截污染快照，机制有效
+
+---
+Task ID: r155-r158
+Agent: cron-ops-loop
+Task: 2026-10-20 07:05~10:05 四轮巡检（r155-r157 沙箱 3 连失败空窗 + r158 catchup）
+
+Work Log:
+- r155(07:05) r156(08:05) r157(09:05)：沙箱连续 3 轮失败（累计第 15-17 次），零执行，每轮回复建议重启会话
+- r158(10:05)：沙箱恢复。dump OK 但 push FAILED；四链路 200×4 但 auth=no such table → 重供给 #95（标准重置态：vite 1188/node index.ts/bun 占位，无 java，内存 3.28GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1446 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + rebase 后 push 成功（上轮 FAILED 补推闭环）
+
+Stage Summary:
+- 重供给累计 #95；零 mvn 79 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+- 沙箱 3 连失败第二次出现（模式与 r147-r150 相同），重启建议持续未被采纳

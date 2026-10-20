@@ -9455,3 +9455,17 @@ Work Log:
 
 Stage Summary:
 - 事件累计 #104；零 mvn 88 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+
+---
+Task ID: r173-r175
+Agent: cron-ops-loop
+Task: 2026-10-21 01:05~03:05 三轮巡检（r173-r174 沙箱 2 连失败空窗 + r175 catchup）
+
+Work Log:
+- r173(01:05) r174(02:05)：沙箱连续 2 轮失败（累计第 23-24 次），零执行
+- r175(03:05)：沙箱恢复。dump OK 20261020-190545；四链路 200×4 但 auth=no such table → 事件 #105（标准重供给：vite 1177/mariadb 1258/node index.ts 1278/bun 1108，无 java，内存 3.28GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1454 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 事件累计 #105；零 mvn 89 次；全绿 200×4 真绿，内存 3.28GB，oom 0

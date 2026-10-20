@@ -9358,3 +9358,17 @@ Work Log:
 Stage Summary:
 - 重供给累计 #97；零 mvn 81 次；全绿 200×4 真绿，内存 3.05GB（回落），oom 0
 - 冷启动等待 apt 完成再 recover 的时序处理模式首次应用，recover 最快一次（<5s 完成检测+拉起）
+
+---
+Task ID: r161-r163
+Agent: cron-ops-loop
+Task: 2026-10-20 13:05~15:05 三轮巡检（r161-r162 沙箱 2 连失败空窗 + r163 catchup）
+
+Work Log:
+- r161(13:05) r162(14:05)：沙箱连续 2 轮失败（累计第 18-19 次），零执行
+- r163(15:05)：沙箱恢复。dump OK 20261020-070546；四链路 200×4 但 auth=no such table → 重供给 #98（vite 1221/node index.ts/bun 占位，无 java，内存 3.28GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1446 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 重供给累计 #98；零 mvn 82 次；全绿 200×4 真绿，内存 3.28GB，oom 0

@@ -13,7 +13,7 @@ import java.util.Set;
  * <p>与 {@link BizDataQueryRequest} 的关系：filter/keyword/keywordColumn 语义完全一致；
  * 分页字段被 {@code group/agg/metric/timeGrain/limit} 取代（聚合结果不是行集，不翻页）。
  */
-public class AggregateRequest {
+public class AggregateRequest implements FilterAware {
 
     /** 允许的聚合函数（闭集，控制器层校验后透传；对齐 Node {@code AGGREGATE_FNS}）。 */
     public static final Set<String> AGGREGATE_FNS = Set.of("count", "sum", "avg", "max", "min");

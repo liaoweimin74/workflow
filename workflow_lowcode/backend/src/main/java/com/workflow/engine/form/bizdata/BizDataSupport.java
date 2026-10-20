@@ -16,9 +16,12 @@ import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.framework.security.domain.LoginUser;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -249,7 +252,7 @@ public class BizDataSupport {
         merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
-                ctx.tableName(), ctx.columnKeys(), merged, tenantId);
+                ctx.tableName(), ctx.columnKeys(), merged, tenantId, currentUserId());
         jdbcTemplate.update(insert.sql(), insert.params().toArray());
 
         // 子表行写入（随主表创建批量插入）
@@ -746,6 +749,15 @@ public class BizDataSupport {
      * 解析 filter JSON 字符串为筛选 Map。空/空白返回空 Map，非法 JSON 抛 400。
      */
     @SuppressWarnings("unchecked")
+    /** 当前登录用户 id（写入 created_by，供数据范围 SELF 过滤；无登录态返回 null）。 */
+    private String currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser && loginUser.getUserId() != null) {
+            return String.valueOf(loginUser.getUserId());
+        }
+        return null;
+    }
+
     private Map<String, Object> parseFilter(String filterJson) {
         if (filterJson == null || filterJson.isBlank()) {
             return Map.of();

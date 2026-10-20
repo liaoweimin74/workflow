@@ -66,6 +66,8 @@ public class LoginUserService {
                 .filter(p -> p != null && !p.isEmpty())
                 .collect(Collectors.toSet());
 
-        return new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true);
+        LoginUser loginUser = new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true);
+        loginUser.setOrgId(user.getOrgId());
+        return loginUser;
     }
 }

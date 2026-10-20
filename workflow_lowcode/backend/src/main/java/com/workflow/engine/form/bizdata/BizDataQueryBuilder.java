@@ -16,8 +16,13 @@ import java.util.Set;
  */
 public final class BizDataQueryBuilder {
 
-    /** 内置可排序/可查询列 */
-    private static final Set<String> BUILTIN_COLUMNS = Set.of("id", "created_at", "updated_at");
+    /**
+     * 内置可排序/可查询列（所有 wf_biz_* 主表固定列，不属于业务列配置）。
+     * <p>{@code created_by} 在册是数据范围 SELF 的前提：{@code DataScopeService} 注入的
+     * {@code created_by = 当前用户} 条件要经 {@link #validateColumn} 校验；
+     * 写入侧不受影响（{@code filterData} 只认业务列，客户端无法伪造 created_by）。
+     */
+    private static final Set<String> BUILTIN_COLUMNS = Set.of("id", "created_at", "updated_at", "created_by");
 
     private static final Set<String> ALLOWED_ORDER = Set.of("asc", "desc");
 
@@ -247,7 +252,7 @@ public final class BizDataQueryBuilder {
      * 生成 INSERT。仅插入白名单列 + tenant_id + version，值全参数化。
      */
     public static SqlAndParams buildInsert(String tableName, List<String> allowedColumns,
-                                           Map<String, Object> data, String tenantId) {
+                                           Map<String, Object> data, String tenantId, String createdBy) {
         Map<String, Object> safeData = filterData(allowedColumns, data);
 
         StringBuilder cols = new StringBuilder("INSERT INTO ").append(tableName)
@@ -257,6 +262,13 @@ public final class BizDataQueryBuilder {
         params.add(java.util.UUID.randomUUID().toString().replace("-", ""));
         params.add(tenantId);
         params.add(1);
+
+        // 归属人由服务端写入（数据范围 SELF 依赖此列）；业务列白名单不含 created_by，客户端伪造值已被 filterData 丢弃
+        if (createdBy != null && !createdBy.isBlank()) {
+            cols.append(", created_by");
+            placeholders.append(", ?");
+            params.add(createdBy);
+        }
 
         for (Map.Entry<String, Object> e : safeData.entrySet()) {
             cols.append(", ").append(e.getKey());

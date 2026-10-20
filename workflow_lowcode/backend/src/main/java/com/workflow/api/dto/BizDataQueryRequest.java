@@ -3,7 +3,7 @@ package com.workflow.api.dto;
 /**
  * 业务数据查询请求。
  */
-public class BizDataQueryRequest {
+public class BizDataQueryRequest implements FilterAware {
 
     /** 字段筛选（JSON 字符串：{"column":"value"}，仅接受 column_config 中的字段） */
     private String filter;

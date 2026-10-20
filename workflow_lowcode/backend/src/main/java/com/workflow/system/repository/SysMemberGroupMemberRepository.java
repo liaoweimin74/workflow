@@ -20,6 +20,9 @@ public interface SysMemberGroupMemberRepository extends JpaRepository<SysMemberG
     /** 组内全部有效成员关系。 */
     List<SysMemberGroupMember> findByGroupIdAndIsDeleted(Long groupId, Integer isDeleted);
 
+    /** 某用户的全部有效成员关系（数据范围按成员组匹配主体用）。 */
+    List<SysMemberGroupMember> findByUserIdAndIsDeleted(Long userId, Integer isDeleted);
+
     /** 批量取多个组的有效成员关系（列表页成员数统计，避免 N+1）。 */
     List<SysMemberGroupMember> findByGroupIdInAndIsDeleted(Collection<Long> groupIds, Integer isDeleted);
 

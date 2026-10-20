@@ -13,6 +13,8 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.datasource.scope.DataScopeAction;
+import com.workflow.engine.datasource.scope.DataScopeService;
 import com.workflow.engine.form.bizdata.JoinSqlGenerator;
 import com.workflow.engine.form.bizdata.JoinTargetCatalog;
 import com.workflow.engine.form.bizdata.SqlTemplateEngine;
@@ -81,6 +83,7 @@ public class DataSourceDefinitionService {
     private final TenantProvider tenantProvider;
     private final ObjectMapper objectMapper;
     private final List<DataSourceAdapter> adapters;
+    private final DataScopeService dataScopeService;
 
     /**
      * @param adapters Spring 自动注入所有 DataSourceAdapter bean（无则空列表）
@@ -90,13 +93,15 @@ public class DataSourceDefinitionService {
                                        PageDefinitionRepository pageRepository,
                                        TenantProvider tenantProvider,
                                        ObjectMapper objectMapper,
-                                       List<DataSourceAdapter> adapters) {
+                                       List<DataSourceAdapter> adapters,
+                                       DataScopeService dataScopeService) {
         this.dsRepository = dsRepository;
         this.formDefRepository = formDefRepository;
         this.pageRepository = pageRepository;
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
         this.adapters = adapters == null ? List.of() : adapters;
+        this.dataScopeService = dataScopeService;
     }
 
     /**
@@ -383,16 +388,19 @@ public class DataSourceDefinitionService {
         if (req == null) {
             req = new BizDataQueryRequest();
         }
+        dataScopeService.applyRead(id, req);
         return adapterOf(id).query(getById(id), req);
     }
 
     /**
      * 数据源分组聚合分发（Task 119 仪表盘；经适配器 SPI）。
+     * <p>聚合与列表同源受控：范围注入在这里施加，否则仪表盘 KPI/图表可绕过数据范围统计全量。
      */
     public AggregateResultVO aggregateData(String id, AggregateRequest req) {
         if (req == null) {
             req = new AggregateRequest();
         }
+        dataScopeService.applyRead(id, req);
         return adapterOf(id).aggregate(getById(id), req);
     }
 
@@ -404,9 +412,20 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 数据源单条查询分发。
+     * 数据源单条查询分发（受读范围约束）。
+     *
+     * <p>只收列表不收单条等于「翻不到但能按 id 直读」，所以命中范围条件时改用
+     * 带条件的按 id 查询；不在范围内按 404 处理——不区分「不存在」与「无权读」，
+     * 免得接口变成一个探测行存在性的探针。
      */
     public BizDataVO getData(String id, String rowId) {
+        if (isRowScoped(id, DataScopeAction.READ)) {
+            BizDataVO scoped = findScopedRecord(id, rowId, DataScopeAction.READ);
+            if (scoped == null) {
+                throw new BusinessException(404, "记录不存在或无权访问: " + rowId);
+            }
+            return scoped;
+        }
         return adapterOf(id).get(getById(id), rowId);
     }
 
@@ -418,17 +437,59 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 数据源修改分发。
+     * 数据源修改分发（受写范围约束：不在范围内的行改不到）。
      */
     public void updateData(String id, String rowId, Map<String, Object> data, Integer version) {
+        requireRowWritable(id, rowId);
         adapterOf(id).update(getById(id), rowId, data, version);
     }
 
     /**
-     * 数据源删除分发。
+     * 数据源删除分发（受写范围约束）。
      */
     public void deleteData(String id, String rowId) {
+        requireRowWritable(id, rowId);
         adapterOf(id).delete(getById(id), rowId);
+    }
+
+    /**
+     * 写范围校验：命中 WRITE 条件时用「带条件的按 id 查询」确认归属，查不到即 403。
+     *
+     * <p>读范围与写范围同时存在时是叠加（交集）：改一条看不见的行没有意义。
+     * 新增不做行校验——新行还没有归属可比，归功能权限（菜单/按钮）管。
+     */
+    private void requireRowWritable(String id, String rowId) {
+        if (!isRowScoped(id, DataScopeAction.WRITE)) {
+            return;
+        }
+        if (findScopedRecord(id, rowId, DataScopeAction.WRITE) == null) {
+            throw new BusinessException(403, "无权修改或删除该记录（不在数据范围内）: " + rowId);
+        }
+    }
+
+    /** 当前用户在该数据源上是否存在生效的范围条件（无登录态/管理员/无规则 = false）。 */
+    private boolean isRowScoped(String id, DataScopeAction action) {
+        return !dataScopeService.conditionFor(id, action).isEmpty();
+    }
+
+    /** 带范围条件按 id 取一行；取不到返回 null。复用查询分发，条件叠加路径与实际查询完全一致。 */
+    private BizDataVO findScopedRecord(String id, String rowId, DataScopeAction action) {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter(idFilterJson(rowId));
+        req.setSize(1);
+        dataScopeService.apply(id, action, req);
+        BizDataPageVO page = queryData(id, req);
+        List<BizDataVO> records = page == null ? null : page.getRecords();
+        return records == null || records.isEmpty() ? null : records.get(0);
+    }
+
+    /** id 等值筛选 JSON（走序列化，不拼接字符串：rowId 来自路径参数，可能是任意字符）。 */
+    private String idFilterJson(String rowId) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("id", rowId == null ? "" : rowId));
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "数据范围校验条件构造失败");
+        }
     }
 
     /** 按数据源类型找适配器（数据源须 ENABLED） */

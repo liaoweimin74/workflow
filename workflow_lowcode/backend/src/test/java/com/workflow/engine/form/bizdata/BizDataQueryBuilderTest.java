@@ -78,12 +78,49 @@ class BizDataQueryBuilderTest {
     void buildInsert_whitelistsColumns_andForcesTenant() {
         Map<String, Object> data = Map.of("dept", "研发部", "name", "张三", "evil", "x");
         BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildInsert(
-                "wf_biz_biz_leave", COLUMNS, data, "t1");
+                "wf_biz_biz_leave", COLUMNS, data, "t1", "200");
 
         assertThat(sp.sql()).contains("INSERT INTO wf_biz_biz_leave");
         assertThat(sp.sql()).contains("dept", "name", "tenant_id", "version");
         assertThat(sp.sql()).doesNotContain("evil");
         assertThat(sp.params()).contains("研发部", "张三", "t1", 1);
+    }
+
+    @Test
+    void buildInsert_writesCreatedBy_forDataScopeSelf() {
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildInsert(
+                "wf_biz_biz_leave", COLUMNS, Map.of("name", "张三"), "t1", "200");
+
+        assertThat(sp.sql()).contains("created_by");
+        assertThat(sp.params()).contains("200");
+    }
+
+    @Test
+    void buildInsert_ignores_client_supplied_created_by() {
+        // 客户端把 created_by 放进 payload 必须被白名单丢弃，否则可冒充他人归属绕过 SELF 范围
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildInsert(
+                "wf_biz_biz_leave", COLUMNS, Map.of("created_by", "999"), "t1", "200");
+
+        assertThat(sp.sql()).contains("created_by");
+        assertThat(sp.params()).doesNotContain("999");
+        assertThat(sp.params()).contains("200");
+    }
+
+    @Test
+    void buildInsert_withoutCreatedBy_keepsColumnOmitted() {
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildInsert(
+                "wf_biz_biz_leave", COLUMNS, Map.of("name", "张三"), "t1", null);
+
+        assertThat(sp.sql()).doesNotContain("created_by");
+    }
+
+    @Test
+    void buildSelect_allows_created_by_filter_forSelfScopeInjection() {
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of("created_by", "200"), null, null, "created_by", "asc", 0, 20);
+
+        assertThat(sp.sql()).contains("created_by = ?");
+        assertThat(sp.params()).contains("200");
     }
 
     @Test

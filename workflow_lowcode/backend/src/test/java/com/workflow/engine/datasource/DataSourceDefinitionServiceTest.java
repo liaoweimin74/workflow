@@ -3,11 +3,15 @@ package com.workflow.engine.datasource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.workflow.api.dto.AggregateRequest;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
+import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.datasource.scope.DataScopeAction;
+import com.workflow.engine.datasource.scope.DataScopeService;
 import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
@@ -19,12 +23,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -56,6 +62,9 @@ class DataSourceDefinitionServiceTest {
     @Mock
     private DataSourceAdapter formAdapter;
 
+    @Mock
+    private DataScopeService dataScopeService;
+
     private ObjectMapper objectMapper = new ObjectMapper();
     private DataSourceDefinitionService service;
 
@@ -71,7 +80,7 @@ class DataSourceDefinitionServiceTest {
         lenient().when(formAdapter.supports("SYSTEM")).thenReturn(false);
         lenient().when(formAdapter.supports("API")).thenReturn(false);
         service = new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
-                tenantProvider, objectMapper, List.of(formAdapter));
+                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService);
     }
 
     @AfterEach
@@ -434,6 +443,123 @@ class DataSourceDefinitionServiceTest {
 
         assertNotNull(vo);
         verify(formAdapter).query(eq(ds), any(BizDataQueryRequest.class));
+    }
+
+    @Test
+    void queryData_appliesDataScope_beforeHandingToAdapter() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        service.queryData(DS_ID, req);
+
+        InOrder order = inOrder(dataScopeService, formAdapter);
+        order.verify(dataScopeService).applyRead(DS_ID, req);
+        order.verify(formAdapter).query(eq(ds), same(req));
+    }
+
+    @Test
+    void aggregateData_appliesDataScope_soDashboardsCannotBypassIt() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        AggregateRequest req = new AggregateRequest();
+
+        service.aggregateData(DS_ID, req);
+
+        verify(dataScopeService).applyRead(DS_ID, req);
+    }
+
+    // ==================== 单条读取与写路径的范围门禁 ====================
+
+    @Test
+    void getData_unscoped_delegatesToAdapterDirectly() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ)).thenReturn(Map.of());
+        BizDataVO row = new BizDataVO();
+        when(formAdapter.get(ds, "r1")).thenReturn(row);
+
+        assertSame(row, service.getData(DS_ID, "r1"));
+    }
+
+    @Test
+    void getData_outsideReadScope_returns404_not_a_probe_of_existence() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
+                .thenReturn(Map.of("created_by", "200"));
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
+
+        BusinessException e = assertThrows(BusinessException.class, () -> service.getData(DS_ID, "r1"));
+
+        assertEquals(404, e.getCode());
+        verify(formAdapter, never()).get(any(), any());
+    }
+
+    @Test
+    void getData_insideReadScope_returns_the_scoped_row() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
+                .thenReturn(Map.of("created_by", "200"));
+        BizDataVO row = new BizDataVO();
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(row), 1, 0, 20));
+
+        assertSame(row, service.getData(DS_ID, "r1"));
+    }
+
+    @Test
+    void updateData_outsideWriteScope_returns403_and_never_reaches_adapter() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE))
+                .thenReturn(Map.of("created_by", "200"));
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.updateData(DS_ID, "r1", Map.of("k", "v"), null));
+
+        assertEquals(403, e.getCode());
+        verify(formAdapter, never()).update(any(), any(), any(), any());
+    }
+
+    @Test
+    void updateData_insideWriteScope_proceeds() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE))
+                .thenReturn(Map.of("created_by", "200"));
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(new BizDataVO()), 1, 0, 20));
+
+        service.updateData(DS_ID, "r1", Map.of("k", "v"), null);
+
+        verify(formAdapter).update(eq(ds), eq("r1"), any(), any());
+    }
+
+    @Test
+    void deleteData_withoutWriteScopeRule_is_not_gated() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE)).thenReturn(Map.of());
+
+        service.deleteData(DS_ID, "r1");
+
+        verify(formAdapter).delete(ds, "r1");
+        verify(formAdapter, never()).query(any(), any());
     }
 
     // ==================== WORKFLOW 启用校验 ====================

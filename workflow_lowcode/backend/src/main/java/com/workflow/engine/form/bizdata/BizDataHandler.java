@@ -108,6 +108,10 @@ public interface BizDataHandler {
     /**
      * 覆盖查询。仅当 {@link #overridesQuery()} 返回 true 时被调用。
      *
+     * <p>数据范围（DataScope）由服务端注入在 {@code req.getFilter()} 里，接管查询的实现必须把该
+     * filter 透传给通用查询（如 {@code support.queryGeneric(formKey, req)}）；自行构造条件而丢弃
+     * filter 等于绕过范围，越权读取。
+     *
      * @return 分页查询结果
      */
     default BizDataPageVO query(BizDataQueryRequest req) {

@@ -17,6 +17,9 @@ public class LoginUser implements UserDetails {
     private Set<String> permissions;
     private Boolean enabled;
 
+    /** 所属组织 id（sys_user.org_id）；数据范围 {orgId} 模板取值来源，可为 null。 */
+    private Long orgId;
+
     public LoginUser(Long userId, String username, String password,
                      List<String> roles, Set<String> permissions, Boolean enabled) {
         this.userId = userId;
@@ -30,6 +33,8 @@ public class LoginUser implements UserDetails {
     public Long getUserId() { return userId; }
     public List<String> getRoles() { return roles; }
     public Set<String> getPermissions() { return permissions; }
+    public Long getOrgId() { return orgId; }
+    public void setOrgId(Long orgId) { this.orgId = orgId; }
 
     @Override
     public String getUsername() { return username; }

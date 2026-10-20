@@ -6,6 +6,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 import DataSourceListPage from '../DataSourceListPage.vue'
 import VisualQueryBuilder from '../components/VisualQueryBuilder.vue'
 import SqlEditor from '../components/SqlEditor.vue'
@@ -52,6 +54,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
   CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
   QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
+  Lock: { name: 'Lock', render: () => h('span', '🔒') },
 }))
 
 vi.mock('vue-router', () => ({
@@ -77,15 +80,20 @@ const SearchTableStub = defineComponent({
 })
 
 describe('DataSourceListPage', () => {
+  /** 活动 pinia 与注入 app 的必须是同一实例，测试里改 authStore 才影响页面 */
+  let pinia: ReturnType<typeof createPinia>
+
   beforeEach(() => {
     vi.clearAllMocks()
+    pinia = createPinia()
+    setActivePinia(pinia)
   })
 
   function createWrapper() {
     return mount(DataSourceListPage, {
       global: {
-        plugins: [ElementPlus],
-        stubs: { SearchTable: SearchTableStub },
+        plugins: [ElementPlus, pinia],
+        stubs: { SearchTable: SearchTableStub, DataScopeDialog: true },
         directives: { permission: { mounted() {} } },
       },
     })
@@ -152,6 +160,29 @@ describe('DataSourceListPage', () => {
     const dataBtn = actionButtons.find((b: any) => b.label === '数据管理')
     await dataBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'ENABLED', name: '报表' })
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'DataSourceData', params: { id: 'ds-1' } })
+    wrapper.unmount()
+  })
+
+  it('数据范围：仅管理员可见，点击打开配置弹窗并带上该数据源', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const scopeBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '数据范围')
+
+    // 未登录（authStore.user 为空）不摆按钮——后端本就 403
+    expect(scopeBtn.show({ id: 'ds-1' })).toBe(false)
+
+    const auth = useAuthStore()
+    auth.user = { id: 1, username: 'admin', roles: ['ROLE_ADMIN'] } as any
+    expect(scopeBtn.show({ id: 'ds-1' })).toBe(true)
+
+    await scopeBtn.onClick({ id: 'ds-1', name: '订单' })
+    await nextTick()
+    const dialog = wrapper.findComponent({ name: 'DataScopeDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect((dialog.props('dataSource') as any).id).toBe('ds-1')
     wrapper.unmount()
   })
 

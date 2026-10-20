@@ -598,6 +598,10 @@
           </div>
         </div>
       </div>
+
+    <!-- 数据范围配置（管理员）：规则按数据源存放，弹窗内自带生效预览。
+         v-if 而非仅隐藏：el-dialog 关闭态仍会渲染 el-overlay，破坏本页「表单用内嵌覆盖层」的形态 -->
+    <DataScopeDialog v-if="scopeVisible" v-model="scopeVisible" :data-source="scopeDataSource" />
    </div>
 </template>
 
@@ -607,7 +611,7 @@ defineOptions({ name: 'DataSourceList' })
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid, Lock } from '@element-plus/icons-vue'
 import { clearHttpCache } from '@/utils/http'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
@@ -618,9 +622,21 @@ import { formApi, type FormDefinitionDTO } from '@/api/form'
 import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
 import SqlEditor from './components/SqlEditor.vue'
 import FormJoinConfig, { type FormJoinConfigValue, type JoinConfigItem } from './components/FormJoinConfig.vue'
+import DataScopeDialog from './components/DataScopeDialog.vue'
 import { SYSTEM_JOIN_TARGET_KEYS } from './components/joinColumns'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+/**
+ * 是否管理员（与后端 DataScopeController.requireAdmin 同口径：ROLE_ADMIN / admin code，
+ * 或 username='admin'）。服务端仍会 403，这里只是不摆一个必红的按钮。
+ */
+const isAdmin = computed(() => {
+  const u = authStore.user
+  if (!u) return false
+  return u.username === 'admin' || (u.roles ?? []).some((r) => r === 'admin' || r === 'ROLE_ADMIN')
+})
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
 /** 已发布业务表单（FORM 类型 formKey 下拉候选） */
@@ -1652,6 +1668,15 @@ function openView(row: DataSourceDTO) {
   }
 
 // ========== 操作按钮 ==========
+/** 数据范围配置弹窗（管理员专用；规则挂在数据源上，与数据源编辑互不覆盖） */
+const scopeVisible = ref(false)
+const scopeDataSource = ref<DataSourceDTO | null>(null)
+
+function openScope(row: DataSourceDTO): void {
+  scopeDataSource.value = row
+  scopeVisible.value = true
+}
+
 /** API 和 SQL 类型可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看；
  *  系统内建数据源（tenantId=system，随应用启动预置）只读且不可删改/禁用 */
 const actionButtons: ActionButton[] = [
@@ -1666,6 +1691,12 @@ const actionButtons: ActionButton[] = [
     permission: 'data-source:manage',
     show: (row: any) => row.type !== 'WORKFLOW',
     onClick: (row: any) => router.push({ name: 'DataSourceData', params: { id: row.id } }),
+  },
+  {
+    label: '数据范围',
+    icon: Lock,
+    show: () => isAdmin.value,
+    onClick: (row: any) => openScope(row),
   },
   {
     label: '编辑',

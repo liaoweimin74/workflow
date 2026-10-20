@@ -632,9 +632,15 @@ const BUTTON_TRIGGER: Record<string, { trigger: string; readonly: boolean; mode:
 
 const HANDLED_TRIGGERS = ['row-edit', 'row-view', 'row-create']
 
-/** 列表组件的刷新调用：没暴露 refresh 就别出假接线，留一行 lc:todo 给人看 */
+const NO_REFRESH_TODO = 'lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状）'
+
+/** 语句位的刷新调用：没暴露 refresh 就别出假接线，留一行注释给人看 */
 export const refreshCall = (refName: string | null | undefined): string =>
-  refName ? `${refName}.value?.refresh()` : `/* lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状） */`
+  refName ? `${refName}.value?.refresh()` : `// ${NO_REFRESH_TODO}`
+
+/** 回调位（删除后刷新）：注释不是表达式，箭头后只剩注释会把产物打成非法 TS，得包成空块 */
+export const refreshThen = (refName: string | null | undefined): string =>
+  refName ? `${refName}.value?.refresh()` : `{ /* ${NO_REFRESH_TODO} */ }`
 
 function planBehaviors(
   schema: any,
@@ -690,7 +696,10 @@ function planBehaviors(
     if (!(listOf(lp.node.type)?.events || []).some((e) => e.on === 'button-click')) continue
     const buttons: any[] = schema.rule?.[idx]?.props?.viewActions?.buttons || []
     for (const btn of buttons) {
-      if (Array.isArray(btn?.events) && btn.events.length) {
+      // 链里真配了动作才算动作链（对齐组件 handleActionClick 的 some(actions.length>0)）：
+      // 面板保存过但没配动作的空链不代表自定义语义，把它当链吞掉就等于内建按钮不接线
+      const hasChain = (btn?.events || []).some((ev: any) => (ev?.actions || []).length > 0)
+      if (hasChain) {
         ctx.unsupported.push({
           path: `${lp.node.rulePath}.props.viewActions.buttons(${btn.key}).events`,
           type: lp.node.type,
@@ -703,7 +712,7 @@ function planBehaviors(
       if (!map) {
         if (btn.key === 'delete') {
           switchCases.push(
-            `    case 'delete':\n      if (row?.id != null) void deleteData(String(row.id)).then(() => ${refreshCall(refreshTarget)})\n      return`,
+            `    case 'delete':\n      if (row?.id != null) void deleteData(String(row.id)).then(() => ${refreshThen(refreshTarget)})\n      return`,
           )
         } else {
           ctx.unsupported.push({
@@ -849,23 +858,34 @@ function assembleVue(args: {
     L.push('')
   }
   const explicit = args.behaviors.filter((x) => x.origin.startsWith('actions['))
-  L.push('// ==================== lc:behavior ← schema.actions ====================')
-  L.push(`// 原形态：${JSON.stringify(explicit.map((x) => ({ trigger: x.trigger, source: x.source, steps: x.steps })))}`)
-  L.push('// target 填数据源标识 → 出码时解引用成具体容器（同源画布靠前的容器），运行期不再查表')
-  L.push('function onButtonClick(payload: { key: string; row: Record<string, unknown> | null }) {')
-  L.push('  const row = payload.row')
-  L.push('  switch (payload.key) {')
-  switchCases.forEach((c) => L.push(c))
-  L.push('  }')
-  L.push('}')
-  L.push('')
-  L.push('function onRowClick(_row: Record<string, unknown>) {')
-  L.push('  // schema.actions 无 row-click 触发的动作链 → 空实现，保留挂点供人工接管')
-  L.push('}')
-  L.push('')
-  L.push('function onSelectionChange(_rows: Record<string, unknown>[]) {')
-  L.push('  // 无关联动作')
-  L.push('}')
+  // handler 只出产物真绑得到的：组件没那个 emit（卡片的 selection-change）还留空函数，
+  // 就是 vue-tsc 里的 TS6133 孤儿 —— 看着有挂点，实际没人调
+  const boundHandlers = new Set(
+    listPlans.flatMap((lp) => (listOf(lp.node.type)?.events || []).map((e) => e.handler)),
+  )
+  if (boundHandlers.has('onButtonClick')) {
+    L.push('// ==================== lc:behavior ← schema.actions ====================')
+    L.push(`// 原形态：${JSON.stringify(explicit.map((x) => ({ trigger: x.trigger, source: x.source, steps: x.steps })))}`)
+    L.push('// target 填数据源标识 → 出码时解引用成具体容器（同源画布靠前的容器），运行期不再查表')
+    L.push('function onButtonClick(payload: { key: string; row: Record<string, unknown> | null }) {')
+    L.push('  const row = payload.row')
+    L.push('  switch (payload.key) {')
+    switchCases.forEach((c) => L.push(c))
+    L.push('  }')
+    L.push('}')
+    L.push('')
+  }
+  if (boundHandlers.has('onRowClick')) {
+    L.push('function onRowClick(_row: Record<string, unknown>) {')
+    L.push('  // schema.actions 无 row-click 触发的动作链 → 空实现，保留挂点供人工接管')
+    L.push('}')
+    L.push('')
+  }
+  if (boundHandlers.has('onSelectionChange')) {
+    L.push('function onSelectionChange(_rows: Record<string, unknown>[]) {')
+    L.push('  // 无关联动作')
+    L.push('}')
+  }
   L.push('</script>')
   L.push('')
   L.push('<style scoped>')

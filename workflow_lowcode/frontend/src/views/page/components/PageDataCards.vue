@@ -102,6 +102,12 @@ const props = withDefaults(defineProps<{
   /** 卡片操作区位置 */
   actionsPlacement?: 'top' | 'bottom' | 'right'
   designMode?: boolean
+  /**
+   * 按钮语义交给宿主：为真时 action/toolbar 按钮一律 emit `button-click`，
+   * 既不派发到 pageActionBus，也不弹组件自带的兜底表单（那份表单按数据源业务
+   * 表单生成 rule，跟页面配的容器不是同一个）。运行态渲染器不传，行为不变。
+   */
+  externalActions?: boolean
   stretch?: boolean
   /** 内置主题模板 */
   theme?: CardTheme
@@ -116,6 +122,8 @@ const emit = defineEmits<{
   (e: 'row-click', row: any): void
   (e: 'loaded', rows: any[]): void
   (e: 'ready', instance: any): void
+  /** externalActions 模式下按钮的唯一出口 */
+  (e: 'button-click', payload: { key: string; label: string; row: Record<string, unknown> | null }): void
 }>()
 
 const route = useRoute()
@@ -439,6 +447,11 @@ const LINKAGE_TRIGGERS: Record<string, string> = {
 }
 
 function handleActionClick(action: { key: string; label: string; events?: any[] }, row: any) {
+  // 宿主接管按钮（出码产物）：必须在事件链之前，否则组件内仍会把链跑一遍造成双执行
+  if (props.externalActions) {
+    emit('button-click', { key: action.key, label: action.label, row: row ?? null })
+    return
+  }
   // 有绑定事件且链里实际配了动作 → 优先执行事件链（内建/自定义都一样，对齐 PageDataTable）；
   // 空链（面板保存了但没配动作）视为未配置，不能吞掉按钮，落回总线联动/默认行为
   if ((action.events || []).some((ev: any) => (ev.actions || []).length > 0)) {

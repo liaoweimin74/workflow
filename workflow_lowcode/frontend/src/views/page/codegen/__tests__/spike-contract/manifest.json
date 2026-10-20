@@ -309,16 +309,20 @@
   ],
   "dataSources": [
     {
+      "path": "dataSources[0]",
       "id": "ds_mu2jhb3n",
       "refId": "20f476f047ca4386bfd1365ea5516832",
       "apiModule": "api/test-page",
-      "searchFields": [
-        "code",
-        "name",
-        "dept"
+      "bindings": [
+        "rule[0]",
+        "rule[1]"
       ],
-      "dropped": [
-        "name"
+      "warnings": [
+        {
+          "kind": "no-consumer",
+          "path": "dataSources[0].name",
+          "message": "设计器里的数据源显示名，运行期取数只认 refId"
+        }
       ]
     }
   ],

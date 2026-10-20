@@ -142,7 +142,9 @@ function parseArtifact(source: string): Template {
         if (String(p.name).startsWith('lc:')) continue
         map[camel(p.name)] = { expr: p.value?.content ?? '', static: true }
       } else if (p.type === 7) {
-        const arg = p.arg?.content ?? p.arg?.name
+        // v-model 在 AST 里没有 arg（指令名即 model），不补这一笔就匹配不到字段自己的元素，
+        // 回导会退回文档里第一个 el-form-item —— 容器多字段时 label 全部错位
+        const arg = p.arg?.content ?? p.arg?.name ?? (p.name === 'model' ? 'model' : undefined)
         if (!arg || String(arg).startsWith('lc:')) continue
         if (p.name === 'bind' && p.modifiers?.isDynamic) continue
         map[camel(arg)] = { expr: String(p.exp?.content ?? '').trim(), static: false, event: p.name === 'on' }
@@ -218,6 +220,7 @@ function resolveExpr(expr: string, consts: Record<string, unknown>): unknown {
     }
     return inner
   }
+  if (e === '[]') return []
   const arr = e.match(/^\[(.*)\]$/)
   if (arr) return arr[1].split(',').map((x) => resolveExpr(x, consts))
   const member = e.match(/^(\w+)\.(\w+)$/)
@@ -292,14 +295,16 @@ export function reverseToSchema(
     const rp = node.rulePath
     const rel = (p: string) => join(rp, p)
     // 1) 组件节点：模板上的属性/事件绑定即原始证据（容器与 el-form 的证据靠登记表搬运）
-    if (node.host?.ref && node.host.tag !== 'el-form') {
+    if ((node.host?.ref || node.propsFrom === 'bindings') && node.host.tag !== 'el-form') {
       const b = t.bindings(elFor(node))
       const props: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(b)) {
-        if (k === 'ref') continue
+        // ref 是产物接线；model 是 v-model，schema 侧的值落在 form 上，都不是 props
+        if (k === 'ref' || k === 'model') continue
         props[k] = v.event ? { __handler__: v.expr } : v.static ? v.expr : resolveExpr(v.expr, t.consts)
       }
-      setPath(rebuilt, rel('props'), props)
+      // 元素上什么都没绑（schema 也没 props）就别造一个空对象出来，那是多造
+      if (Object.keys(props).length) setPath(rebuilt, rel('props'), props)
     }
     if (Array.isArray(getPath(schema, rel('props.rule'))) && getPath(rebuilt, rel('props.rule')) === undefined) {
       setPath(rebuilt, rel('props.rule'), [])
@@ -317,7 +322,8 @@ export function reverseToSchema(
       renameChecks.push({ path: fromAbs, to: r.to, ok: JSON.stringify(v) === JSON.stringify(schemaV), artifact: v, schema: schemaV })
       setPath(rebuilt, fromAbs, v)
       renamedFrom.add(fromAbs)
-      if (r.to.startsWith('props.')) moves.push(rel(r.to))
+      // 同名登记（props.showSearch → props.showSearch）的证据就是它自己：剥掉等于把刚读回来的值删了
+      if (r.to.startsWith('props.') && r.to !== r.from) moves.push(rel(r.to))
       if (r.evidence) moves.push(rel(r.evidence))
     }
     for (const m of moves) delPath(rebuilt, m)
@@ -331,16 +337,20 @@ export function reverseToSchema(
     }
   }
 
-  // 数据源：id 优先取锚点（容器把数据源标识只写在锚点里），否则取表格回导出的 dataSourceId；
-  // refId 来自 script 常量，name 只在设计期存在
-  const dsAnchor = manifest.nodes.map((n) => t.anchors[n.id]?.ds).find(Boolean)
-  const dsIdFromRule = manifest.nodes.map((n) => getPath(rebuilt, join(n.rulePath, 'props.dataSourceId'))).find(Boolean)
-  rebuilt.dataSources = [{ id: dsAnchor ?? dsIdFromRule, refId: (t.consts.ds as any)?.refId }]
+  // 数据源：整块读产物常量表 dataSources（字面量键序即 schema 数组序）。
+  // 证据在脚本里而不是登记表里 —— 手改表里的 refId，回读必须报差异。
+  const table = (t.consts.dataSources as Record<string, unknown> | undefined) || {}
+  rebuilt.dataSources = Object.entries(table).map(([id, refId]) => ({ id, refId }))
 
   // 总线动作：只还原 origin 声明的显式动作，implicit 兜底行为不回写 schema
+  // schema 无 source 的动作不兜空串补回，否则回导凭空多出一键
   rebuilt.actions = (manifest.behaviors || [])
     .filter((x) => x.origin.startsWith('actions['))
-    .map((x) => ({ trigger: x.trigger, source: x.source, steps: x.steps }))
+    .map((x) => {
+      const a: Record<string, unknown> = { trigger: x.trigger, steps: x.steps }
+      if (x.source !== undefined) a.source = x.source
+      return a
+    })
 
   const notEmitted = new Set<string>()
   for (const node of manifest.nodes) {
@@ -349,17 +359,16 @@ export function reverseToSchema(
   for (const b of manifest.behaviors || []) {
     for (const wn of b.warnings || []) if (dropKinds.has(wn.kind)) notEmitted.add(wn.path)
   }
+  // 数据源级丢弃：登记的就是页面级绝对路径，不再只认 dataSources[0] 的固定键名
+  for (const d of manifest.dataSources || []) {
+    for (const wn of d.warnings || []) if (dropKinds.has(wn.kind)) notEmitted.add(wn.path)
+  }
   const identityScopes = manifest.nodes.map((n) => ({ prefix: n.rulePath, leaves: new Set(n.dropped || []) }))
-  const dsDropped = new Set((manifest.dataSources[0]?.dropped || []).map((k) => `dataSources[0].${k}`))
 
   const holes: Hole[] = []
 
   const explainable = (path: string, exp: unknown): boolean => {
     if (notEmitted.has(path)) {
-      explained.drop++
-      return true
-    }
-    if (dsDropped.has(path)) {
       explained.drop++
       return true
     }

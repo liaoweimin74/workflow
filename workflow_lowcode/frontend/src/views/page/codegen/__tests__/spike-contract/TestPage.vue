@@ -59,6 +59,10 @@ import { queryData, getData, createData, updateData, deleteData } from './api/te
 
 // ==================== 数据源（schema.dataSources[]）====================
 const ds = { id: 'ds_mu2jhb3n', refId: '20f476f047ca4386bfd1365ea5516832' }
+// 逐源登记表：页面声明的几个源都在册（含未绑到组件的），人工补接线时按 id 取 refId
+const dataSources = {
+  'ds_mu2jhb3n': '20f476f047ca4386bfd1365ea5516832',
+}
 
 // ==================== 节点 n1：page-table（schema.rule[0].props）====================
 const tableRef = ref<InstanceType<typeof PageTable> | null>(null)

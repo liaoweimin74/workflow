@@ -41,17 +41,48 @@ export type AttrBy = 'containerSizeAttr'
 /** 反推依据 */
 export type DerivedBy = 'dsRefId' | 'containerDisplayMode' | 'containerHasForm' | 'footerConfirmButton' | 'footerCancelButton'
 
+/**
+ * 数据源记录（schema.dataSources[]）的落点。
+ * 它不是组件节点，进不了 TYPE_CONTRACTS，但同样要逐键登记 —— 只还原 dataSources[0]
+ * 就等于承认"其余源的 id/refId 出没出产物没人认领"。
+ */
+export type DataSourceEmit =
+  /** 落产物常量表 `const dataSources = { '<id>': '<refId>' }`，回导按字面量键序还原数组 */
+  | { emit: 'binding' }
+  /** 丢弃并登记原因 */
+  | { emit: 'drop'; kind: DropKind; note: string }
+
 export interface TypeContract {
   /** 产物标签；runtime 组件（page-table）或 EP 原生（el-drawer / el-input） */
   tag: string
   /** 是否保留 runtime 标签（false = 出成真模板） */
   runtime?: boolean
+  /**
+   * 字段控件：出 v-model="form.<field>"，产物元素上的属性即 schema props 的证据
+   * （回导侧对这些节点按绑定重建 props）。取代此前与 TYPE_CONTRACTS 并行的 FIELD_TAGS 表。
+   */
+  field?: true
+  /**
+   * 列表类 runtime 组件：产物要接的事件与容器形态来源。
+   * expose=none 表示组件没 defineExpose，产物拿不到 refresh()，保存后的刷新要人工接。
+   */
+  list?: { events: Array<{ on: string; handler: string }>; expose?: 'refresh' | 'none' }
   /** 容器类：标签与尺寸属性名由展示方式决定（数据表格的 viewDetail.formMode） */
   displayModeDriven?: boolean
   /** 节点自身键（type/field/title/display/... ，不在 props 里） */
   self?: Record<string, PropEmit>
   /** props 内键；路径支持数组下标模式：columns[].onCellClick */
   props: Record<string, PropEmit>
+  /**
+   * 产物侧固定接线属性：schema 里没有对应键（如 textarea 出 el-input type="textarea"）。
+   * 值写进模板，键名进 wireOnly 登记，回导剥离不报多造。
+   */
+  constAttrs?: Record<string, unknown>
+  /**
+   * 组件跑起来还缺的接线：出码按节点登记为 unsupported，属语义债（要改运行时/产物形态），
+   * 不是补契约能消的广度债 —— 混在一起就会把 emit 缺口的大小又读成零。
+   */
+  requires?: Array<{ key: string; note: string }>
 }
 
 /** form-create 结构键：取默认值时产物省略不写，回导按此补 */
@@ -66,10 +97,26 @@ export const STRUCT_DEFAULTS: Record<string, unknown> = {
 /** 出码丢弃的设计器身份键 */
 export const IDENTITY_KEYS = ['_fc_id', 'name', '_fc_drag_tag']
 
+/** 字段控件共有 self：type/field 进锚点，title 落 el-form-item 的 label */
+const FIELD_SELF: Record<string, PropEmit> = {
+  type: { emit: 'anchor', key: 'type' },
+  field: { emit: 'anchor', key: 'field' },
+  title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+}
+
 export const TYPE_CONTRACTS: Record<string, TypeContract> = {
+
   'page-table': {
     tag: 'page-table',
     runtime: true,
+    list: {
+      events: [
+        { on: 'row-click', handler: 'onRowClick' },
+        { on: 'button-click', handler: 'onButtonClick' },
+        { on: 'selection-change', handler: 'onSelectionChange' },
+      ],
+      expose: 'refresh',
+    },
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
@@ -135,19 +182,143 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
   input: {
     tag: 'el-input',
     runtime: false,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      placeholder: { emit: 'prop' },
+    },
+  },
+  textarea: {
+    tag: 'el-input',
+    runtime: false,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      rows: { emit: 'prop' },
+      placeholder: { emit: 'prop' },
+    },
+    // form-create 用 el-input + type=textarea 出多行；模板上这个 type 是产物侧接线，不是 schema props
+    constAttrs: { type: 'textarea' },
+  },
+  inputNumber: {
+    tag: 'el-input-number',
+    runtime: false,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      min: { emit: 'prop' },
+      max: { emit: 'prop' },
+      precision: { emit: 'prop' },
+    },
+  },
+  datePicker: {
+    tag: 'el-date-picker',
+    runtime: false,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      // props.type 是选择器形态（date/datetime/month…），与节点 type 同名不同层
+      type: { emit: 'prop' },
+      valueFormat: { emit: 'prop' },
+      placeholder: { emit: 'prop' },
+    },
+  },
+  dataPicker: {
+    tag: 'dataPicker',
+    runtime: true,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      // 选择器只认页面级数据源绑定 id，refId 由运行期从 activeDsBindings 解析
+      dataSourceId: { emit: 'prop' },
+      displayField: { emit: 'prop' },
+      searchColumns: { emit: 'prop' },
+      columns: { emit: 'prop' },
+      maxCount: { emit: 'prop' },
+      clearOnCascadeChange: { emit: 'default', value: false },
+      allowCreate: { emit: 'default', value: false },
+      detailReadonly: { emit: 'default', value: true },
+    },
+    requires: [
+      {
+        key: 'dataSourceId',
+        note: 'DataPicker 取 refId 走 activeDsBindings 模块级存储（DataPicker.vue:261-265），产物里没有页面绑定表；globalDataSourceId 才是可直接内联的入口，需把 dataSourceId 换算成 refId 后改出 global-data-source-id',
+      },
+    ],
+  },
+  LookupPicker: {
+    tag: 'LookupPicker',
+    runtime: true,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      dataSourceId: { emit: 'prop' },
+      displayField: { emit: 'prop' },
+      idField: { emit: 'prop' },
+      returnFields: { emit: 'prop' },
+      searchColumns: { emit: 'prop' },
+      columns: { emit: 'prop' },
+    },
+    requires: [
+      {
+        key: 'dataSourceId',
+        note: 'LookupPicker 只有 dataSourceId 一条入口，refId 全靠 activeDsBindings（LookupPicker.vue:111-117），无 globalDataSourceId 可用；产物要跑得先给组件加 refId prop 或在页面里注册绑定',
+      },
+      {
+        key: 'returnFields',
+        note: '带回靠 formCreateInject.api.setValue 写别的字段（含 idField），出码产物是裸 v-model 表单，没有 form-create 实例；需把带回写成 handler 里的显式赋值',
+      },
+    ],
+  },
+  'page-list-cards': {
+    tag: 'page-list-cards',
+    runtime: true,
+    list: {
+      events: [{ on: 'row-click', handler: 'onRowClick' }],
+      // 组件没有 defineExpose，产物拿不到 refresh()
+      expose: 'none',
+    },
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
-      title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+      title: { emit: 'default', value: '', note: '列表组件标题不落模板（PageDataCards 无 title prop）' },
     },
-    props: {},
+    props: {
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+      columns: { emit: 'prop' },
+      searchFields: { emit: 'default', value: [], note: '空搜索字段不落模板' },
+      sortableFields: { emit: 'prop' },
+      pageSize: { emit: 'default', value: 20, note: '等于组件默认值' },
+      pageSizes: { emit: 'default', value: [10, 20, 50], note: '等于组件默认值' },
+      pagination: { emit: 'default', value: true, note: '等于组件默认值' },
+      showSearch: { emit: 'default', value: false, note: '等于组件默认值' },
+      stretch: { emit: 'default', value: false, note: '等于组件默认值' },
+      cardMinWidth: { emit: 'default', value: 280, note: '等于组件默认值' },
+      collapsibleGroups: { emit: 'default', value: false, note: '等于组件默认值' },
+      groupBy: { emit: 'default', value: '', note: '空分组不落模板' },
+      actionsPlacement: { emit: 'prop' },
+      cardStyle: { emit: 'prop' },
+      viewActions: { emit: 'prop' },
+      viewDetail: { emit: 'prop' },
+      'viewDetail.formMode': { emit: 'derived', by: 'containerDisplayMode' },
+      'viewDetail.type': { emit: 'derived', by: 'containerHasForm' },
+      viewEvents: { emit: 'default', value: [], note: '空事件组不落模板' },
+      designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器态标记' },
+    },
+    requires: [
+      {
+        key: 'viewActions',
+        note: '卡片按钮不走 emit，组件内部 dispatch 到 pageActionBus（PageDataCards.vue:480）并把打开容器交给 hasLinkedContainer/openLinkedContainer(:464)；产物是裸 SFC 没有总线，按钮语义要人重写',
+      },
+    ],
   },
 }
 
-/** 字段控件类型 → EP 标签（首版只认 input，其余进 unsupported 占位） */
-export const FIELD_TAGS: Record<string, string> = {
-  input: 'el-input',
-}
+/** 字段控件判定：以前靠并行的 FIELD_TAGS 表登记，漏一张就出码丢 v-model —— 现在从能力表反推 */
+export const isFieldType = (type: string): boolean => !!TYPE_CONTRACTS[type]?.field
+
+/** 列表类组件（页面主体不是表单字段） */
+export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_CONTRACTS[type]?.list
 
 /** 页面 option 的落点（宿主渲染项，不是 rule 节点） */
 export const OPTION_CONTRACT: Record<string, PropEmit> = {
@@ -164,4 +335,21 @@ export const OPTION_CONTRACT: Record<string, PropEmit> = {
   'submitBtn.innerText': { emit: 'drop', kind: 'not-in-artifact', note: '按钮不出，文案无落点' },
   'resetBtn.show': { emit: 'drop', kind: 'not-in-artifact', note: '运行时同样强制隐藏' },
   'resetBtn.innerText': { emit: 'drop', kind: 'not-in-artifact', note: '按钮不出，文案无落点' },
+}
+
+/**
+ * 数据源落点表：页面级，逐源逐键。
+ * id/refId 进常量表是"refId 必须出成常量表"这条前置决策的落点；
+ * 其余三键在本项目里确实没有产物消费者，登记成丢弃而不是不写。
+ */
+export const DATA_SOURCE_CONTRACT: Record<string, DataSourceEmit> = {
+  id: { emit: 'binding' },
+  refId: { emit: 'binding' },
+  name: { emit: 'drop', kind: 'no-consumer', note: '设计器里的数据源显示名，运行期取数只认 refId' },
+  label: { emit: 'drop', kind: 'no-consumer', note: '页内别名，无运行时消费者' },
+  searchFields: {
+    emit: 'drop',
+    kind: 'not-in-artifact',
+    note: '唯一消费者是 AI 操作桥注册（PageRendererPage.vue:233），首版产物不接该桥；组件筛选表单吃的是节点级 props.searchFields',
+  },
 }

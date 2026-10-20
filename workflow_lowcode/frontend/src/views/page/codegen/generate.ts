@@ -5,18 +5,22 @@
  * 组件能力表算出来 —— 这是 spike 0 的核心结论：产物模板承载不了 schema 的全部语义，
  * 而手写登记表会在加组件时腐烂。
  *
- * 首版边界（超出即 unsupported，出码报告里是 error，不静默丢）：
- *  - 组件只认 page-table / formContainer / input
+ * 边界（超出即 unsupported，出码报告里是 error，不静默丢）：
+ *  - 组件契约见 contract.ts：列表组件 page-table / page-list-cards、容器 formContainer、
+ *    字段控件 input / textarea / inputNumber / datePicker / dataPicker / LookupPicker
+ *  - group / tableForm / subForm 等嵌套容器与 dash-* 组件仍未登记，整节点算广度债
  *  - 动作流只认总线容器动作 + 按钮内建行为；配了动作链的按钮不出码
  *  - 事件脚本（type=script）不出码
  */
 
 import {
-  FIELD_TAGS,
+  DATA_SOURCE_CONTRACT,
   IDENTITY_KEYS,
   OPTION_CONTRACT,
   STRUCT_DEFAULTS,
   TYPE_CONTRACTS,
+  isFieldType,
+  listOf,
   type PropEmit,
   type TypeContract,
 } from './contract'
@@ -50,6 +54,8 @@ export interface NodeArtifact {
   anchor: string
   file: string
   host: NodeHost
+  /** 元素上的属性即 schema props 的证据（runtime 组件与字段控件）：回导侧按绑定重建 props */
+  propsFrom?: 'bindings'
   displayMode?: string
   displayModeSource?: string
   dropped: string[]
@@ -62,7 +68,8 @@ export interface Behavior {
   id: string
   origin: string
   trigger: string
-  source: string
+  /** schema 没写就不兜空串：兜出来的空值回导即凭空多出一键 */
+  source?: string
   steps: Array<Record<string, unknown>>
   resolvedTarget?: string
   implementedBy: { file: string; function: string; case?: string }
@@ -89,7 +96,18 @@ export interface GeneratedManifest {
     defaults: Record<string, unknown>
   }
   nodes: NodeArtifact[]
-  dataSources: Array<{ id: string; refId: string; apiModule: string; dropped: string[] }>
+  /**
+   * 逐源登记，与 schema.dataSources 同序同数。
+   * bindings = 消费该源的节点；warnings = 数据源级丢弃（path 是页面级绝对路径，不像节点那样相对）。
+   */
+  dataSources: Array<{
+    path: string
+    id: string
+    refId: string
+    apiModule: string
+    bindings: string[]
+    warnings: Warning[]
+  }>
   behaviors: Behavior[]
   unsupported: Unsupported[]
   identity: { policy: string }
@@ -122,6 +140,8 @@ interface Ctx {
   containerModeSource: string
   /** 主 SFC 产物名（由 pageKey 转大驼峰） */
   file: string
+  /** 数据源被谁消费：schema.dataSources[i].id → 消费节点 rulePath，逐源登记的依据 */
+  dsUse: Map<string, string[]>
 }
 
 interface NodePlan {
@@ -136,6 +156,8 @@ interface NodePlan {
 
 
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
+const camel = (s: string) => s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+const pascal = (s: string) => s.split('-').filter(Boolean).map((x) => x[0].toUpperCase() + x.slice(1)).join('')
 const leafName = (rel: string) => rel.split('.').pop()!.replace(/\[\d+\]$/, '')
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -215,7 +237,8 @@ function addConst(ctx: Ctx, hint: string, value: unknown): string {
 function propSnippet(ctx: Ctx, name: string, value: unknown, hint: string): string {
   if (typeof value === 'string') return `${kebab(name)}="${value}"`
   if (typeof value === 'boolean' || typeof value === 'number') return `:${kebab(name)}="${lit(value)}"`
-  if (Array.isArray(value) && value.every((x) => typeof x === 'number')) return `:${kebab(name)}="${lit(value)}"`
+  // 空数组必须走常量：`:x="[]"` 字面上好看，回导侧解析器会把它读成一个空字符串元素
+  if (Array.isArray(value) && value.length && value.every((x) => typeof x === 'number')) return `:${kebab(name)}="${lit(value)}"`
   return `:${kebab(name)}="${addConst(ctx, hint, value)}"`
 }
 
@@ -243,18 +266,20 @@ export function generatePage(
   schema: { rule: any[]; option: any; dataSources: any[]; actions: any[] },
   meta: { pageKey: string; pageName: string; exportedAt: string },
 ): GenerateResult {
-  const table = (schema.rule || []).find((r) => r.type === 'page-table')
-  // 容器展示方式由数据表格的 viewDetail.formMode 决定，schema.displayMode 运行期不生效
+  // 页面主体（列表组件）：容器展示方式与两处尺寸冲突都以它的 viewDetail 为准
+  const listNode = (schema.rule || []).find((r) => listOf(r?.type))
+  // 容器展示方式由列表组件的 viewDetail.formMode 决定，schema.displayMode 运行期不生效
   const ctx: Ctx = {
     unsupported: [],
     consts: new Map(),
-    containerMode: table?.props?.viewDetail?.formMode || 'popup',
+    containerMode: listNode?.props?.viewDetail?.formMode || 'popup',
     containerModeSource: 'rule[].props.viewDetail.formMode',
     file: `${meta.pageKey
       .split(/[-_]+/)
       .filter(Boolean)
       .map((s) => s[0].toUpperCase() + s.slice(1))
       .join('')}.vue`,
+    dsUse: new Map(),
   }
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
@@ -271,20 +296,21 @@ export function generatePage(
   const optionPlan = planOption(schema.option, ctx, `n${(schema.rule || []).length + 1}`)
   const { behaviors, switchCases } = planBehaviors(schema, plans, ctx)
 
-  // 两处尺寸（表格 viewDetail.width / 容器 dialogWidth）都会出码，运行期以数据表格为准；
+  // 两处尺寸（列表组件 viewDetail.width / 容器 dialogWidth）都会出码，运行期以列表组件为准；
   // 不等时产物里有两份真相，登记成冲突告警让人来看，不出静默取其一
   const containerPlan = plans.find((p) => p.node.type === 'formContainer')
-  const vw = table?.props?.viewDetail?.width
+  const vw = listNode?.props?.viewDetail?.width
   const dw = containerPlan && (schema.rule || []).find((r) => r.type === 'formContainer')?.props?.dialogWidth
   if (containerPlan && vw && dw && vw !== dw) {
     containerPlan.node.warnings.push({
       kind: 'value-conflict',
       path: 'props.dialogWidth',
-      message: `容器尺寸 ${dw} 与数据表格 viewDetail.width ${vw} 不一致，运行期以数据表格为准（PageDataTable.vue:198），出码两处都保留`,
+      message: `容器尺寸 ${dw} 与列表组件 ${listNode!.type} 的 viewDetail.width ${vw} 不一致，运行期以列表组件为准（PageDataTable.vue:198、PageDataCards.vue:139），出码两处都保留`,
     })
   }
 
-  const vue = assembleVue({ schema, plans, optionPlan, behaviors, switchCases, ctx, ds, meta })
+  const dsEntries = planDataSources(schema, ctx, apiFile)
+  const vue = assembleVue({ schema, plans, optionPlan, behaviors, switchCases, ctx, ds, dsEntries, meta })
   const manifest: GeneratedManifest = {
     kind: 'page-codegen-manifest',
     manifestVersion: 2,
@@ -299,7 +325,7 @@ export function generatePage(
     runtime: {
       package: '@lc/runtime',
       sdkVersion: '1',
-      components: ['page-table'],
+      components: [...new Set(plans.filter((p) => TYPE_CONTRACTS[p.node.type]?.runtime).map((p) => p.tag))],
       note: '表单容器不出 runtime 组件，出成容器标签 + EP 原生表单模板',
     },
     contract: {
@@ -310,6 +336,7 @@ export function generatePage(
         renames: '重命名/派生登记表：from(schema 路径) ← to(产物侧证据)，回导先校验两侧值一致再剥离产物键',
         wireOnly: '归属登记表：产物里有、schema 里没有的接线键，回导剥离不报多造',
         defaults: '默认值登记表：结构键取默认值时产物省略不写，回导按此补；非默认值必须显式出码',
+        'dataSources[].warnings': '数据源级丢弃登记：path 为页面级绝对路径（dataSources[i].<键>），bindings 记消费节点',
       },
       dropKinds: [
         'ignored-by-runtime',
@@ -323,14 +350,7 @@ export function generatePage(
       defaults: STRUCT_DEFAULTS,
     },
     nodes: [...flattenPlans(plans), optionPlan.node],
-    dataSources: [
-      {
-        id: String(ds.id ?? ''),
-        refId: String(ds.refId ?? ''),
-        apiModule: apiFile.replace(/\.ts$/, ''),
-        dropped: ['name'],
-      },
-    ],
+    dataSources: dsEntries,
     behaviors,
     unsupported: ctx.unsupported,
     identity: {
@@ -382,6 +402,8 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
 
   const mode = contract.displayModeDriven ? ctx.containerMode : undefined
   const tag = mode ? containerTag(mode) : contract.tag
+  // 组件没 defineExpose（list.expose=none）就别写 ref：产物里挂个取不到方法的 ref 是假接线
+  const refable = !!contract.runtime && contract.list?.expose !== 'none'
   const plan: NodePlan = {
     node: {
       id,
@@ -390,7 +412,8 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
       field: String(node.field ?? ''),
       anchor: '',
       file: ctx.file,
-      host: { tag, ref: contract.runtime ? `${id}Ref` : null },
+      host: { tag, ref: refable ? `${id}Ref` : null },
+      propsFrom: contract.runtime || contract.field ? 'bindings' : undefined,
       displayMode: mode,
       displayModeSource: mode ? ctx.containerModeSource : undefined,
       dropped: [...IDENTITY_KEYS],
@@ -404,7 +427,16 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
     anchorKv: {},
     children: [],
   }
-  if (contract.runtime) plan.node.host.ref = `${id}Ref`
+
+  // 产物侧固定接线：值写进模板，键名进归属登记（schema 里没有这个键，回导不许报多造）
+  for (const [k, v] of Object.entries(contract.constAttrs || {})) {
+    plan.propSnippets.push(propSnippet(ctx, k, v, `const:${k}`))
+    plan.node.wireOnly.push(k)
+  }
+  // 语义债登记：契约能把键出码，组件跑起来还差一段接线，按节点记账
+  for (const req of contract.requires || []) {
+    ctx.unsupported.push({ path: `${rulePath}.props.${req.key}`, type: node.type, key: req.key, message: req.note })
+  }
 
   const self = Object.fromEntries(
     Object.entries(node).filter(([k]) => k !== 'props' && k !== 'children' && !IDENTITY_KEYS.includes(k)),
@@ -418,7 +450,7 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
     })
   }
   // 字段控件的 v-model 路径：回导侧靠它把 el-input 对回 schema 节点
-  if (plan.node.field && FIELD_TAGS[node.type]) plan.node.host.vmodel = `form.${plan.node.field}`
+  if (plan.node.field && contract.field) plan.node.host.vmodel = `form.${plan.node.field}`
 
   const dsKv = plan.anchorKv.ds
   plan.node.anchor = `lc:node=${id} type=${node.type} field=${plan.node.field}` + (dsKv ? ` ds=${dsKv}` : '')
@@ -474,10 +506,14 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
     case 'anchor':
       plan.anchorKv[entry.key] = String(leaf.value ?? '')
       node.renames.push({ from: rel, to: `anchor:${node.id}@${entry.key}`, note: '模板上别处没有这个信息' })
+      useDs(ctx, leaf.value, rulePath)
       return
     case 'derived':
       node.renames.push({ from: rel, to: `derived:${entry.by}`, evidence: entry.evidence })
-      if (entry.by === 'dsRefId') plan.propSnippets.push(':ds-ref-id="ds.refId"')
+      if (entry.by === 'dsRefId') {
+        plan.propSnippets.push(':ds-ref-id="ds.refId"')
+        useDs(ctx, leaf.value, rulePath)
+      }
       return
     case 'attr': {
       const attrName = entry.by === 'containerSizeAttr' ? containerSizeAttrOf(ctx) : entry.as!
@@ -494,11 +530,52 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
       const value = stripPaths(leaf.value, nestedDrops.get(rel) || [])
       plan.propSnippets.push(propSnippet(ctx, propName, value, rel))
       if (entry.as) node.renames.push({ from: rel, to: `props.${propName}` })
+      if (propName === 'dataSourceId') useDs(ctx, leaf.value, rulePath)
     }
   }
 }
 
 const containerSizeAttrOf = (ctx: Ctx) => (ctx.containerMode === 'drawer' ? 'size' : 'width')
+
+/** 记一笔"这个数据源被这个节点消费了"：逐源登记的依据，值取自 schema 不取自产物片段 */
+function useDs(ctx: Ctx, value: unknown, rulePath: string): void {
+  const id = String(value ?? '')
+  if (!id) return
+  ctx.dsUse.set(id, [...(ctx.dsUse.get(id) || []), rulePath])
+}
+
+/**
+ * 数据源逐源登记：schema 声明几个就记几个，落点由 DATA_SOURCE_CONTRACT 决定。
+ * bindings 记消费节点；无消费者的源照样进产物常量表（id/refId 是 schema 声明的一部分，
+ * 丢了就还原不回来），但设计上不参与取数，报告里由体检的 B 桶暴露。
+ */
+function planDataSources(schema: any, ctx: Ctx, apiFile: string): GeneratedManifest['dataSources'] {
+  return (schema.dataSources || []).map((src: any, i: number) => {
+    const path = `dataSources[${i}]`
+    const entry: GeneratedManifest['dataSources'][number] = {
+      path,
+      id: String(src.id ?? ''),
+      refId: String(src.refId ?? ''),
+      apiModule: i === 0 ? apiFile.replace(/\.ts$/, '') : '',
+      bindings: ctx.dsUse.get(String(src.id ?? '')) || [],
+      warnings: [],
+    }
+    for (const k of Object.keys(src)) {
+      const e = DATA_SOURCE_CONTRACT[k]
+      if (!e) {
+        ctx.unsupported.push({
+          path: `${path}.${k}`,
+          type: 'dataSource',
+          key: k,
+          message: `数据源键 ${k} 无落点登记 —— 必须补 DATA_SOURCE_CONTRACT 或人工确认`,
+        })
+        continue
+      }
+      if (e.emit === 'drop') entry.warnings.push({ kind: e.kind, path: `${path}.${k}`, message: e.note })
+    }
+    return entry
+  })
+}
 
 // ==================== option ====================
 
@@ -547,6 +624,10 @@ const BUTTON_TRIGGER: Record<string, { trigger: string; readonly: boolean; mode:
 
 const HANDLED_TRIGGERS = ['row-edit', 'row-view', 'row-create']
 
+/** 列表组件的刷新调用：没暴露 refresh 就别出假接线，留一行 lc:todo 给人看 */
+export const refreshCall = (refName: string | null | undefined): string =>
+  refName ? `${refName}.value?.refresh()` : `/* lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状） */`
+
 function planBehaviors(
   schema: any,
   plans: NodePlan[],
@@ -554,9 +635,10 @@ function planBehaviors(
 ): { behaviors: Behavior[]; switchCases: string[] } {
   const behaviors: Behavior[] = []
   const switchCases: string[] = []
-  const table = plans.find((p) => p.node.type === 'page-table')
+  const listPlans = plans.filter((p) => listOf(p.node.type))
+  const list = listPlans[0]
   const container = plans.find((p) => p.node.type === 'formContainer')
-  const tableRef = table?.node.host.ref || 'tableRef'
+  const refreshTarget = list?.node.host.ref
   const resolvedTarget = container?.node.id || ''
   const seenTriggers = new Set<string>()
 
@@ -578,7 +660,7 @@ function planBehaviors(
       id: `b${behaviors.length + 1}`,
       origin: `actions[${i}]`,
       trigger: action.trigger,
-      source: action.source ?? '',
+      source: action.source,
       steps,
       resolvedTarget,
       implementedBy: { file: ctx.file, function: 'onButtonClick', case: triggerCase(action.trigger) },
@@ -594,53 +676,58 @@ function planBehaviors(
     }
   })
 
-  const buttons: any[] = schema.rule?.find((r: any) => r.type === 'page-table')?.props?.viewActions?.buttons || []
-  for (const btn of buttons) {
-    if (Array.isArray(btn?.events) && btn.events.length) {
-      ctx.unsupported.push({
-        path: `rule[].props.viewActions.buttons(${btn.key}).events`,
-        type: 'page-table',
-        key: String(btn.key),
-        message: '按钮配了动作链（chain），spike 1 只出内建行为与总线动作，该按钮不接线',
-      })
-      continue
-    }
-    const map = BUTTON_TRIGGER[btn.key]
-    if (!map) {
-      if (btn.key === 'delete') {
-        switchCases.push(
-          `    case 'delete':\n      if (row?.id != null) void deleteData(String(row.id)).then(() => ${tableRef}?.refresh())\n      return`,
-        )
-      } else {
+  for (const lp of listPlans) {
+    const idx = Number(lp.node.rulePath.match(/\[(\d+)\]$/)?.[1])
+    // 只有把按钮点击 emit 出来的列表组件才能在产物里接管按钮（卡片走总线，见契约 requires）
+    if (!(listOf(lp.node.type)?.events || []).some((e) => e.on === 'button-click')) continue
+    const buttons: any[] = schema.rule?.[idx]?.props?.viewActions?.buttons || []
+    for (const btn of buttons) {
+      if (Array.isArray(btn?.events) && btn.events.length) {
         ctx.unsupported.push({
-          path: `rule[].props.viewActions.buttons(${btn.key})`,
-          type: 'page-table',
+          path: `${lp.node.rulePath}.props.viewActions.buttons(${btn.key}).events`,
+          type: lp.node.type,
           key: String(btn.key),
-          message: `按钮 ${btn.key} 无对应出码语义（既非内建 key 也无动作链），产物里该按钮不接线`,
+          message: '按钮配了动作链（chain），spike 1 只出内建行为与总线动作，该按钮不接线',
+        })
+        continue
+      }
+      const map = BUTTON_TRIGGER[btn.key]
+      if (!map) {
+        if (btn.key === 'delete') {
+          switchCases.push(
+            `    case 'delete':\n      if (row?.id != null) void deleteData(String(row.id)).then(() => ${refreshCall(refreshTarget)})\n      return`,
+          )
+        } else {
+          ctx.unsupported.push({
+            path: `${lp.node.rulePath}.props.viewActions.buttons(${btn.key})`,
+            type: lp.node.type,
+            key: String(btn.key),
+            message: `按钮 ${btn.key} 无对应出码语义（既非内建 key 也无动作链），产物里该按钮不接线`,
+          })
+        }
+        continue
+      }
+      switchCases.push(
+        `    case '${btn.key}':\n      void openContainer(String(row?.id ?? ''), ${map.readonly}, '${map.mode}')\n      return`,
+      )
+      if (!seenTriggers.has(map.trigger)) {
+        behaviors.push({
+          id: `b${behaviors.length + 1}`,
+          origin: 'implicit:buttons',
+          trigger: map.trigger,
+          source: String(schema.rule?.[idx]?.props?.dataSourceId ?? schema.dataSources?.[0]?.id ?? ''),
+          steps: [],
+          resolvedTarget,
+          implementedBy: { file: ctx.file, function: 'onButtonClick', case: String(btn.key) },
+          warnings: [
+            {
+              kind: 'fallback-behavior',
+              path: `actions(${map.trigger})`,
+              message: `schema.actions 无 ${map.trigger} 动作，运行时走同数据源容器兜底（PageDataTable.vue:939-941）。出码把兜底显式化成代码，属新增行为而非原配置`,
+            },
+          ],
         })
       }
-      continue
-    }
-    switchCases.push(
-      `    case '${btn.key}':\n      void openContainer(String(row?.id ?? ''), ${map.readonly}, '${map.mode}')\n      return`,
-    )
-    if (!seenTriggers.has(map.trigger)) {
-      behaviors.push({
-        id: `b${behaviors.length + 1}`,
-        origin: 'implicit:buttons',
-        trigger: map.trigger,
-        source: String(schema.dataSources?.[0]?.id ?? ''),
-        steps: [],
-        resolvedTarget,
-        implementedBy: { file: ctx.file, function: 'onButtonClick', case: String(btn.key) },
-        warnings: [
-          {
-            kind: 'fallback-behavior',
-            path: `actions(${map.trigger})`,
-            message: `schema.actions 无 ${map.trigger} 动作，运行时走同数据源容器兜底（PageDataTable.vue:939-941）。出码把兜底显式化成代码，属新增行为而非原配置`,
-          },
-        ],
-      })
     }
   }
 
@@ -660,16 +747,17 @@ function assembleVue(args: {
   switchCases: string[]
   ctx: Ctx
   ds: any
+  dsEntries: GeneratedManifest['dataSources']
   meta: { pageKey: string; pageName: string; exportedAt: string }
 }): string {
-  const { plans, optionPlan, switchCases, ctx, ds, meta } = args
-  const table = plans.find((p) => p.node.type === 'page-table')
+  const { plans, optionPlan, switchCases, ctx, ds, dsEntries, meta } = args
+  const listPlans = plans.filter((p) => listOf(p.node.type))
   const container = plans.find((p) => p.node.type === 'formContainer')
-  const refName = table?.node.host.ref || 'tableRef'
+  const refName = listPlans[0]?.node.host.ref
   const fields: string[] = []
   if (container) {
     const walk = (p: NodePlan) => {
-      if (FIELD_TAGS[p.node.type] && p.node.field) fields.push(p.node.field)
+      if (isFieldType(p.node.type) && p.node.field) fields.push(p.node.field)
       p.children.forEach(walk)
     }
     container.children.forEach(walk)
@@ -679,13 +767,14 @@ function assembleVue(args: {
   L.push('<!-- 由 lc-codegen 从页面 schema 出码，勿手改登记表以外的部分；人工接管写在 handler 里 -->')
   L.push('<template>')
   L.push('  <div class="lc-page lc-page--stretch">')
-  if (table) {
-    const events = table.propSnippets.length ? `${table.propSnippets.join(' ')} ` : ''
-    L.push(`    <!-- ${table.node.anchor} -->`)
-    L.push(
-      `    <${table.tag} ref="${table.node.host.ref}" ${events}@row-click="onRowClick" @button-click="onButtonClick" @selection-change="onSelectionChange" />`,
-    )
-    table.node.wireOnly.push('on.rowClick', 'on.buttonClick', 'on.selectionChange')
+  for (const lp of listPlans) {
+    const list = listOf(lp.node.type) || { events: [] }
+    const head = lp.node.host.ref ? ` ref="${lp.node.host.ref}"` : ''
+    const props = lp.propSnippets.length ? ` ${lp.propSnippets.join(' ')}` : ''
+    const events = list.events.map((e) => `@${e.on}="${e.handler}"`)
+    L.push(`    <!-- ${lp.node.anchor} -->`)
+    L.push(`    <${lp.tag}${head}${props} ${events.join(' ')} />`)
+    lp.node.wireOnly.push(...list.events.map((e) => `on.${camel(e.on)}`))
   }
   if (container) L.push(renderContainer(container, optionPlan, ctx))
   L.push('  </div>')
@@ -693,15 +782,22 @@ function assembleVue(args: {
   L.push('')
   L.push('<script setup lang="ts">')
   L.push("import { reactive, ref } from 'vue'")
-  L.push("import PageTable from '@lc/runtime/page-table'")
+  for (const tag of [...new Set(listPlans.map((p) => p.tag))]) L.push(`import ${pascal(tag)} from '@lc/runtime/${tag}'`)
   L.push(`import { getData, createData, updateData, deleteData } from './api/${meta.pageKey.replace(/_/g, '-')}'`)
   L.push('')
   L.push('// ==================== 数据源（schema.dataSources[]）====================')
   L.push(`const ds = { id: '${ds.id}', refId: '${ds.refId}' }`)
+  if (dsEntries.length) {
+    L.push('// 逐源登记表：页面声明的几个源都在册（含未绑到组件的），人工补接线时按 id 取 refId')
+    L.push('const dataSources = {')
+    dsEntries.forEach((d) => L.push(`  '${d.id}': '${d.refId}',`))
+    L.push('}')
+  }
   L.push('')
-  if (table) {
-    L.push(`// ==================== 节点 ${table.node.id}：page-table（schema.${table.node.rulePath}.props）====================`)
-    L.push(`const ${refName} = ref<InstanceType<typeof PageTable> | null>(null)`)
+  for (const lp of listPlans) {
+    if (!lp.node.host.ref) continue
+    L.push(`// ==================== 节点 ${lp.node.id}：${lp.node.type}（schema.${lp.node.rulePath}.props）====================`)
+    L.push(`const ${lp.node.host.ref} = ref<InstanceType<typeof ${pascal(lp.tag)}> | null>(null)`)
   }
   for (const [name, value] of ctx.consts) L.push('', `const ${name} = ${jsonToTs(value)}`)
   L.push('')
@@ -738,7 +834,7 @@ function assembleVue(args: {
     L.push('    await updateData(containerRecordId.value, { ...form })')
     L.push('  }')
     L.push('  closeContainer()')
-    L.push(`  ${refName}.value?.refresh()`)
+    L.push(`  ${refreshCall(refName)}`)
     L.push('}')
     L.push('')
   }
@@ -798,6 +894,14 @@ function renderContainer(plan: NodePlan, optionPlan: NodePlan, ctx: Ctx): string
     'label-width="var(--lc-label-width)"',
   ]
   const items = plan.children.map((c) => {
+    // 未登记的字段类型没有标签可出。绝不能用空 tag 占位：`< v-model="…" />` 既过不了
+    // Vue 编译，又会把回导侧的 el-form-item 祖先关系搅乱（语料体检里 8 条 label 错位的根因）。
+    // 只留一行 lc:todo 注释，节点本体作为广度债进 holes，由补契约来消。
+    // 注释里带 node=<id>：回导侧据此把该子节点补回数组占位，否则整个 rule 数组只报一次
+    // 「长度不符」，到底是哪几个字段没出码就看不见了（广度债会被容器掩盖）。
+    if (!c.tag) {
+      return `          <!-- lc:todo node=${c.node.id} type=${c.node.type} field=${c.node.field} 组件类型无出码契约，整字段未出码 -->`
+    }
     const f = c.node.field
     const label = c.attrs['el-form-item']?.label ?? f
     const control = c.propSnippets.length ? ` ${c.propSnippets.join(' ')}` : ''

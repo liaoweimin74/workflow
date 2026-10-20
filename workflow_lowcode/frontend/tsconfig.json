@@ -20,5 +20,8 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/views/page/codegen/__tests__/spike-contract/**"
+  ]
 }

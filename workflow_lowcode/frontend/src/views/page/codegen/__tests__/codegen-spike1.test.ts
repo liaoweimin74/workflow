@@ -67,7 +67,7 @@ describe('出码 spike 1：generate → reverse 闭环', () => {
     const warn = gen.manifest.nodes
       .find((n) => n.type === 'formContainer')!
       .warnings.find((w) => w.kind === 'value-conflict')
-    expect(warn?.message).toContain('以数据表格为准')
+    expect(warn?.message).toContain('以列表组件为准')
     expect(reverseToSchema(conflict, gen.files[SRC], gen.manifest).holes).toEqual([])
   })
 

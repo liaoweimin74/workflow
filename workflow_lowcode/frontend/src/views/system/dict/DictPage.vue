@@ -8,20 +8,24 @@ defineOptions({ name: 'DictManagement' })
  * 由选中上下文注入）、修复 createTime→createdAt 列错绑。
  * Task 117：左栏抽为公共组件 SideNavList——本页成为第一个消费方，
  * 业务数据由本页管理（受控模式），组件零字典语义。
+ * 本轮：字典项支持行拖动排序（PUT /dict-data/sort）；创建时间列默认隐藏，
+ * 由卡片头部的开关按需显示。
  */
 
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Switch as SwitchIcon, Edit, Delete, CopyDocument } from '@element-plus/icons-vue'
+import { Switch as SwitchIcon, Edit, Delete, CopyDocument, Rank } from '@element-plus/icons-vue'
 import { SearchTable, SideNavList } from '@/components/business'
 import type { SearchField, TableColumn, FormConfig, NavItem, NavItemAction } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import {
   getDictTypeList, createDictType, updateDictType, deleteDictType,
-  getDictDataList, createDictData, updateDictData, deleteDictData,
+  getDictDataList, createDictData, updateDictData, deleteDictData, sortDictData,
 } from '@/api/dict'
 import type { DictTypeVO, DictDataVO } from '@/types/dict'
 import { useAuthStore } from '@/stores/auth'
+import { applyVisibleReorder, moveWithinVisible } from './dictSort'
+import { useDictDataDrag } from './useDictDataDrag'
 
 const authStore = useAuthStore()
 
@@ -171,24 +175,76 @@ const dataSearchFields: SearchField[] = [
   { type: 'input', label: '值', prop: 'value', placeholder: '输入值' },
 ]
 
-// Task 115 修复：后端字段为 createdAt（旧版绑 createTime 恒空白）
-const dataColumns: TableColumn[] = [
-  { prop: 'label', label: '标签', minWidth: 150 },
-  { prop: 'value', label: '值', width: 150 },
-  { prop: 'sortOrder', label: '排序', width: 80 },
-  { prop: 'createdAt', label: '创建时间', width: 170 },
-]
+/** 创建时间列默认隐藏（占宽度、少有人看），开关在右卡片标题行；列绑 createdAt（Task 115 曾修过 createTime 错绑） */
+const showCreatedAt = ref(false)
+
+/** 列定义：有更新权限时首列给拖动把手，创建时间按开关插入 */
+const dataColumns = computed<TableColumn[]>(() => {
+  const cols: TableColumn[] = []
+  if (canUpdate.value) cols.push({ label: '', width: 42, align: 'center', slotName: 'drag' })
+  cols.push(
+    { prop: 'label', label: '标签', minWidth: 150 },
+    { prop: 'value', label: '值', width: 150 },
+    { prop: 'sortOrder', label: '排序', width: 80 },
+  )
+  if (showCreatedAt.value) cols.push({ prop: 'createdAt', label: '创建时间', width: 170 })
+  return cols
+})
+
+/**
+ * 整表 id 顺序（当前字典类型全部字典项）与当前可见页 id 顺序。
+ * 拖动的只是可见的那几行，提交排序必须还原成整表顺序，
+ * 否则翻页后拖一次会把未显示的项甩到列表尾部。
+ */
+const allIds = ref<number[]>([])
+const visibleIds = ref<number[]>([])
 
 const dataFetchApi = async (p: any) => {
-  if (!selectedType.value) return { rows: [], total: 0 }
+  if (!selectedType.value) {
+    allIds.value = []
+    visibleIds.value = []
+    return { rows: [], total: 0 }
+  }
   const res = await getDictDataList(selectedType.value.dictCode)
-  let list = (res.data as any[]) || []
+  const full = (res.data as DictDataVO[]) || []
+  allIds.value = full.map((d) => d.id)
+  let list = full
   if (p.label) list = list.filter((d: any) => d.label?.includes(p.label))
   if (p.value) list = list.filter((d: any) => d.value?.includes(p.value))
   const total = list.length
   const start = ((p.page || 1) - 1) * (p.size || 10)
-  return { rows: list.slice(start, start + (p.size || 10)), total }
+  const rows = list.slice(start, start + (p.size || 10))
+  visibleIds.value = rows.map((d) => d.id)
+  // tbody 可能因切换类型/翻页/换列而重建，每次取数后重新绑定把手
+  initRowDrag()
+  return { rows, total }
 }
+
+// ================= 字典项行拖动排序 =================
+const { init: initRowDrag } = useDictDataDrag({
+  getTbody: () => dataTableRef.value?.$el?.querySelector('.el-table__body-wrapper tbody'),
+  // 无更新权限时不给把手，避免拖出一次注定 403 的请求
+  disabled: () => !canUpdate.value,
+  onDrop: async (dragId, hoverId, band) => {
+    const nextVisible = moveWithinVisible(visibleIds.value, dragId, hoverId, band)
+    if (!nextVisible) return
+    const dictCode = selectedType.value?.dictCode
+    const ids = applyVisibleReorder(allIds.value, visibleIds.value, nextVisible)
+    if (!dictCode || ids.length === 0) return
+    try {
+      await sortDictData({ dictCode, ids })
+      ElMessage.success('排序已更新')
+    } finally {
+      // sortOrder 由服务端整表归一化，无论如何都以服务端为准重取
+      await dataTableRef.value?.fetchList?.()
+    }
+  },
+})
+
+// 换列会让 el-table 重渲染，重新绑定一次把手
+watch(showCreatedAt, () => {
+  nextTick(initRowDrag)
+})
 
 /** Task 115：表单去掉 LookupPicker——dictCode 由左侧选中上下文注入 */
 const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
@@ -279,6 +335,10 @@ onMounted(fetchTypes)
             <el-icon class="align-middle mr-0.5"><CopyDocument /></el-icon>
             {{ selectedType.dictCode }}
           </el-tag>
+          <!-- 创建时间默认隐藏，需要时再打开 -->
+          <el-checkbox v-model="showCreatedAt" class="created-at-toggle ml-auto" size="small">
+            显示创建时间
+          </el-checkbox>
         </div>
       </template>
       <SearchTable
@@ -289,7 +349,14 @@ onMounted(fetchTypes)
         table-size="small"
         :fetch-api="dataFetchApi"
         :form-config="dataFormConfig"
-      />
+      >
+        <!-- 拖动把手：data-dict-row-id 供拖动逻辑识别悬停行是哪一条字典项 -->
+        <template #drag="{ row }">
+          <el-icon class="dict-drag-handle" :data-dict-row-id="row.id" title="拖动调整顺序">
+            <Rank />
+          </el-icon>
+        </template>
+      </SearchTable>
     </el-card>
 
     <!-- 未选中占位（理论上进入即自动选中第一个，防御性保留） -->
@@ -328,3 +395,22 @@ onMounted(fetchTypes)
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.dict-drag-handle {
+  cursor: grab;
+  vertical-align: -2px;
+  color: var(--el-text-color-secondary);
+}
+.dict-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 拖动落点提示：落在行的上半段插到它前面，下半段插到它后面 */
+:deep(.el-table__body tr.dict-drop-before > td.el-table__cell) {
+  box-shadow: inset 0 2px 0 var(--el-color-primary);
+}
+:deep(.el-table__body tr.dict-drop-after > td.el-table__cell) {
+  box-shadow: inset 0 -2px 0 var(--el-color-primary);
+}
+</style>

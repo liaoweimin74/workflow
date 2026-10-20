@@ -2,6 +2,7 @@ package com.workflow.system.controller;
 
 import com.workflow.common.domain.R;
 import com.workflow.system.domain.dto.DictDataCreateRequest;
+import com.workflow.system.domain.dto.DictDataSortRequest;
 import com.workflow.system.domain.dto.DictDataUpdateRequest;
 import com.workflow.system.domain.vo.DictDataVO;
 import com.workflow.system.service.DictDataService;
@@ -22,6 +23,11 @@ public class DictDataController {
     @GetMapping("/{dictCode}")
     public R<List<DictDataVO>> list(@PathVariable String dictCode) {
         return R.ok(dictDataService.list(dictCode));
+    }
+
+    @PutMapping("/sort")
+    public R<List<DictDataVO>> sort(@Valid @RequestBody DictDataSortRequest request) {
+        return R.ok(dictDataService.sort(request));
     }
 
     @PostMapping

@@ -18,7 +18,7 @@ export function deleteDictType(id: number) {
   return http.delete<any, R<null>>(`/dict-types/${id}`)
 }
 
-import type { DictDataVO, DictDataCreateForm, DictDataUpdateForm } from '@/types/dict'
+import type { DictDataVO, DictDataCreateForm, DictDataUpdateForm, DictDataSortForm } from '@/types/dict'
 
 export function getDictDataList(dictCode: string) {
   return http.get<any, R<DictDataVO[]>>(`/dict-data/${dictCode}`)
@@ -34,4 +34,9 @@ export function updateDictData(id: number, data: DictDataUpdateForm) {
 
 export function deleteDictData(id: number) {
   return http.delete<any, R<null>>(`/dict-data/${id}`)
+}
+
+/** 拖动排序：提交整个字典类型的完整 id 顺序，后端按序归一化 sortOrder */
+export function sortDictData(data: DictDataSortForm) {
+  return http.put<any, R<DictDataVO[]>>('/dict-data/sort', data)
 }

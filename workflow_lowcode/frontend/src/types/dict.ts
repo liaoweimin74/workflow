@@ -50,3 +50,9 @@ export interface DictDataUpdateForm {
   sortOrder?: number
   status?: number
 }
+
+/** 字典项排序请求：ids 为该字典类型下完整的 id 顺序（未软删的全部项，一个都不能少） */
+export interface DictDataSortForm {
+  dictCode: string
+  ids: number[]
+}

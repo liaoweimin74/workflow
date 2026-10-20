@@ -10,6 +10,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import DictPage from '../DictPage.vue'
+import { useAuthStore } from '@/stores/auth'
 
 vi.mock('@/api/dict', () => ({
   getDictTypeList: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/api/dict', () => ({
   createDictData: vi.fn(),
   updateDictData: vi.fn(),
   deleteDictData: vi.fn(),
+  sortDictData: vi.fn(),
 }))
 
 const { getDictTypeList, getDictDataList, createDictData } = await import('@/api/dict').then(
@@ -36,13 +38,14 @@ describe('DictPage 交互重构（Task 115）', () => {
     setActivePinia(createPinia())
   })
 
-  async function mountPage(types?: any[]) {
+  async function mountPage(types?: any[], permissions: string[] = []) {
     ;(getDictTypeList as any).mockResolvedValue({
       data: { rows: types ?? [typeRow(1, '审批意见类型', 'opinion_type'), typeRow(2, '性别', 'gender')], total: types?.length ?? 2 },
     })
     ;(getDictDataList as any).mockResolvedValue({
       data: [{ id: 11, dictCode: 'opinion_type', label: '同意', value: '1', sortOrder: 1, status: 1, createdAt: '2025-01-01T00:00:00Z' }],
     })
+    if (permissions.length) useAuthStore().permissions = permissions
     const wrapper = mount(DictPage, {
       global: {
         plugins: [ElementPlus],
@@ -108,11 +111,26 @@ describe('DictPage 交互重构（Task 115）', () => {
     )
   })
 
-  it('右表列绑定 createdAt（修复 createTime 恒空白的既有 bug）', async () => {
+  it('创建时间列默认隐藏，勾选开关后才出现且仍绑定 createdAt', async () => {
     const wrapper = await mountPage()
-    const cols = (wrapper.vm as any).dataColumns as any[]
-    const timeCol = cols.find((c) => c.label === '创建时间')
-    expect(timeCol?.prop).toBe('createdAt')
+    const cols = () => (wrapper.vm as any).dataColumns as any[]
+    expect(cols().find((c) => c.label === '创建时间')).toBeUndefined()
+
+    const toggle = wrapper.find('.created-at-toggle input')
+    expect(toggle.exists()).toBe(true)
+    await toggle.setValue(true)
+    await flushPromises()
+    expect(cols().find((c) => c.label === '创建时间')?.prop).toBe('createdAt')
+  })
+
+  it('有更新权限才给拖动把手列（无权限时不显示，避免拖出必然 403 的请求）', async () => {
+    const wrapper = await mountPage()
+    expect(((wrapper.vm as any).dataColumns as any[]).some((c) => c.slotName === 'drag')).toBe(false)
+
+    const withPerm = await mountPage(undefined, ['system:dict:update'])
+    const cols = (withPerm.vm as any).dataColumns as any[]
+    expect(cols[0].slotName).toBe('drag')
+    expect(withPerm.find('.created-at-toggle').exists()).toBe(true)
   })
 
   it('类型编辑弹窗中编码不可修改（后端 UpdateForm 不含 dictCode）', async () => {

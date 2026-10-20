@@ -270,6 +270,30 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       },
     ],
   },
+  /**
+   * 计算字段：保留 runtime 标签（求值器 formulaEval 是纯函数，但依赖取值仍走 form-create 实例）。
+   * 语料里 expression 用 `${字段}` 引用同页其他字段，是真语义，不能当字符串透传就算完。
+   */
+  FormulaField: {
+    tag: 'FormulaField',
+    runtime: true,
+    field: true,
+    self: FIELD_SELF,
+    props: {
+      expression: { emit: 'prop' },
+      precision: { emit: 'default', value: 2, note: '等于组件默认值（FormulaField.vue:51）' },
+      prefix: { emit: 'default', value: '', note: '空前缀不落模板' },
+      suffix: { emit: 'default', value: '', note: '空后缀不落模板' },
+      placeholder: { emit: 'default', value: '—', note: '等于组件默认值' },
+      disabled: { emit: 'default', value: false, note: '等于组件默认值' },
+    },
+    requires: [
+      {
+        key: 'expression',
+        note: '求值逐依赖走 formCreateInject.api.getValue（FormulaField.vue:79-89）并 watchEffect 回写自身字段；产物是裸 v-model 表单没有 form-create 实例，需改成对 form 的 computed（formulaEval.parseFormula 可直接复用），否则该字段恒为空',
+      },
+    ],
+  },
   'page-list-cards': {
     tag: 'page-list-cards',
     runtime: true,

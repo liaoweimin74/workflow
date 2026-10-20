@@ -325,7 +325,7 @@ export function generatePage(
     runtime: {
       package: '@lc/runtime',
       sdkVersion: '1',
-      components: [...new Set(plans.filter((p) => TYPE_CONTRACTS[p.node.type]?.runtime).map((p) => p.tag))],
+      components: runtimeTagsOf(plans),
       note: '表单容器不出 runtime 组件，出成容器标签 + EP 原生表单模板',
     },
     contract: {
@@ -370,6 +370,14 @@ function flattenPlans(plans: NodePlan[]): NodeArtifact[] {
   }
   plans.forEach(walk)
   return out
+}
+
+/**
+ * 产物依赖的 runtime 组件：必须含容器里的嵌套字段控件（dataPicker / LookupPicker /
+ * FormulaField），过去只看顶层 plans 把它们漏掉了 —— 出成裸标签、清单也说不出要打包谁。
+ */
+function runtimeTagsOf(plans: NodePlan[]): string[] {
+  return [...new Set(flattenPlans(plans).filter((n) => TYPE_CONTRACTS[n.type]?.runtime).map((n) => String(n.host.tag)))]
 }
 
 // ==================== 单节点 ====================
@@ -782,7 +790,9 @@ function assembleVue(args: {
   L.push('')
   L.push('<script setup lang="ts">')
   L.push("import { reactive, ref } from 'vue'")
-  for (const tag of [...new Set(listPlans.map((p) => p.tag))]) L.push(`import ${pascal(tag)} from '@lc/runtime/${tag}'`)
+  // runtime 标签一律要 import：过去只导列表组件，容器里的字段控件（dataPicker /
+  // LookupPicker / FormulaField）出成了裸标签，产物看着对、实际跑不起来
+  for (const tag of runtimeTagsOf(plans)) L.push(`import ${pascal(tag)} from '@lc/runtime/${tag}'`)
   L.push(`import { getData, createData, updateData, deleteData } from './api/${meta.pageKey.replace(/_/g, '-')}'`)
   L.push('')
   L.push('// ==================== 数据源（schema.dataSources[]）====================')

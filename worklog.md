@@ -9372,3 +9372,17 @@ Work Log:
 
 Stage Summary:
 - 重供给累计 #98；零 mvn 82 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+
+---
+Task ID: r164-r165
+Agent: cron-ops-loop
+Task: 2026-10-20 16:05(r164 沙箱失败) + 17:05(r165 catchup 巡检)
+
+Work Log:
+- r164(16:05)：沙箱第 20 次失败，零执行
+- r165(17:05)：沙箱恢复。dump OK 20261020-090546；四链路 200×4 但 auth=no such table → 重供给 #99（vite 1139/node index.ts/bun 占位，无 java，内存 3.26GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1450 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 重供给累计 #99；零 mvn 83 次；全绿 200×4 真绿，内存 3.26GB，oom 0

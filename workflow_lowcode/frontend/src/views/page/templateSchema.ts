@@ -128,11 +128,14 @@ function collectActionLists(props: Record<string, any>, nodePath: string): Array
       })
     })
   }
-  if (Array.isArray(props.viewColumns)) {
-    props.viewColumns.forEach((col: any, i: number) => {
+  // 列点击链的载体：现行是 props.columns（QueryColumnsConfig.vue:502 写、PageDataTable.vue:1177 读），
+  // viewColumns 是 ViewDesigner 时代遗留载体（templateSkeleton.ts:73 仍在清），历史模板里可能有数据，两者都扫。
+  for (const carrier of ['columns', 'viewColumns'] as const) {
+    if (!Array.isArray(props[carrier])) continue
+    props[carrier].forEach((col: any, i: number) => {
       const cc = col?.onCellClick
       if (Array.isArray(cc?.actions)) {
-        out.push({ actions: cc.actions, path: `${nodePath}.props.viewColumns[${i}].onCellClick` })
+        out.push({ actions: cc.actions, path: `${nodePath}.props.${carrier}[${i}].onCellClick` })
       }
     })
   }

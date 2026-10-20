@@ -185,6 +185,56 @@ describe('remapPageSchema — 结构性引用改写（D0–D3）', () => {
     expect(p.viewColumns[0].onCellClick.actions[0].params[0].value).toBe('ds_new2')
   })
 
+  it('D3：列点击链的现行载体是 props.columns，必须一并改写（回归：曾只扫遗留的 viewColumns）', () => {
+    // 写入侧 QueryColumnsConfig.vue:502、读取侧 PageDataTable.vue:1177 都用 columns，
+    // viewColumns 只是 ViewDesigner 时代的旧载体，历史模板里可能仍有数据
+    const s = baseSchema()
+    s.rule = [
+      {
+        type: 'page-table',
+        field: 't1',
+        props: {
+          dataSourceId: 'ds_a',
+          columns: [
+            { key: 'code', label: '编码' },
+            {
+              key: 'name',
+              label: '姓名',
+              onCellClick: {
+                actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_b' }] }],
+              },
+            },
+          ],
+        },
+      },
+    ]
+    const { schema, report } = remapPageSchema(s, bindings)
+    expect(schema.rule[0].props.columns[1].onCellClick.actions[0].params[0].value).toBe('ds_new2')
+    expect(schema.rule[0].props.columns[0].onCellClick).toBeUndefined()
+    expect(report).toHaveLength(0)
+  })
+
+  it('引用扫描：props.columns 上的列点击链要进 collectDsRefs（删除组件级联与悬空检查的依据）', () => {
+    const s = baseSchema()
+    s.rule = [
+      {
+        type: 'page-table',
+        field: 't1',
+        props: {
+          dataSourceId: 'ds_a',
+          columns: [
+            { key: 'name', onCellClick: { actions: [{ type: 'save-container', params: [{ key: 'target', value: 'ds_gone' }] }] } },
+          ],
+        },
+      },
+    ]
+    const refs = collectDsRefs(s)
+    const cell = refs.find((r) => r.path.includes('props.columns[0].onCellClick'))
+    expect(cell).toBeDefined()
+    expect(cell!.value).toBe('ds_gone')
+    expect(cell!.dangling).toBe(true)
+  })
+
   it('D3：委托动作 target 留空（回退本组件数据源）不报错', () => {
     const s = baseSchema()
     s.rule = [

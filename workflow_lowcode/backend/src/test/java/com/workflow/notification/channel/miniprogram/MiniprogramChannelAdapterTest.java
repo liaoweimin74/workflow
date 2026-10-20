@@ -96,6 +96,39 @@ class MiniprogramChannelAdapterTest {
         mockServer.verify();
     }
 
+    /**
+     * 多小程序凭据共存时（如商户端与客户端各一个 appid），access_token 不得跨应用复用：
+     * 缓存必须绑定取到它的那个 appid，换了应用就重新取。
+     * 否则 B 应用拿着 A 的 token 调订阅消息，微信侧随机返回 40001 无效凭据。
+     */
+    @Test
+    void send_refetches_token_when_app_id_changes() {
+        mockServer.expect(requestTo("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx-app-a&secret=secret-a"))
+                .andRespond(withSuccess("{\"access_token\":\"TOKEN_A\",\"expires_in\":7200}", MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo("https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=TOKEN_A"))
+                .andRespond(withSuccess("{\"errcode\":0}", MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx-app-b&secret=secret-b"))
+                .andRespond(withSuccess("{\"access_token\":\"TOKEN_B\",\"expires_in\":7200}", MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo("https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=TOKEN_B"))
+                .andRespond(withSuccess("{\"errcode\":0}", MediaType.APPLICATION_JSON));
+
+        ReflectionTestUtils.setField(adapter, "appId", "wx-app-a");
+        ReflectionTestUtils.setField(adapter, "appSecret", "secret-a");
+        ChannelMessage first = new ChannelMessage();
+        first.setMessageId(1L);
+        first.setContent("to app A");
+        assertTrue(adapter.send(first).isSuccess());
+
+        ReflectionTestUtils.setField(adapter, "appId", "wx-app-b");
+        ReflectionTestUtils.setField(adapter, "appSecret", "secret-b");
+        ChannelMessage second = new ChannelMessage();
+        second.setMessageId(2L);
+        second.setContent("to app B");
+        assertTrue(adapter.send(second).isSuccess());
+
+        mockServer.verify();
+    }
+
     @Test
     void send_returns_failure_when_wechat_error() {
         mockServer.expect(requestTo("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx-test-app&secret=test-secret"))

@@ -52,7 +52,12 @@ public class MiniprogramChannelAdapter implements ChannelAdapter {
     @Value("${notification.miniprogram.template-id:}")
     private String templateId;
 
-    /** access_token 缓存（含过期时间戳） */
+    /**
+     * access_token 缓存（含过期时间戳）。
+     * {@code cachedAppId} 记录这份 token 是哪个应用取到的：缓存必须与 appid 绑定，
+     * 否则多小程序凭据共存时（商户端/客户端）B 应用会拿着 A 应用的 token 发送，微信侧随机 40001。
+     */
+    private volatile String cachedAppId;
     private volatile String cachedToken;
     private volatile long tokenExpiresAt;
 
@@ -121,18 +126,22 @@ public class MiniprogramChannelAdapter implements ChannelAdapter {
     }
 
     /**
-     * 获取 access_token：优先使用未过期的缓存，否则重新请求。
+     * 获取 access_token：优先使用未过期且属于当前 appid 的缓存，否则重新请求。
      */
     private String getAccessToken() {
-        if (cachedToken != null && System.currentTimeMillis() < tokenExpiresAt) {
+        // appId/appSecret 可能在两次发送之间变更，整个方法内用同一份快照，避免取值与缓存错位
+        String currentAppId = appId;
+        String currentSecret = appSecret;
+        if (currentAppId != null && currentAppId.equals(cachedAppId)
+                && cachedToken != null && System.currentTimeMillis() < tokenExpiresAt) {
             return cachedToken;
         }
         try {
             String json = restClient.get()
                     .uri(baseUrl().concat("/cgi-bin/token")
                             .concat("?grant_type=client_credential")
-                            .concat("&appid=").concat(encode(appId))
-                            .concat("&secret=").concat(encode(appSecret)))
+                            .concat("&appid=").concat(encode(currentAppId))
+                            .concat("&secret=").concat(encode(currentSecret)))
                     .retrieve()
                     .body(String.class);
 
@@ -148,6 +157,7 @@ public class MiniprogramChannelAdapter implements ChannelAdapter {
                 return null;
             }
             cachedToken = String.valueOf(token);
+            cachedAppId = currentAppId;
             // 官方有效期 7200 秒，留 5 分钟余量提前刷新
             tokenExpiresAt = System.currentTimeMillis() + 6600 * 1000L;
             return cachedToken;

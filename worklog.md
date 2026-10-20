@@ -9343,3 +9343,18 @@ Work Log:
 
 Stage Summary:
 - 重供给累计 #96；零 mvn 80 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+
+---
+Task ID: r160
+Agent: cron-ops-loop
+Task: 2026-10-20 12:05 巡检
+
+Work Log:
+- dump 首跑 3306 不在线跳过；探活 200×4 但 auth=no such table → 重供给 #97，且冷启动初始化进行中（apt-get download mariadb 在跑）
+- 等待策略：轮询 70s 至 apt 完成、3306 就绪（mariadb 随冷启动自动就绪），避免 dpkg 锁冲突
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → recover 干净退出（done: 8080=200 jar=ok 3306=ok 真绿 t+5s，首次秒级完成）→ java pid 1475
+- 40s 复验 200×4 真绿 + node 探针 200；补跑收口 dump + push
+
+Stage Summary:
+- 重供给累计 #97；零 mvn 81 次；全绿 200×4 真绿，内存 3.05GB（回落），oom 0
+- 冷启动等待 apt 完成再 recover 的时序处理模式首次应用，recover 最快一次（<5s 完成检测+拉起）

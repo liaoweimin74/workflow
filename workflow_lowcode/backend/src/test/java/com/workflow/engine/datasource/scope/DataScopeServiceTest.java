@@ -140,6 +140,50 @@ class DataScopeServiceTest {
     }
 
     @Test
+    void applyRead_composes_scope_into_structured_and_group() {
+        loginAs(200L, "u200", List.of("clerk"));
+        stubRules(DataScopeAction.READ, roleRule("clerk", DataScopeType.SELF));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"logic\":\"AND\",\"conditions\":[{\"column\":\"status\",\"op\":\"eq\",\"value\":\"paid\"}]}");
+
+        service.applyRead(DS_ID, req);
+
+        // 三个 SQL 生成器见到 conditions 就只走结构化分支并忽略顶层键，
+        // 所以范围条件必须进 conditions，挂在顶层等于没施加
+        assertTrue(req.getFilter().contains("\"column\":\"created_by\""), req.getFilter());
+        assertTrue(req.getFilter().contains("\"value\":\"200\""), req.getFilter());
+        assertTrue(req.getFilter().contains("\"status\""), req.getFilter());
+    }
+
+    @Test
+    void applyRead_rejects_or_group_instead_of_silently_narrowing_it() {
+        loginAs(200L, "u200", List.of("clerk"));
+        stubRules(DataScopeAction.READ, roleRule("clerk", DataScopeType.SELF));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"logic\":\"OR\",\"conditions\":["
+                + "{\"column\":\"status\",\"op\":\"eq\",\"value\":\"paid\"},"
+                + "{\"column\":\"channel\",\"op\":\"eq\",\"value\":\"web\"}]}");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.applyRead(DS_ID, req));
+
+        assertEquals(400, ex.getCode());
+        assertTrue(ex.getMessage().contains("OR"), ex.getMessage());
+    }
+
+    @Test
+    void applyRead_keeps_or_group_when_no_scope_applies() {
+        loginAs(200L, "u200", List.of("clerk"));
+        stubRules(DataScopeAction.READ);
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        String orFilter = "{\"logic\":\"OR\",\"conditions\":[{\"column\":\"status\",\"op\":\"eq\",\"value\":\"paid\"}]}";
+        req.setFilter(orFilter);
+
+        service.applyRead(DS_ID, req);
+
+        assertEquals(orFilter, req.getFilter(), "不受限的请求不该被改写");
+    }
+
+    @Test
     void applyRead_custom_scope_resolves_user_id_template() {
         loginAs(200L, "u200", List.of("clerk"));
         stubRules(DataScopeAction.READ,

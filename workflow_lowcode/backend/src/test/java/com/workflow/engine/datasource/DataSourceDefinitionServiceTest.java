@@ -461,6 +461,27 @@ class DataSourceDefinitionServiceTest {
         order.verify(formAdapter).query(eq(ds), same(req));
     }
 
+    /**
+     * SYSTEM/API 这类取数实现根本不读 filter 的源，即便库里留着范围规则也不能静默放行——
+     * 静默等于让一个「看着已收紧」的配置变成假保障，必须当场 400。
+     */
+    @Test
+    void queryData_scopeOnNonFilterConsumingType_failsLoud() {
+        DataSourceDefinition ds = draftDs("SYSTEM", null, "sys-user", null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
+                .thenReturn(Map.of("created_by", "200"));
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.queryData(DS_ID, new BizDataQueryRequest()));
+
+        assertEquals(400, e.getCode());
+        assertTrue(e.getMessage().contains("不消费筛选条件"), e.getMessage());
+        verify(dataScopeService, never()).applyRead(eq(DS_ID), any());
+        verify(formAdapter, never()).query(any(), any());
+    }
+
     @Test
     void aggregateData_appliesDataScope_soDashboardsCannotBypassIt() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);

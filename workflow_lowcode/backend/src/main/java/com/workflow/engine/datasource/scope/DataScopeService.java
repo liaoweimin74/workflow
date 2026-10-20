@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +29,9 @@ import java.util.regex.Pattern;
  * <p>语义约定（改动须同步这里的四条不变量）：
  * <ol>
  *   <li><b>默认放行</b>：某数据源没有任何命中规则 = 现状行为（全租户可见），配置是收紧而非开关；</li>
- *   <li><b>交集而非覆盖</b>：注入写入筛选 Map 的键，与客户端已传条件 AND 叠加；
- *       同键（客户端伪造 {@code created_by} 试图越权）服务端值胜出；</li>
+ *   <li><b>交集而非覆盖</b>：范围条件与客户端已传条件 AND 叠加——map 形态按同键写入
+ *       （客户端伪造 {@code created_by} 试图越权时服务端值胜出），结构化形态往 conditions
+ *       里追加等值条目；OR 组没法在不放宽可见行的前提下叠加，当场 400，不静默改成 AND；</li>
  *   <li><b>最宽优先</b>：同一用户经角色/组织/成员组命中多条规则时取最宽的一条
  *       （ALL &gt; CUSTOM &gt; SELF），与 {@code PermissionEvaluator} 的多角色或语义一致；</li>
  *   <li><b>读写分轴</b>：READ 管列表/聚合/单条，WRITE 管改删；新增不按行校验
@@ -95,9 +97,7 @@ public class DataScopeService {
         if (condition.isEmpty()) {
             return;
         }
-        Map<String, Object> filters = parseFilter(request.getFilter());
-        filters.putAll(condition);
-        request.setFilter(writeFilter(filters));
+        request.setFilter(composeFilter(request.getFilter(), condition));
     }
 
     /**
@@ -287,6 +287,54 @@ public class DataScopeService {
             throw new BusinessException(400, "数据范围取值解析为空: " + template);
         }
         return value;
+    }
+
+    /**
+     * 把范围条件叠加进调用方 filter，产出下游三个 SQL 生成器都认的形状。
+     *
+     * <p>三个生成器（BizDataQueryBuilder / JoinSqlGenerator / SqlTemplateEngine）共用同一形状判定：
+     * filter 里一旦出现 {@code conditions}，就只走结构化分支并 <b>忽略其余顶层键</b>。
+     * 直接把范围条件当顶层键并进去（旧写法）在结构化筛选下等于不施加范围。
+     *
+     * <p>组合规则：
+     * <ul>
+     *   <li>调用方空 filter：原样写范围条件（map 形态，等值 AND）。</li>
+     *   <li>调用方 map 形态：同键服务端胜出，范围条件覆盖调用方的同名列取值。</li>
+     *   <li>调用方结构化 AND 组：把范围条件作为等值叶子追加进同一 AND 组。</li>
+     *   <li>调用方结构化 OR 组：拒绝。把叶子并进 OR 组会把语义从 OR 改成 AND（放大可见行），
+     *       范围控制宁可报错也不能静默放宽；OR 与范围的正式组合要等第二通道（范围条件独立成段）落地。</li>
+     * </ul>
+     *
+     * <p>同列冲突：调用方已按 {@code created_by} 筛选且与范围值不同时，AND 结果为空集，
+     * 属预期（他明确要别人的行，而范围不给），不是 bug。
+     */
+    private String composeFilter(String callerFilterJson, Map<String, Object> condition) {
+        Map<String, Object> caller = parseFilter(callerFilterJson);
+        if (caller.isEmpty()) {
+            return writeFilter(condition);
+        }
+        Object conditions = caller.get("conditions");
+        if (conditions == null) {
+            Map<String, Object> merged = new LinkedHashMap<>(caller);
+            merged.putAll(condition);
+            return writeFilter(merged);
+        }
+        if (!(conditions instanceof List<?> callerConditions)) {
+            throw new BusinessException(400, "筛选参数 conditions 必须为数组");
+        }
+        String logic = String.valueOf(caller.getOrDefault("logic", "AND"));
+        if (!"AND".equalsIgnoreCase(logic)) {
+            throw new BusinessException(400,
+                    "该数据源已配置数据范围，OR 组合筛选暂不可用（范围条件无法在不放宽可见行的前提下与 OR 组合）；"
+                            + "请改用 AND 筛选，或调整该数据源的范围配置");
+        }
+        List<Object> composed = new ArrayList<Object>(callerConditions);
+        condition.forEach((column, value) -> composed.add(Map.of(
+                "column", column, "op", "eq", "value", value)));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("logic", "AND");
+        out.put("conditions", composed);
+        return writeFilter(out);
     }
 
     @SuppressWarnings("unchecked")

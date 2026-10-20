@@ -56,12 +56,14 @@ public class DataScopeController {
 
     /**
      * 保存规则（同租户 + 同数据源 + 同动作 + 同主体覆盖）。
-     * 先校验数据源存在：悬空 dataSourceId 的配置看着生效实则永不命中，属于必须拒绝的误配。
+     * 先校验数据源存在且可施加范围：悬空 dataSourceId 的配置看着生效实则永不命中，
+     * 而 WORKFLOW/SYSTEM/API 源的取数实现不读筛选条件，配上也永不生效——两类误配都在入口拒绝。
      */
     @PostMapping
     public R<DataScopeDTO> save(@RequestBody DataScopeSaveRequest req) {
         requireAdmin();
         dataSourceService.getById(req.getDataSourceId());
+        dataSourceService.requireScopeConfigurable(req.getDataSourceId());
         WfDataScope saved = dataScopeService.save(req.getDataSourceId(), req.getAction(),
                 req.getSubjectType(), req.getSubjectKey(), req.getScopeType(),
                 req.getScopeColumn(), req.getScopeValue());

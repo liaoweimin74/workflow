@@ -54,6 +54,8 @@ public class DataSourceDefinitionService {
     private static final String TYPE_API = "API";
     private static final String TYPE_WORKFLOW = "WORKFLOW";
     private static final String TYPE_SQL = "SQL";
+    /** 可施加数据范围的源类型（见 {@link #requireScopeEnforceable}）：仅这两类的取数实现消费筛选条件。 */
+    private static final Set<String> SCOPE_ENFORCEABLE_TYPES = Set.of(TYPE_FORM, TYPE_SQL);
     private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW, TYPE_SQL);
 
     /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist；唯一事实源见 BuiltInSystemSources，8 个内建数据源） */
@@ -388,6 +390,7 @@ public class DataSourceDefinitionService {
         if (req == null) {
             req = new BizDataQueryRequest();
         }
+        requireScopeEnforceable(id, DataScopeAction.READ);
         dataScopeService.applyRead(id, req);
         return adapterOf(id).query(getById(id), req);
     }
@@ -400,6 +403,7 @@ public class DataSourceDefinitionService {
         if (req == null) {
             req = new AggregateRequest();
         }
+        requireScopeEnforceable(id, DataScopeAction.READ);
         dataScopeService.applyRead(id, req);
         return adapterOf(id).aggregate(getById(id), req);
     }
@@ -470,6 +474,28 @@ public class DataSourceDefinitionService {
     /** 当前用户在该数据源上是否存在生效的范围条件（无登录态/管理员/无规则 = false）。 */
     private boolean isRowScoped(String id, DataScopeAction action) {
         return !dataScopeService.conditionFor(id, action).isEmpty();
+    }
+
+    /**
+     * 范围条件只能施加在「取数实现真正消费 filter」的源类型上。
+     *
+     * <p>FORM/SQL 走 BizDataQueryBuilder / JoinSqlGenerator / SqlTemplateEngine，三者都认筛选条件；
+     * WORKFLOW 查询服务只按 map 等值拼条件且不认结构化形态，SYSTEM 内建源根本不读 filter，
+     * API 源的筛选参数由第三方接口自定。在这些源上注入范围等于没注入——
+     * 与其静默放行让管理员以为已收紧，不如当场拒绝并说明原因。
+     */
+    public void requireScopeConfigurable(String id) {
+        String type = getById(id).getType();
+        if (!SCOPE_ENFORCEABLE_TYPES.contains(type)) {
+            throw new BusinessException(400, "数据源类型 " + type
+                    + " 的取数实现不消费筛选条件，数据范围无法施加；请取消该数据源的范围配置");
+        }
+    }
+
+    private void requireScopeEnforceable(String id, DataScopeAction action) {
+        if (isRowScoped(id, action)) {
+            requireScopeConfigurable(id);
+        }
     }
 
     /** 带范围条件按 id 取一行；取不到返回 null。复用查询分发，条件叠加路径与实际查询完全一致。 */

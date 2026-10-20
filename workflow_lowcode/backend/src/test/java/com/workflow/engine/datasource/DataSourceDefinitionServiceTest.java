@@ -470,8 +470,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("SYSTEM", null, "sys-user", null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
-                .thenReturn(Map.of("created_by", "200"));
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
 
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.queryData(DS_ID, new BizDataQueryRequest()));
@@ -501,7 +500,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ)).thenReturn(Map.of());
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(false);
         BizDataVO row = new BizDataVO();
         when(formAdapter.get(ds, "r1")).thenReturn(row);
 
@@ -513,8 +512,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
-                .thenReturn(Map.of("created_by", "200"));
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
 
@@ -529,8 +527,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.READ))
-                .thenReturn(Map.of("created_by", "200"));
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
         BizDataVO row = new BizDataVO();
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(row), 1, 0, 20));
@@ -543,8 +540,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE))
-                .thenReturn(Map.of("created_by", "200"));
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
 
@@ -553,6 +549,11 @@ class DataSourceDefinitionServiceTest {
 
         assertEquals(403, e.getCode());
         verify(formAdapter, never()).update(any(), any(), any(), any());
+        // 写归属必须把 READ 与 WRITE 一次性合并后查（分两次施加会被后一次覆盖保留键）
+        verify(dataScopeService).applyAll(eq(DS_ID),
+                eq(List.of(DataScopeAction.READ, DataScopeAction.WRITE)),
+                any(BizDataQueryRequest.class));
+        verify(dataScopeService, never()).applyRead(eq(DS_ID), any());
     }
 
     @Test
@@ -560,8 +561,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE))
-                .thenReturn(Map.of("created_by", "200"));
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(new BizDataVO()), 1, 0, 20));
 
@@ -575,7 +575,7 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.conditionFor(DS_ID, DataScopeAction.WRITE)).thenReturn(Map.of());
+        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(false);
 
         service.deleteData(DS_ID, "r1");
 

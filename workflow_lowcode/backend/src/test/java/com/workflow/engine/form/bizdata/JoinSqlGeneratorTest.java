@@ -1,5 +1,6 @@
 package com.workflow.engine.form.bizdata;
 
+import com.workflow.api.dto.FilterAware;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -256,6 +257,55 @@ class JoinSqlGeneratorTest {
                 Map.of(), null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).doesNotContain("_text");
+    }
+
+    // ---------- 行级范围保留键通道 __row_scope ----------
+
+    @Test
+    void buildSelect_rowScope_selfScopeOnBuiltinCreatedBy() {
+        // created_by 是 wf_biz_* 固定系统列、不在表单列配置里，SELF 范围必须能引用主表别名
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "created_by", "op", "eq", "value", "200"))));
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
+                filters, null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).isEqualTo(
+                "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
+                        + " WHERE m.tenant_id = ? AND ((m.created_by = ?))"
+                        + " ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, "200", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_unionOfMainAndVirtualColumns() {
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "order_no", "op", "eq", "value", "NO-1")),
+                List.of(Map.of("column", "customer_name", "op", "eq", "value", "张三"))));
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
+                filters, null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).contains(" AND ((m.order_no = ?) OR (j1.name = ?))");
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, "NO-1", "张三", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_emptyGroup_rollsBackParams() {
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "order_no", "op", "eq", "value", "NO-1")),
+                List.of()));
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
+                filters, null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).doesNotContain("m.order_no = ?");
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, 10, 0);
     }
 
     private static List<JoinSqlGenerator.QueryColumn> queryColumns() {

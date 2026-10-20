@@ -2,6 +2,7 @@ package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.FilterAware;
 import com.workflow.engine.datasource.InMemoryAggregateUtil;
 
 import java.util.ArrayList;
@@ -354,6 +355,8 @@ public final class BizDataQueryBuilder {
         if (filters == null || filters.isEmpty()) {
             return;
         }
+        // 行级范围（服务端注入的保留键）：独立 AND 段，组间 OR、组内 AND
+        appendRowScope(sql, params, allowedColumns, columnTypeOf, filters.get(FilterAware.ROW_SCOPE_KEY));
         // 结构化格式：{ "logic": "AND"|"OR", "conditions": [{column, op, value}] }
         if (filters.get("conditions") instanceof List<?> condList) {
             String logic = "AND".equalsIgnoreCase(String.valueOf(filters.getOrDefault("logic", "AND"))) ? "AND" : "OR";
@@ -362,6 +365,9 @@ public final class BizDataQueryBuilder {
         }
         // 旧格式：{col: value} 等值 AND
         for (Map.Entry<String, Object> e : filters.entrySet()) {
+            if (FilterAware.ROW_SCOPE_KEY.equals(e.getKey())) {
+                continue;
+            }
             validateColumn(e.getKey(), allowedColumns, "筛选字段");
             if (e.getValue() == null) {
                 continue;
@@ -388,12 +394,65 @@ public final class BizDataQueryBuilder {
     }
 
     /**
+     * 行级范围：{@code [ [cond,...], [cond,...] ]} —— 组间 OR、组内 AND，整体作为独立 AND 段。
+     *
+     * <p>某个组解析不出任何条件时视为该对象放行全部行，整个并集因此不再收窄：
+     * 直接回滚已收集的参数并跳过范围段（与服务端「空条件对象 = 不受限」一致）。
+     */
+    private static void appendRowScope(StringBuilder sql, List<Object> params,
+                                       List<String> allowedColumns, Map<String, String> columnTypeOf,
+                                       Object rowScope) {
+        if (rowScope == null) {
+            return;
+        }
+        if (!(rowScope instanceof List<?> groups)) {
+            throw new IllegalArgumentException("数据范围条件格式非法");
+        }
+        int mark = params.size();
+        List<String> groupFragments = new ArrayList<>();
+        for (Object group : groups) {
+            if (!(group instanceof List<?> leaves)) {
+                throw new IllegalArgumentException("数据范围条件格式非法");
+            }
+            List<String> leafFragments = buildStructuredFragments(params, allowedColumns, columnTypeOf,
+                    castConditions(leaves));
+            if (leafFragments.isEmpty()) {
+                rollbackParams(params, mark);
+                return;
+            }
+            groupFragments.add("(" + String.join(" AND ", leafFragments) + ")");
+        }
+        if (groupFragments.isEmpty()) {
+            rollbackParams(params, mark);
+            return;
+        }
+        sql.append(" AND (").append(String.join(" OR ", groupFragments)).append(")");
+    }
+
+    private static void rollbackParams(List<Object> params, int mark) {
+        while (params.size() > mark) {
+            params.remove(params.size() - 1);
+        }
+    }
+
+    /**
      * 结构化多条件：按 logic 组合 AND/OR，括号包裹；列名白名单校验，值参数绑定。
      * 运算符：eq/ne/gt/gte/lt/lte/like/in/range/isEmpty/isNotEmpty（isEmpty/isNotEmpty 忽略 value）。
      */
     private static void appendStructuredFilters(StringBuilder sql, List<Object> params,
                                                 List<String> allowedColumns, Map<String, String> columnTypeOf,
                                                 String logic, List<Map<String, Object>> conditions) {
+        List<String> fragments = buildStructuredFragments(params, allowedColumns, columnTypeOf, conditions);
+        if (fragments.isEmpty()) {
+            return;
+        }
+        sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
+    }
+
+    private static List<String> buildStructuredFragments(List<Object> params,
+                                                         List<String> allowedColumns,
+                                                         Map<String, String> columnTypeOf,
+                                                         List<Map<String, Object>> conditions) {
         List<String> fragments = new ArrayList<>();
         for (Map<String, Object> c : conditions) {
             String column = String.valueOf(c.get("column"));
@@ -465,10 +524,7 @@ public final class BizDataQueryBuilder {
                 default -> throw new IllegalArgumentException("非法筛选运算符: " + op);
             }
         }
-        if (fragments.isEmpty()) {
-            return;
-        }
-        sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
+        return fragments;
     }
 
     /**

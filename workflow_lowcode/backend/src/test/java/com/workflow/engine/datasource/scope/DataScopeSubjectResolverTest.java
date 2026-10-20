@@ -1,8 +1,6 @@
 package com.workflow.engine.datasource.scope;
 
 import com.workflow.framework.security.domain.LoginUser;
-import com.workflow.system.domain.entity.SysMemberGroupMember;
-import com.workflow.system.repository.SysMemberGroupMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -11,21 +9,17 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
- * 主体摊平：一个用户 = 角色 + 本人 + 组织 + 成员组的标识集合。
+ * 主体摊平：当前只按角色收紧行权限，一个用户 = 他所拥有角色的标识集合。
  */
 class DataScopeSubjectResolverTest {
 
-    private SysMemberGroupMemberRepository memberRepository;
     private DataScopeSubjectResolver resolver;
 
     @BeforeEach
     void setUp() {
-        memberRepository = mock(SysMemberGroupMemberRepository.class);
-        resolver = new DataScopeSubjectResolver(memberRepository);
+        resolver = new DataScopeSubjectResolver();
     }
 
     private LoginUser user(Long userId, List<String> roles, Long orgId) {
@@ -34,30 +28,26 @@ class DataScopeSubjectResolverTest {
         return loginUser;
     }
 
-    private SysMemberGroupMember memberOf(Long groupId) {
-        SysMemberGroupMember member = new SysMemberGroupMember();
-        member.setGroupId(groupId);
-        return member;
+    @Test
+    void flattens_roles_and_deduplicates() {
+        Set<String> subjects = resolver.subjectsOf(
+                user(200L, List.of("clerk", "auditor", "clerk"), 77L));
+
+        assertEquals(Set.of("ROLE:clerk", "ROLE:auditor"), subjects);
     }
 
     @Test
-    void flattens_all_four_subject_axes() {
-        when(memberRepository.findByUserIdAndIsDeleted(200L, 0))
-                .thenReturn(List.of(memberOf(9L), memberOf(10L), memberOf(9L)));
-
-        Set<String> subjects = resolver.subjectsOf(user(200L, List.of("clerk", "auditor"), 77L));
-
-        assertEquals(Set.of("ROLE:clerk", "ROLE:auditor", "USER:200", "ORG:77",
-                "MEMBER_GROUP:9", "MEMBER_GROUP:10"), subjects);
-    }
-
-    @Test
-    void skips_missing_axes_instead_of_emitting_null_keys() {
-        when(memberRepository.findByUserIdAndIsDeleted(200L, 0)).thenReturn(List.of());
-
+    void skips_blank_roles_instead_of_emitting_null_keys() {
         Set<String> subjects = resolver.subjectsOf(user(200L, List.of(" ", "clerk"), null));
 
-        assertEquals(Set.of("ROLE:clerk", "USER:200"), subjects);
+        assertEquals(Set.of("ROLE:clerk"), subjects);
+    }
+
+    @Test
+    void id_and_org_are_not_subjects_anymore() {
+        Set<String> subjects = resolver.subjectsOf(user(200L, List.of(), 77L));
+
+        assertTrue(subjects.isEmpty());
     }
 
     @Test
@@ -66,18 +56,9 @@ class DataScopeSubjectResolverTest {
     }
 
     @Test
-    void member_group_lookup_failure_does_not_widen_or_break_subjects() {
-        when(memberRepository.findByUserIdAndIsDeleted(200L, 0)).thenThrow(new RuntimeException("db down"));
+    void missing_role_list_yields_no_subjects() {
+        LoginUser loginUser = new LoginUser(200L, "u200", null, null, Set.of(), true);
 
-        Set<String> subjects = resolver.subjectsOf(user(200L, List.of("clerk"), null));
-
-        assertEquals(Set.of("ROLE:clerk", "USER:200"), subjects);
-    }
-
-    @Test
-    void no_user_id_skips_member_group_query() {
-        Set<String> subjects = resolver.subjectsOf(new LoginUser(null, "anonymous", null, List.of(), Set.of(), true));
-
-        assertTrue(subjects.isEmpty());
+        assertTrue(resolver.subjectsOf(loginUser).isEmpty());
     }
 }

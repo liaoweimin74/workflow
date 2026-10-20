@@ -2,6 +2,7 @@ package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.FilterAware;
 import com.workflow.engine.datasource.InMemoryAggregateUtil;
 
 import java.util.ArrayList;
@@ -449,12 +450,16 @@ public final class SqlTemplateEngine {
         if (filters == null || filters.isEmpty()) {
             return;
         }
+        appendRowScope(sql, params, columns, filters.get(FilterAware.ROW_SCOPE_KEY));
         if (filters.get("conditions") instanceof List<?> condList) {
             String logic = "AND".equalsIgnoreCase(String.valueOf(filters.getOrDefault("logic", "AND"))) ? "AND" : "OR";
             appendStructuredFilters(sql, params, columns, logic, castConditions(condList));
             return;
         }
         for (Map.Entry<String, Object> e : filters.entrySet()) {
+            if (FilterAware.ROW_SCOPE_KEY.equals(e.getKey())) {
+                continue;
+            }
             String key = resolveKey(e.getKey(), columns, "筛选字段");
             if (e.getValue() == null) {
                 continue;
@@ -480,10 +485,59 @@ public final class SqlTemplateEngine {
         return out;
     }
 
+    /** 行级范围：组间 OR、组内 AND；某组无实际条件 = 该对象放行全部行，并集整体不收窄。 */
+    private static void appendRowScope(StringBuilder sql, List<Object> params,
+                                       List<JoinSqlGenerator.QueryColumn> columns, Object rowScope) {
+        if (rowScope == null) {
+            return;
+        }
+        if (!(rowScope instanceof List<?> groups)) {
+            throw new IllegalArgumentException("数据范围条件格式非法");
+        }
+        int mark = params.size();
+        List<String> groupFragments = new ArrayList<>();
+        for (Object group : groups) {
+            if (!(group instanceof List<?> leaves)) {
+                throw new IllegalArgumentException("数据范围条件格式非法");
+            }
+            List<String> leafFragments = buildStructuredFragments(params, columns, castConditions(leaves));
+            if (leafFragments.isEmpty()) {
+                rollbackParams(params, mark);
+                return;
+            }
+            groupFragments.add("(" + String.join(" AND ", leafFragments) + ")");
+        }
+        if (groupFragments.isEmpty()) {
+            rollbackParams(params, mark);
+            return;
+        }
+        sql.append(" AND (").append(String.join(" OR ", groupFragments)).append(")");
+    }
+
+    private static void rollbackParams(List<Object> params, int mark) {
+        while (params.size() > mark) {
+            params.remove(params.size() - 1);
+        }
+    }
+
     /** 结构化多条件筛选（复用 filter 协议：eq/ne/like/in/range/isempty/isnotempty） */
     private static void appendStructuredFilters(StringBuilder sql, List<Object> params,
                                                 List<JoinSqlGenerator.QueryColumn> columns, String logic,
                                                 List<Map<String, Object>> conditions) {
+        List<String> fragments = buildStructuredFragments(params, columns, conditions);
+        if (fragments.isEmpty()) {
+            return;
+        }
+        if (fragments.size() == 1) {
+            sql.append(" AND ").append(fragments.get(0));
+        } else {
+            sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
+        }
+    }
+
+    private static List<String> buildStructuredFragments(List<Object> params,
+                                                         List<JoinSqlGenerator.QueryColumn> columns,
+                                                         List<Map<String, Object>> conditions) {
         List<String> fragments = new ArrayList<>();
         for (Map<String, Object> c : conditions) {
             String column = String.valueOf(c.get("column"));
@@ -542,14 +596,7 @@ public final class SqlTemplateEngine {
                 default -> throw new IllegalArgumentException("非法筛选运算符: " + op);
             }
         }
-        if (fragments.isEmpty()) {
-            return;
-        }
-        if (fragments.size() == 1) {
-            sql.append(" AND ").append(fragments.get(0));
-        } else {
-            sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
-        }
+        return fragments;
     }
 
     /** 关键词搜索：keywordColumn 支持逗号分隔多列（OR LIKE），仅允许 filterable=true 列 */

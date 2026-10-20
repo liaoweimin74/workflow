@@ -4,7 +4,7 @@ defineOptions({ name: 'RoleManagement' })
 import { ref, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Key } from '@element-plus/icons-vue'
+import { Key, Lock } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
@@ -13,6 +13,7 @@ import { getRoleList, createRole, updateRole, deleteRole, getRoleMenus, assignRo
 import { getMenuTree } from '@/api/menu'
 import type { RoleVO } from '@/types/role'
 import type { MenuTree } from '@/types/menu'
+import RoleDataPermissionDialog from './RoleDataPermissionDialog.vue'
 
 const searchTableRef = ref()
 // ensure searchTableRef is "used" for template ref binding
@@ -22,6 +23,10 @@ const menuDialogVisible = ref(false)
 const currentRoleId = ref<number>(0)
 const checkedMenuKeys = ref<number[]>([])
 const menuTreeRef = ref<any>(null)
+
+const dataPermissionDialogRef = ref<InstanceType<typeof RoleDataPermissionDialog> | null>(null)
+const dataPermissionVisible = ref(false)
+const dataPermissionRole = ref<RoleVO | null>(null)
 
 // ---------- 搜索字段 ----------
 const searchFields: SearchField[] = [
@@ -66,9 +71,16 @@ async function handleMenuSubmit() {
   menuDialogVisible.value = false
 }
 
+// ---------- 数据权限 ----------
+function handleAssignDataPermission(row: RoleVO): void {
+  dataPermissionRole.value = row
+  dataPermissionVisible.value = true
+}
+
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
   { label: '分配菜单', icon: Key, size: 'small', link: true, onClick: handleAssignMenu },
+  { label: '数据权限', icon: Lock, size: 'small', link: true, onClick: handleAssignDataPermission },
 ]
 
 // ---------- fetchApi ----------
@@ -129,8 +141,8 @@ const unregisterAi = registerPageActions({
     searchFields: searchFields.map((f) => ({ field: f.prop, title: f.label, type: f.type })),
     tableColumns: columns.map((c) => ({ field: (c as TableColumn).prop, title: (c as TableColumn).label })).filter((c) => c.field),
     formFields: formConfig.rule.map((r) => ({ field: (r as any).field, title: (r as any).title, required: !!(r as any).validate?.length })),
-    buttons: ['search', 'reset', 'open-create', 'open-edit', 'submit', 'assign-menu', 'check-menu', 'submit-menu'],
-    notes: 'set-query 即时生效并刷新列表；弹窗表单先 open-create/open-edit 再 set-value，最后 submit；分配菜单流程=assign-menu(行序号)→check-menu(菜单名数组)→submit-menu',
+    buttons: ['search', 'reset', 'open-create', 'open-edit', 'submit', 'assign-menu', 'check-menu', 'submit-menu', 'assign-data-permission'],
+    notes: 'set-query 即时生效并刷新列表；弹窗表单先 open-create/open-edit 再 set-value，最后 submit；分配菜单流程=assign-menu(行序号)→check-menu(菜单名数组)→submit-menu；数据权限流程=assign-data-permission(行序号) 打开勾选弹窗（人工勾选读写轴后保存）',
     layer: 'L2',
   }),
   handlers: {
@@ -181,6 +193,13 @@ const unregisterAi = registerPageActions({
       return { ok: true, data: `已勾选 ${ids.length} 个节点` }
     },
     'submit-menu': () => handleMenuSubmit().then(() => ({ ok: true, data: '菜单分配已保存' })).catch((e) => ({ ok: false, error: `保存失败：${e?.message ?? e}` })),
+    'assign-data-permission': (a) => {
+      const idx = Number(a.target ?? a.value ?? NaN)
+      const row = (searchTableRef.value?.getList?.() ?? [])[idx]
+      if (!row) return { ok: false, error: `行序号 ${a.target} 不存在（先 get-state 查看当前页）` }
+      handleAssignDataPermission(row)
+      return { ok: true, data: `已打开「${row.roleName}」的数据权限弹窗` }
+    },
     'get-state': () => {
       const st = searchTableRef.value?.dialogState?.()
       return {
@@ -191,6 +210,7 @@ const unregisterAi = registerPageActions({
           dialog: st,
           form: st?.visible ? searchTableRef.value?.getFormValues?.() : null,
           menuDialog: { visible: menuDialogVisible.value, checked: checkedMenuKeys.value },
+          dataPermissionDialog: dataPermissionDialogRef.value?.getState?.() ?? { visible: false, rows: [] },
         },
       }
     },
@@ -243,6 +263,12 @@ onUnmounted(unregisterAi)
       <el-button type="primary" @click="handleMenuSubmit">保存</el-button>
     </template>
   </el-dialog>
+
+  <RoleDataPermissionDialog
+    ref="dataPermissionDialogRef"
+    v-model="dataPermissionVisible"
+    :role="dataPermissionRole"
+  />
 </template>
 
 <style scoped>

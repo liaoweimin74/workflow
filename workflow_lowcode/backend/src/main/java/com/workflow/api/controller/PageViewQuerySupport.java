@@ -2,6 +2,7 @@ package com.workflow.api.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.FilterAware;
 import com.workflow.common.exception.BusinessException;
 import org.springframework.stereotype.Component;
 
@@ -80,14 +81,20 @@ public class PageViewQuerySupport {
         if (filterJson == null || filterJson.isBlank()) {
             return null;
         }
+        boolean mayCarryRowScope = filterJson.contains(FilterAware.ROW_SCOPE_KEY);
         // 白名单为空（数据源未声明 searchFields）= 不限制
-        if (whitelist == null || whitelist.isEmpty()) {
+        if ((whitelist == null || whitelist.isEmpty()) && !mayCarryRowScope) {
             return filterJson;
         }
         try {
             Map<String, Object> filter = objectMapper.readValue(filterJson, Map.class);
             if (filter == null || filter.isEmpty()) {
                 return null;
+            }
+            // 行级范围是服务端保留通道：客户端传入的一律丢弃，不参与白名单校验
+            filter.remove(FilterAware.ROW_SCOPE_KEY);
+            if (whitelist == null || whitelist.isEmpty()) {
+                return objectMapper.writeValueAsString(filter);
             }
             if (filter.get("conditions") instanceof List<?> conditions) {
                 // 结构化格式：{logic, conditions:[{column,op,value}]}

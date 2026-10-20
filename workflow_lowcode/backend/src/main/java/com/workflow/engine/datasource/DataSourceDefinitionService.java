@@ -15,6 +15,7 @@ import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.datasource.scope.DataScopeAction;
 import com.workflow.engine.datasource.scope.DataScopeService;
+import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.bizdata.JoinSqlGenerator;
 import com.workflow.engine.form.bizdata.JoinTargetCatalog;
 import com.workflow.engine.form.bizdata.SqlTemplateEngine;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +58,15 @@ public class DataSourceDefinitionService {
     private static final String TYPE_SQL = "SQL";
     /** 可施加数据范围的源类型（见 {@link #requireScopeEnforceable}）：仅这两类的取数实现消费筛选条件。 */
     private static final Set<String> SCOPE_ENFORCEABLE_TYPES = Set.of(TYPE_FORM, TYPE_SQL);
+
+    /**
+     * 单表 / JOIN 路径额外可筛的系统内置列。
+     *
+     * <p>与 {@code BizDataQueryBuilder.BUILTIN_COLUMNS}、{@code JoinSqlGenerator.BUILTIN_COLUMNS}
+     * 同一清单（那两个是各自类的私有常量，生成器不读这里，改动时三处一起看）：
+     * SQL 模板路径不认内置列，所以只在 {@link #scopeColumns} 的非模板分支里补。
+     */
+    private static final Set<String> SCOPE_BUILTIN_COLUMNS = Set.of("id", "created_at", "updated_at", "created_by");
     private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW, TYPE_SQL);
 
     /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist；唯一事实源见 BuiltInSystemSources，8 个内建数据源） */
@@ -392,7 +403,7 @@ public class DataSourceDefinitionService {
         }
         requireScopeEnforceable(id, DataScopeAction.READ);
         dataScopeService.applyRead(id, req);
-        return adapterOf(id).query(getById(id), req);
+        return queryAdapter(id, req);
     }
 
     /**
@@ -473,7 +484,7 @@ public class DataSourceDefinitionService {
 
     /** 当前用户在该数据源上是否存在生效的范围条件（无登录态/管理员/无规则 = false）。 */
     private boolean isRowScoped(String id, DataScopeAction action) {
-        return !dataScopeService.conditionFor(id, action).isEmpty();
+        return dataScopeService.hasScope(id, action);
     }
 
     /**
@@ -486,10 +497,54 @@ public class DataSourceDefinitionService {
      */
     public void requireScopeConfigurable(String id) {
         String type = getById(id).getType();
-        if (!SCOPE_ENFORCEABLE_TYPES.contains(type)) {
+        if (!isScopeEnforceableType(type)) {
             throw new BusinessException(400, "数据源类型 " + type
                     + " 的取数实现不消费筛选条件，数据范围无法施加；请取消该数据源的范围配置");
         }
+    }
+
+    /** 该数据源类型是否可施加行范围（覆盖度盘点与配置入口共用同一判定）。 */
+    public static boolean isScopeEnforceableType(String type) {
+        return SCOPE_ENFORCEABLE_TYPES.contains(type);
+    }
+
+    /**
+     * 该源的范围条件可安全施加的列（保存权限对象时逐源校验用）。
+     *
+     * <p>口径取自各生成器真正的列校验，不是「metadata 报了哪些列」：
+     * <ul>
+     *   <li><b>SQL 模板路径</b>（SQL 源的 visual/sql、FORM 源 sql 模式，都走
+     *       {@link SqlTemplateEngine}）：只认管理员声明列中 {@code filterable=true} 的列，
+     *       <b>不认</b>系统内置列——模板是子查询，外层能引用的只有它 SELECT 出来的列；</li>
+     *   <li><b>单表 / JOIN 路径</b>（FORM 无模式、FORM config 模式）：物理表恒带
+     *       {@code id/created_at/updated_at/created_by}，主表列默认可筛（{@code filterable}
+     *       未标注也算），JOIN 虚拟列与 {@code <key>_text} 冗余列按声明的 {@code filterable} 取值。</li>
+     * </ul>
+     *
+     * <p>返回空集是有效结果（SQL 源 config 模式没有活跃声明列，本就无法被范围收紧），
+     * 调用方据此拒绝保存并提示，好过让条件在用户打开列表时才炸成「非法筛选字段」。
+     */
+    public Set<String> scopeColumns(String id) {
+        DataSourceDefinition ds = getById(id);
+        boolean templatePath = TYPE_SQL.equals(ds.getType())
+                || TYPE_FORM.equals(ds.getType()) && FormQueryConfig.parse(ds.getParams(), objectMapper).isSqlMode();
+        Set<String> columns = new LinkedHashSet<>();
+        for (ColumnConfig column : metadata(id).getColumns()) {
+            String key = column.getKey();
+            if (key == null || key.isBlank()) {
+                continue;
+            }
+            boolean usable = templatePath
+                    ? Boolean.TRUE.equals(column.getFilterable())
+                    : !Boolean.FALSE.equals(column.getFilterable());
+            if (usable) {
+                columns.add(key);
+            }
+        }
+        if (!templatePath) {
+            columns.addAll(SCOPE_BUILTIN_COLUMNS);
+        }
+        return columns;
     }
 
     private void requireScopeEnforceable(String id, DataScopeAction action) {
@@ -498,15 +553,29 @@ public class DataSourceDefinitionService {
         }
     }
 
-    /** 带范围条件按 id 取一行；取不到返回 null。复用查询分发，条件叠加路径与实际查询完全一致。 */
+    /**
+     * 带范围条件按 id 取一行；取不到返回 null。
+     *
+     * <p>读、写范围一次性合并成一次查询（{@link DataScopeService#applyAll}）：先施加 WRITE 再走
+     * {@code queryData} 会被后者的 {@code applyRead} 覆盖掉保留键，写条件等于没加。
+     */
     private BizDataVO findScopedRecord(String id, String rowId, DataScopeAction action) {
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter(idFilterJson(rowId));
         req.setSize(1);
-        dataScopeService.apply(id, action, req);
-        BizDataPageVO page = queryData(id, req);
+        requireScopeEnforceable(id, action);
+        if (action != DataScopeAction.READ) {
+            requireScopeEnforceable(id, DataScopeAction.READ);
+        }
+        dataScopeService.applyAll(id, List.of(DataScopeAction.READ, action), req);
+        BizDataPageVO page = queryAdapter(id, req);
         List<BizDataVO> records = page == null ? null : page.getRecords();
         return records == null || records.isEmpty() ? null : records.get(0);
+    }
+
+    /** 只取数不施加范围：范围由调用方组合后放进请求（列表/聚合与按 id 反查共用）。 */
+    private BizDataPageVO queryAdapter(String id, BizDataQueryRequest req) {
+        return adapterOf(id).query(getById(id), req);
     }
 
     /** id 等值筛选 JSON（走序列化，不拼接字符串：rowId 来自路径参数，可能是任意字符）。 */

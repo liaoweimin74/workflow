@@ -105,6 +105,14 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模型配置' }
       },
       {
+        // 数据权限（系统管理 → 数据权限）：权限对象（条件 + 关联数据源）
+        // 与覆盖度盘点（缺口/豁免留痕）同页双 Tab；授权入口在角色管理 → 数据权限
+        path: 'system/row-permission',
+        name: 'RowPermissionManagement',
+        component: () => import('@/views/system/row-permission/RowPermissionPage.vue'),
+        meta: { title: '数据权限' }
+      },
+      {
         // AI 测试工具（录制 / 回放 / 用例管理）：面向测试人员，不进菜单（直达 URL
         // /aitest/cases）；录制为全局状态，可跨页面开始与保存
         path: 'aitest/cases',

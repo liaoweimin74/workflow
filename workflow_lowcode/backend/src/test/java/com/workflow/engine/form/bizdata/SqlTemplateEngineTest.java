@@ -1,5 +1,6 @@
 package com.workflow.engine.form.bizdata;
 
+import com.workflow.api.dto.FilterAware;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -247,6 +248,55 @@ class SqlTemplateEngineTest {
         SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
                 TEMPLATE, TENANT, columns(), Map.of(), null, null, null, null, 1, 10);
 
+        assertThat(wrapped.select().params()).containsExactly(TENANT, 10, 0);
+    }
+
+    // ---------- 行级范围保留键通道 __row_scope ----------
+
+    @Test
+    void wrap_rowScope_restrictsOuterQueryAndCount() {
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "customer_name", "op", "eq", "value", "张三"))));
+
+        SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
+                TEMPLATE, TENANT, columns(), filters, null, null, null, null, 1, 10);
+
+        assertThat(wrapped.select().sql()).isEqualTo(
+                "SELECT * FROM (SELECT o.id, o.order_no, c.name AS customer_name FROM wf_biz_order o"
+                        + " LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(o.customer_id,'$[0]'))"
+                        + " WHERE o.tenant_id = ?) _qs WHERE ((customer_name = ?))"
+                        + " ORDER BY order_no DESC LIMIT ? OFFSET ?");
+        assertThat(wrapped.select().params()).containsExactly(TENANT, "张三", 10, 0);
+        // 总数与行查询必须同一套范围条件，否则分页条数会泄露范围外行数
+        assertThat(wrapped.count().sql()).contains("_qs WHERE ((customer_name = ?))");
+        assertThat(wrapped.count().params()).containsExactly(TENANT, "张三");
+    }
+
+    @Test
+    void wrap_rowScope_unionGroups_orOfAnds() {
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "customer_name", "op", "eq", "value", "张三")),
+                List.of(Map.of("column", "order_no", "op", "eq", "value", "NO-1"),
+                        Map.of("column", "customer_name", "op", "like", "value", "张"))));
+
+        SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
+                TEMPLATE, TENANT, columns(), filters, null, null, null, null, 1, 10);
+
+        assertThat(wrapped.select().sql()).contains(
+                "_qs WHERE ((customer_name = ?) OR (order_no = ? AND customer_name LIKE ?))");
+        assertThat(wrapped.select().params()).containsExactly(TENANT, "张三", "NO-1", "%张%", 10, 0);
+    }
+
+    @Test
+    void wrap_rowScope_emptyGroup_leavesQueryUnrestricted() {
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "customer_name", "op", "eq", "value", "张三")),
+                List.of()));
+
+        SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
+                TEMPLATE, TENANT, columns(), filters, null, null, null, null, 1, 10);
+
+        assertThat(wrapped.select().sql()).doesNotContain("customer_name = ?");
         assertThat(wrapped.select().params()).containsExactly(TENANT, 10, 0);
     }
 }

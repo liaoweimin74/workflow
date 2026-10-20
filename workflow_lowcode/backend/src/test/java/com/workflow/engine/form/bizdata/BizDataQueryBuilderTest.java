@@ -1,5 +1,6 @@
 package com.workflow.engine.form.bizdata;
 
+import com.workflow.api.dto.FilterAware;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -330,5 +331,85 @@ class BizDataQueryBuilderTest {
                 null, null, null, "desc", 0, 20);
         assertThat(sp.sql()).contains("name = ?");
         assertThat(sp.params()).contains("张三");
+    }
+
+    // ---------- 行级范围保留键通道 __row_scope（组间 OR、组内 AND） ----------
+
+    private static Map<String, Object> rowScopeFilter(Map<String, Object> clientFilter,
+                                                      List<List<Map<String, Object>>> groups) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>(clientFilter);
+        m.put(FilterAware.ROW_SCOPE_KEY, groups);
+        return m;
+    }
+
+    @Test
+    void buildSelect_rowScope_unionGroups_orOfAnds() {
+        Map<String, Object> filters = rowScopeFilter(Map.of(), List.of(
+                List.of(Map.of("column", "dept", "op", "eq", "value", "研发部")),
+                List.of(Map.of("column", "name", "op", "eq", "value", "张三"),
+                        Map.of("column", "dept", "op", "ne", "value", "行政部"))));
+
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10);
+
+        assertThat(sp.sql()).contains(" AND ((dept = ?) OR (name = ? AND dept <> ?))");
+        assertThat(sp.params()).containsExactly("t1", "研发部", "张三", "行政部", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_emptyGroup_disablesRestriction_andRollsBackParams() {
+        // 空条件对象在并集里等于「放行全部」，先收集的组参数必须一并回滚
+        Map<String, Object> filters = rowScopeFilter(Map.of(), List.of(
+                List.of(Map.of("column", "dept", "op", "eq", "value", "研发部")),
+                List.of()));
+
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10);
+
+        assertThat(sp.sql()).doesNotContain("dept = ?");
+        assertThat(sp.params()).containsExactly("t1", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_coexistsWithClientStructuredOrFilter() {
+        // 客户端自己的 OR 结构化筛选与范围条件各占一个独立 AND 段
+        Map<String, Object> filters = rowScopeFilter(
+                structFilter("OR", List.of(
+                        Map.of("column", "dept", "op", "eq", "value", "研发部"),
+                        Map.of("column", "dept", "op", "eq", "value", "市场部"))),
+                List.of(List.of(Map.of("column", "name", "op", "eq", "value", "张三"))));
+
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10);
+
+        assertThat(sp.sql()).contains(" AND ((name = ?))");
+        assertThat(sp.sql()).contains("(dept = ? OR dept = ?)");
+        assertThat(sp.params()).containsExactly("t1", "张三", "研发部", "市场部", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_legacyMap_reservedKeyNotTreatedAsColumn() {
+        Map<String, Object> filters = new java.util.LinkedHashMap<>();
+        filters.put("dept", "研发部");
+        filters.put(FilterAware.ROW_SCOPE_KEY, List.of(
+                List.of(Map.of("column", "created_by", "op", "eq", "value", "200"))));
+
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10);
+
+        assertThat(sp.sql()).doesNotContain(FilterAware.ROW_SCOPE_KEY);
+        assertThat(sp.sql()).contains("(created_by = ?)");
+        assertThat(sp.sql()).contains("dept = ?");
+        assertThat(sp.params()).containsExactly("t1", "200", "研发部", 10, 0);
+    }
+
+    @Test
+    void buildSelect_rowScope_rejectsUnknownColumn() {
+        Map<String, Object> filters = rowScopeFilter(Map.of(), List.of(
+                List.of(Map.of("column", "hack", "op", "eq", "value", "x"))));
+
+        assertThatThrownBy(() -> BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

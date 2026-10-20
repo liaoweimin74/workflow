@@ -1,6 +1,7 @@
 package com.workflow.engine.datasource.scope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.FilterAware;
 import com.workflow.common.exception.BusinessException;
@@ -9,229 +10,385 @@ import com.workflow.framework.security.domain.LoginUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
- * 数据范围（DataScope）：按「主体 × 数据源 × 动作」在服务端追加行级过滤条件。
+ * 行权限（RowPermission）：按「角色 × 动作」把权限对象叠加到数据源查询上。
  *
- * <p>施加位置是 {@code DataSourceDefinitionService}——列表/聚合走 {@link #applyRead}，
- * 单条读取与改删走 {@link #conditionFor} 的行校验；出码/前端一律不参与范围判定，
- * 范围只能在服务端成立。
+ * <p>模型是三层：{@link RowPermission}（一组 AND 条件 + 名称）通过 {@link RowPermissionSource}
+ * 关联到若干数据源，再通过 {@link RowPermissionGrant} 授予角色并指定 READ/WRITE 轴。
+ * 授权的唯一写入口是「角色管理 → 数据权限」；这里只负责读取与施加。
+ * 施加位置是 {@code DataSourceDefinitionService}——列表/聚合走 {@link #applyRead}，
+ * 单条读取与改删走按 id 反查归属；出码/前端一律不参与范围判定，范围只能在服务端成立。
  *
  * <p>语义约定（改动须同步这里的四条不变量）：
  * <ol>
- *   <li><b>默认放行</b>：某数据源没有任何命中规则 = 现状行为（全租户可见），配置是收紧而非开关；</li>
- *   <li><b>交集而非覆盖</b>：范围条件与客户端已传条件 AND 叠加——map 形态按同键写入
- *       （客户端伪造 {@code created_by} 试图越权时服务端值胜出），结构化形态往 conditions
- *       里追加等值条目；OR 组没法在不放宽可见行的前提下叠加，当场 400，不静默改成 AND；</li>
- *   <li><b>最宽优先</b>：同一用户经角色/组织/成员组命中多条规则时取最宽的一条
- *       （ALL &gt; CUSTOM &gt; SELF），与 {@code PermissionEvaluator} 的多角色或语义一致；</li>
+ *   <li><b>默认放行</b>：某数据源没有任何命中授权 = 现状行为（全租户可见）；「全部可见」靠不授予表达，
+ *       不再有 ALL 通配配置。对象条件为空数组同样视为不受限（显式放行）。</li>
+ *   <li><b>并集</b>：同一用户经多个角色命中多个权限对象时取 OR；对象内部的条件按 AND。
+ *       这不是「取最宽的一条」——两个对象分别放开两批行，用户应当两批都看得到。</li>
+ *   <li><b>交集叠加</b>：并集条件与客户端 filter 始终 AND，走独立保留键 {@link FilterAware#ROW_SCOPE_KEY}，
+ *       客户端自带的是 map 还是 OR 结构化筛选都不影响；客户端传入的同名保留键先被丢弃。
+ *       列名在注入前做标识符校验，取值只能来自服务端解析的模板变量。</li>
  *   <li><b>读写分轴</b>：READ 管列表/聚合/单条，WRITE 管改删；新增不按行校验
  *       （新行还没有归属可比），归功能权限负责。</li>
  * </ol>
- *
- * <p>列名在注入前做标识符校验，取值只能来自服务端解析的模板变量；
- * 非法列/未知变量/空值快速 400，不静默降级为放行。
  */
 @Service
 public class DataScopeService {
 
-    /** 内置归属列：所有 wf_biz_* 主表固定列（见 DdlBuilder），由新增链路自动写入当前用户 id。 */
-    private static final String CREATED_BY_COLUMN = "created_by";
-
-    /** 列名合法格式（同 JOIN_FIELD_PATTERN：首字符允许下划线，上限 64）；范围列名来自配置表，必须挡在 SQL 之前。 */
+    /** 列名合法格式（同 JOIN_FIELD_PATTERN：首字符允许下划线，上限 64）；列名来自配置，必须挡在 SQL 之前。 */
     private static final Pattern COLUMN_PATTERN = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]{0,63}$");
 
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{([A-Za-z][A-Za-z0-9_]*)}");
 
+    /** 条件叶子支持的运算符（与三个 SQL 生成器的结构化筛选同一协议）。 */
+    private static final Set<String> ALLOWED_OPS =
+            Set.of("eq", "ne", "like", "in", "range", "isempty", "isnotempty");
+
     /** 管理员豁免（与 PermissionEvaluator / NotificationAdminAuthorization 的双 code 兼容一致）。 */
     private static final List<String> ADMIN_ROLES = List.of("admin", "ROLE_ADMIN");
 
-    /** 规则宽度：数值越小越宽，多主体命中取最宽。 */
-    private static final Map<DataScopeType, Integer> PERMISSIVENESS =
-            Map.of(DataScopeType.ALL, 0, DataScopeType.CUSTOM, 1, DataScopeType.SELF, 2);
-
-    private final WfDataScopeRepository scopeRepository;
+    private final RowPermissionRepository permissionRepository;
+    private final RowPermissionSourceRepository sourceRepository;
+    private final RowPermissionGrantRepository grantRepository;
     private final DataScopeSubjectResolver subjectResolver;
+    private final DataScopeVariables variables;
     private final ObjectMapper objectMapper;
     private final TenantProvider tenantProvider;
 
-    public DataScopeService(WfDataScopeRepository scopeRepository,
+    public DataScopeService(RowPermissionRepository permissionRepository,
+                            RowPermissionSourceRepository sourceRepository,
+                            RowPermissionGrantRepository grantRepository,
                             DataScopeSubjectResolver subjectResolver,
+                            DataScopeVariables variables,
                             ObjectMapper objectMapper,
                             TenantProvider tenantProvider) {
-        this.scopeRepository = scopeRepository;
+        this.permissionRepository = permissionRepository;
+        this.sourceRepository = sourceRepository;
+        this.grantRepository = grantRepository;
         this.subjectResolver = subjectResolver;
+        this.variables = variables;
         this.objectMapper = objectMapper;
         this.tenantProvider = tenantProvider;
     }
 
     // ==================== 施加 ====================
 
-    /**
-     * 对查询请求施加当前用户的读范围（无规则/管理员 = 原样返回）。
-     *
-     * @param dataSourceId 数据源 id（范围配置的寻址键）
-     * @param request      携带 filter 的查询请求（列表或聚合）
-     */
+    /** 对查询请求施加当前用户的读范围（无授权/管理员 = 原样返回）。 */
     public void applyRead(String dataSourceId, FilterAware request) {
         apply(dataSourceId, DataScopeAction.READ, request);
     }
 
-    /**
-     * 把某动作的范围条件叠加到已带条件的请求上（列表/聚合与「按 id 反查是否在范围内」共用）。
-     */
+    /** 把某动作的并集条件叠加到已带条件的请求上（列表/聚合共用）。 */
     public void apply(String dataSourceId, DataScopeAction action, FilterAware request) {
+        applyAll(dataSourceId, List.of(action), request);
+    }
+
+    /**
+     * 多动作叠加（交集）：按 id 反查归属时，读范围与写范围必须同时满足。
+     * 每个动作各自是「组间 OR、组内 AND」，交集按笛卡尔积展开成新的组。
+     */
+    public void applyAll(String dataSourceId, Collection<DataScopeAction> actions, FilterAware request) {
         if (request == null) {
             return;
         }
-        Map<String, Object> condition = conditionFor(dataSourceId, action);
-        if (condition.isEmpty()) {
+        List<List<Map<String, Object>>> groups = scopeGroups(dataSourceId, actions);
+        if (groups.isEmpty()) {
+            stripRowScope(request);
             return;
         }
-        request.setFilter(composeFilter(request.getFilter(), condition));
+        request.setFilter(composeFilter(request.getFilter(), groups));
     }
 
-    /**
-     * 当前用户在某数据源某动作上的生效条件（列 → 值）；空 Map = 不受限。
-     *
-     * <p>暴露成独立方法是「范围可预览、可复用于单条与写校验」的前提：
-     * 单条读取与改删没有 filter 通道，需要拿同一份条件去按 id 反查归属。
-     */
-    public Map<String, Object> conditionFor(String dataSourceId, DataScopeAction action) {
-        return conditionFor(dataSourceId, action, currentUser());
+    /** 当前用户在某数据源某动作上的生效条件组；空 List = 不受限。 */
+    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, DataScopeAction action) {
+        return scopeGroups(dataSourceId, action, currentUser());
     }
 
-    /** 指定主体的生效条件（管理端「预览/诊断」用；与施加路径同一实现，避免预览与实际不一致）。 */
-    public Map<String, Object> conditionFor(String dataSourceId, DataScopeAction action, LoginUser user) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        WfDataScope effective = effectiveRule(dataSourceId, action, user);
-        if (effective == null) {
-            return out;
-        }
-        switch (effective.getScopeType()) {
-            case ALL -> {
-                return out;
+    /** 多个动作的生效条件组交集；某个动作不受限时结果只受其余动作约束。 */
+    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, Collection<DataScopeAction> actions) {
+        List<List<Map<String, Object>>> combined = null;
+        for (DataScopeAction action : new LinkedHashSet<>(actions)) {
+            List<List<Map<String, Object>>> groups = scopeGroups(dataSourceId, action);
+            if (groups.isEmpty()) {
+                continue;
             }
-            case SELF -> out.put(CREATED_BY_COLUMN, requireUserId(user));
-            case CUSTOM -> out.put(requireColumn(effective.getScopeColumn()),
-                    resolveTemplate(effective.getScopeValue(), user));
+            combined = combined == null ? groups : crossProduct(combined, groups);
+        }
+        return combined == null ? List.of() : combined;
+    }
+
+    private static List<List<Map<String, Object>>> crossProduct(List<List<Map<String, Object>>> left,
+                                                               List<List<Map<String, Object>>> right) {
+        List<List<Map<String, Object>>> out = new ArrayList<>(left.size() * right.size());
+        for (List<Map<String, Object>> l : left) {
+            for (List<Map<String, Object>> r : right) {
+                List<Map<String, Object>> merged = new ArrayList<>(l.size() + r.size());
+                merged.addAll(l);
+                merged.addAll(r);
+                out.add(merged);
+            }
         }
         return out;
     }
 
-    /** 命中集合（主体标识）——预览接口用它解释「这个用户能匹配到哪些规则」。 */
-    public Set<String> subjectsOf(LoginUser user) {
-        return subjectResolver.subjectsOf(user);
+    /** 指定主体的生效条件组（施加路径的唯一出口，「当前用户」与「指定用户」走同一实现）。 */
+    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, DataScopeAction action, LoginUser user) {
+        return resolveGroups(appliedPermissions(dataSourceId, action, user), user);
     }
 
-    /**
-     * 当前用户命中的最宽规则；null = 无限制（无命中或命中 ALL）。
-     */
-    public WfDataScope effectiveRule(String dataSourceId, DataScopeAction action, LoginUser user) {
-        if (dataSourceId == null || dataSourceId.isBlank() || user == null || isAdmin(user)) {
-            return null;
-        }
-        Set<String> subjects = subjectResolver.subjectsOf(user);
-        if (subjects.isEmpty()) {
-            return null;
-        }
-        List<WfDataScope> rules = scopeRepository.findByTenantIdAndDataSourceIdAndAction(
-                tenantProvider.getTenantId(), dataSourceId, action);
-        WfDataScope best = null;
-        for (WfDataScope rule : rules) {
-            if (rule == null || rule.getScopeType() == null || !subjects.contains(rule.subjectRef())) {
-                continue;
-            }
-            if (best == null || width(rule) < width(best)) {
-                best = rule;
-            }
-        }
-        return best;
+    /** 当前用户在该数据源是否有生效范围（用于「是否存在单条归属校验」的快速判断）。 */
+    public boolean hasScope(String dataSourceId, DataScopeAction action) {
+        return !scopeGroups(dataSourceId, action).isEmpty();
     }
 
-    /** 命中的全部规则（含未生效的那些），供管理端解释「为什么是这个结果」。 */
-    public List<WfDataScope> matchedRules(String dataSourceId, DataScopeAction action, LoginUser user) {
-        if (dataSourceId == null || dataSourceId.isBlank() || user == null) {
+    private List<RowPermission> appliedPermissions(String dataSourceId, DataScopeAction action, LoginUser user) {
+        if (dataSourceId == null || dataSourceId.isBlank() || action == null || user == null || isAdmin(user)) {
             return List.of();
         }
         Set<String> subjects = subjectResolver.subjectsOf(user);
-        return scopeRepository.findByTenantIdAndDataSourceIdAndAction(
-                        tenantProvider.getTenantId(), dataSourceId, action).stream()
-                .filter(r -> r != null && subjects.contains(r.subjectRef()))
+        if (subjects.isEmpty()) {
+            return List.of();
+        }
+        String tenantId = tenantProvider.getTenantId();
+        List<Long> permissionIds = sourceRepository.findByTenantIdAndDataSourceId(tenantId, dataSourceId).stream()
+                .map(RowPermissionSource::getPermissionId)
+                .distinct()
+                .toList();
+        if (permissionIds.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> grantedIds = grantRepository
+                .findByTenantIdAndPermissionIdInAndAction(tenantId, permissionIds, action).stream()
+                .filter(g -> subjects.contains(g.subjectRef()))
+                .map(RowPermissionGrant::getPermissionId)
+                .collect(Collectors.toSet());
+        if (grantedIds.isEmpty()) {
+            return List.of();
+        }
+        return permissionRepository.findByTenantIdAndIdIn(tenantId, grantedIds).stream()
+                .sorted(Comparator.comparing(RowPermission::getId))
                 .toList();
     }
 
-    // ==================== 配置读写（管理端） ====================
-
-    public List<WfDataScope> list(String dataSourceId) {
-        return scopeRepository.findByTenantIdAndDataSourceIdOrderBySubjectTypeAscSubjectKeyAsc(
-                tenantProvider.getTenantId(), dataSourceId);
-    }
-
-    /**
-     * 保存一条规则（同主体同动作覆盖）。
-     * SELF/ALL 会清空列与值，避免残留配置在下一次改成 CUSTOM 时被误用。
-     */
-    @Transactional
-    public WfDataScope save(String dataSourceId, DataScopeAction action, DataScopeSubject subjectType,
-                            String subjectKey, DataScopeType scopeType, String scopeColumn, String scopeValue) {
-        if (dataSourceId == null || dataSourceId.isBlank()) {
-            throw new BusinessException(400, "数据源 id 不能为空");
+    private List<List<Map<String, Object>>> resolveGroups(List<RowPermission> permissions, LoginUser user) {
+        List<List<Map<String, Object>>> groups = new ArrayList<>();
+        for (RowPermission permission : permissions) {
+            List<Map<String, Object>> conditions = parseConditions(permission.getConditionsJson());
+            if (conditions.isEmpty()) {
+                // 显式放行对象命中：并集里只要有一条不受限，整体就不受限
+                return List.of();
+            }
+            groups.add(resolveConditions(conditions, user));
         }
-        if (action == null) {
-            throw new BusinessException(400, "数据范围动作不能为空（READ / WRITE）");
-        }
-        if (subjectType == null) {
-            throw new BusinessException(400, "数据范围主体不能为空");
-        }
-        if (subjectKey == null || subjectKey.isBlank()) {
-            throw new BusinessException(400, "数据范围主体标识不能为空");
-        }
-        if (scopeType == null) {
-            throw new BusinessException(400, "数据范围类型不能为空");
-        }
-        String trimmedKey = subjectKey.trim();
-        if (subjectType != DataScopeSubject.ROLE && !trimmedKey.matches("\\d{1,20}")) {
-            throw new BusinessException(400, "主体 " + subjectType + " 的标识必须是数字 id: " + subjectKey);
-        }
-        String tenantId = tenantProvider.getTenantId();
-        WfDataScope entity = scopeRepository.findByTenantIdAndDataSourceIdAndActionAndSubjectTypeAndSubjectKey(
-                        tenantId, dataSourceId, action, subjectType, trimmedKey)
-                .orElseGet(WfDataScope::new);
-        entity.setTenantId(tenantId);
-        entity.setDataSourceId(dataSourceId);
-        entity.setAction(action);
-        entity.setSubjectType(subjectType);
-        entity.setSubjectKey(trimmedKey);
-        entity.setScopeType(scopeType);
-        if (scopeType == DataScopeType.CUSTOM) {
-            entity.setScopeColumn(requireColumn(scopeColumn));
-            entity.setScopeValue(requireTemplate(scopeValue));
-        } else {
-            entity.setScopeColumn(null);
-            entity.setScopeValue(null);
-        }
-        return scopeRepository.save(entity);
-    }
-
-    @Transactional
-    public void delete(Long id) {
-        scopeRepository.deleteById(id);
+        return groups;
     }
 
     // ==================== 内部 ====================
 
-    private int width(WfDataScope rule) {
-        return PERMISSIVENESS.getOrDefault(rule.getScopeType(), 9);
+    private Map<String, Object> leaf(String column, String op, Object value) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("column", column);
+        out.put("op", op);
+        out.put("value", value);
+        return out;
+    }
+
+    /** 读取已存条件（管理端展示用）；空串视为无条件。 */
+    public List<Map<String, Object>> parseStoredConditions(String conditionsJson) {
+        return parseConditions(conditionsJson);
+    }
+
+    private List<Map<String, Object>> parseConditions(String conditionsJson) {
+        if (conditionsJson == null || conditionsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<Map<String, Object>> list = objectMapper.readValue(
+                    conditionsJson, new TypeReference<List<Map<String, Object>>>() { });
+            return list == null ? List.of() : list;
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "行权限对象条件不是合法 JSON，请检查配置");
+        }
+    }
+
+    private String writeConditions(List<Map<String, Object>> conditions) {
+        try {
+            return objectMapper.writeValueAsString(conditions);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "行权限条件写入失败");
+        }
+    }
+
+    /**
+     * 保存期校验：结构、列名、运算符、取值形态（对象级权限管理复用，不解析用户模板）。
+     * 空条件对象在 v2 保存入口一律拒绝——「全部可见」靠不关联表达，不靠一条空条件。
+     */
+    public List<Map<String, Object>> validateConditions(List<Map<String, Object>> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
+            throw new BusinessException(400, "权限对象至少需要一条条件；全部可见请直接不关联权限对象");
+        }
+        List<Map<String, Object>> out = new ArrayList<>(conditions.size());
+        for (Map<String, Object> condition : conditions) {
+            if (condition == null || condition.get("column") == null) {
+                throw new BusinessException(400, "行权限条件缺少列名");
+            }
+            String column = requireColumn(String.valueOf(condition.get("column")));
+            String op = normalizeOp(condition);
+            Object value = condition.get("value");
+            validateRawValue(value, op);
+            out.add(leaf(column, op, value));
+        }
+        return out;
+    }
+
+    /** 逐叶解析模板并校验列/运算符；非法配置快速失败，绝不静默降级为放行。 */
+    private List<Map<String, Object>> resolveConditions(List<Map<String, Object>> conditions, LoginUser user) {
+        if (conditions.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> out = new ArrayList<>(conditions.size());
+        for (Map<String, Object> condition : conditions) {
+            if (condition == null || condition.get("column") == null) {
+                throw new BusinessException(400, "行权限条件缺少列名");
+            }
+            String column = requireColumn(String.valueOf(condition.get("column")));
+            String op = normalizeOp(condition);
+            Object value = resolveValue(condition.get("value"), op, user);
+            validateResolvedValue(value, op);
+            out.add(leaf(column, op, value));
+        }
+        return out;
+    }
+
+    private String normalizeOp(Map<String, Object> condition) {
+        String op = condition.get("op") == null ? "eq" : String.valueOf(condition.get("op")).toLowerCase();
+        if (!ALLOWED_OPS.contains(op)) {
+            throw new BusinessException(400, "行权限条件使用了未知运算符: " + op);
+        }
+        return op;
+    }
+
+    /** 保存期形态校验：生成器对空列表/形状不符的叶子会直接跳过，跳过等于静默放行，必须当场拒绝。 */
+    private void validateRawValue(Object value, String op) {
+        if ("isempty".equals(op) || "isnotempty".equals(op)) {
+            return;
+        }
+        if (value == null) {
+            throw new BusinessException(400, "行权限条件缺少取值");
+        }
+        if (value instanceof List<?> list) {
+            if ("in".equals(op)) {
+                if (list.isEmpty()) {
+                    throw new BusinessException(400, "行权限条件 op=in 的取值必须是非空列表");
+                }
+                for (Object item : list) {
+                    if (item == null) {
+                        throw new BusinessException(400, "行权限条件 op=in 的列表取值不能包含空值");
+                    }
+                    if (item instanceof String text) {
+                        requireValueExpression(text, op);
+                    }
+                }
+                return;
+            }
+            if ("range".equals(op)) {
+                if (list.size() != 2 || list.get(0) == null || list.get(1) == null) {
+                    throw new BusinessException(400, "行权限条件 op=range 的取值必须是两个非空值");
+                }
+                for (Object item : list) {
+                    if (item instanceof String text) {
+                        requireValueExpression(text, op);
+                    }
+                }
+                return;
+            }
+            throw new BusinessException(400, "行权限条件 op=" + op + " 不能使用列表取值");
+        }
+        if (value instanceof String text) {
+            // 单个字符串能当列表用的唯一情形：整个取值就是一个集合变量，由 in 展开
+            if (("in".equals(op) || "range".equals(op)) && !isWholeListVariable(text)) {
+                throw new BusinessException(400, "行权限条件 op=" + op + " 需要列表取值");
+            }
+            requireValueExpression(text, op);
+        }
+    }
+
+    /** 解析期形态校验：函数可能把单值变成列表，必须在求值之后检查。 */
+    private void validateResolvedValue(Object value, String op) {
+        if ("isempty".equals(op) || "isnotempty".equals(op)) {
+            return;
+        }
+        if ("in".equals(op)) {
+            if (!(value instanceof List<?> list) || list.isEmpty()) {
+                throw new BusinessException(400, "行权限条件 op=in 的取值必须是非空列表");
+            }
+            return;
+        }
+        if ("range".equals(op)) {
+            if (!(value instanceof List<?> range) || range.size() != 2
+                    || range.get(0) == null || range.get(1) == null) {
+                throw new BusinessException(400, "行权限条件 op=range 的取值必须是两个非空值");
+            }
+            return;
+        }
+        if (value instanceof List<?>) {
+            throw new BusinessException(400, "行权限条件 op=" + op + " 不能使用列表取值");
+        }
+        if (value == null) {
+            throw new BusinessException(400, "行权限条件缺少取值");
+        }
+    }
+
+    private Object resolveValue(Object value, String op, LoginUser user) {
+        if (value instanceof List<?> list) {
+            List<Object> resolved = new ArrayList<>(list.size());
+            for (Object item : list) {
+                appendResolved(resolved, resolveScalar(item, op, user));
+            }
+            return resolved;
+        }
+        return resolveScalar(value, op, user);
+    }
+
+    /**
+     * 一项解析出多个值（集合变量）时并入列表，而不是嵌套成一项：
+     * 列表形状是 {@code in} 运算符的语义，不是某种取值的专属形态，
+     * 所以 {@code in: 5, {orgIdSubtree}} 这种混写展开后仍然是一维的 id 列表。
+     */
+    private static void appendResolved(List<Object> target, Object resolved) {
+        if (resolved instanceof List<?> expanded) {
+            target.addAll(expanded);
+            return;
+        }
+        target.add(resolved);
+    }
+
+    private Object resolveScalar(Object value, String op, LoginUser user) {
+        if (value instanceof String text) {
+            // 与保存期同一份校验：直接写库或协议变更后的脏配置在求值前就拒，绝不带病拼 SQL
+            requireValueExpression(text, op);
+            return resolveTemplate(text, user);
+        }
+        if (value == null) {
+            if ("isempty".equals(op) || "isnotempty".equals(op)) {
+                return null;
+            }
+            throw new BusinessException(400, "行权限条件缺少取值");
+        }
+        return value;
     }
 
     private String requireColumn(String column) {
@@ -244,41 +401,65 @@ public class DataScopeService {
         return column;
     }
 
-    private String requireTemplate(String value) {
+    /** 保存期取值校验：变量必须在白名单内；集合变量只能独占一项且配 in；其余按字面量。 */
+    private String requireValueExpression(String value, String op) {
         if (value == null || value.isBlank()) {
-            throw new BusinessException(400, "数据范围缺少取值（支持 {userId} / {username} / {orgId} 或字面量）");
+            throw new BusinessException(400, "数据范围缺少取值（支持字面量与 "
+                    + "{userId} / {username} / {orgId} / {orgIdSubtree} 变量）");
+        }
+        String wholeVariable = wholeVariableName(value);
+        boolean listVariable = wholeVariable != null && DataScopeVariables.isListVariable(wholeVariable);
+        Matcher m = TEMPLATE_PATTERN.matcher(value);
+        while (m.find()) {
+            String name = m.group(1);
+            if (!DataScopeVariables.KNOWN.contains(name)) {
+                throw new BusinessException(400, "数据范围取值使用了未知变量: {" + name + "}");
+            }
+            if (DataScopeVariables.isListVariable(name) && !listVariable) {
+                throw new BusinessException(400,
+                        "集合变量 {" + name + "} 要展开成一批 id，只能独占整个取值，不能与其他文字拼接: " + value);
+            }
+        }
+        if (listVariable && !"in".equals(op)) {
+            throw new BusinessException(400, "集合变量 {" + wholeVariable + "} 展开为多个取值，只能配合 in 使用");
         }
         return value;
     }
 
-    private String requireUserId(LoginUser user) {
-        if (user == null || user.getUserId() == null) {
-            throw new BusinessException(403, "数据范围需要登录用户身份");
-        }
-        return String.valueOf(user.getUserId());
+    /** 整个取值就是一个变量时返回变量名；带别的文字（或多个变量）返回 null。 */
+    private static String wholeVariableName(String value) {
+        Matcher m = TEMPLATE_PATTERN.matcher(value.trim());
+        return m.matches() ? m.group(1) : null;
+    }
+
+    /** 整个取值就是一个集合变量（单个字符串也能当列表用的唯一情形）。 */
+    private static boolean isWholeListVariable(String value) {
+        String name = wholeVariableName(value);
+        return name != null && DataScopeVariables.isListVariable(name);
     }
 
     /**
-     * 解析值模板：{@code {userId}} / {@code {username}} / {@code {orgId}}，其余原样当字面量。
-     * 未知变量与解析后为空一律拒绝——静默放行等于范围失效。
+     * 解析取值：整串就是一个变量时直接求值（集合变量在这里展开成 id 列表），
+     * 其余按字符串就地替换标量变量，未知变量与解析后为空一律拒绝——静默放行等于范围失效。
      */
-    private String resolveTemplate(String template, LoginUser user) {
+    private Object resolveTemplate(String template, LoginUser user) {
         if (template == null || template.isBlank()) {
             throw new BusinessException(400, "数据范围缺少取值，无法为该主体施加过滤");
+        }
+        String wholeVariable = wholeVariableName(template);
+        if (wholeVariable != null) {
+            return variables.resolve(wholeVariable, user);
         }
         Matcher m = TEMPLATE_PATTERN.matcher(template);
         StringBuilder out = new StringBuilder();
         while (m.find()) {
             String name = m.group(1);
-            String resolved = switch (name) {
-                case "userId" -> requireUserId(user);
-                case "username" -> user.getUsername() == null ? "" : user.getUsername();
-                case "orgId" -> user.getOrgId() == null ? "" : String.valueOf(user.getOrgId());
-                default -> throw new BusinessException(400, "数据范围取值使用了未知变量: {" + name + "}");
-            };
-            if (resolved.isEmpty()) {
-                throw new BusinessException(400, "数据范围变量 {" + name + "} 当前用户无取值，请改用其他列或调整配置");
+            if (DataScopeVariables.isListVariable(name)) {
+                // 保存期已拒这一形，这里兜住直接写库或协议变更后的脏配置
+                throw new BusinessException(400,
+                        "集合变量 {" + name + "} 要展开成一批 id，只能独占整个取值，不能与其他文字拼接: " + template);
             }
+            String resolved = String.valueOf(variables.resolve(name, user));
             m.appendReplacement(out, Matcher.quoteReplacement(resolved));
         }
         m.appendTail(out);
@@ -290,51 +471,28 @@ public class DataScopeService {
     }
 
     /**
-     * 把范围条件叠加进调用方 filter，产出下游三个 SQL 生成器都认的形状。
+     * 把并集条件写入调用方 filter 的保留键，客户端自带同名键先移除。
      *
-     * <p>三个生成器（BizDataQueryBuilder / JoinSqlGenerator / SqlTemplateEngine）共用同一形状判定：
-     * filter 里一旦出现 {@code conditions}，就只走结构化分支并 <b>忽略其余顶层键</b>。
-     * 直接把范围条件当顶层键并进去（旧写法）在结构化筛选下等于不施加范围。
-     *
-     * <p>组合规则：
-     * <ul>
-     *   <li>调用方空 filter：原样写范围条件（map 形态，等值 AND）。</li>
-     *   <li>调用方 map 形态：同键服务端胜出，范围条件覆盖调用方的同名列取值。</li>
-     *   <li>调用方结构化 AND 组：把范围条件作为等值叶子追加进同一 AND 组。</li>
-     *   <li>调用方结构化 OR 组：拒绝。把叶子并进 OR 组会把语义从 OR 改成 AND（放大可见行），
-     *       范围控制宁可报错也不能静默放宽；OR 与范围的正式组合要等第二通道（范围条件独立成段）落地。</li>
-     * </ul>
-     *
-     * <p>同列冲突：调用方已按 {@code created_by} 筛选且与范围值不同时，AND 结果为空集，
-     * 属预期（他明确要别人的行，而范围不给），不是 bug。
+     * <p>保留键与调用方 filter 的原有形态互不干扰：三个 SQL 生成器先处理保留键（独立 AND 段），
+     * 其余顶层键（map 形态或 conditions 形态）照旧。这样客户端 OR 筛选不再需要为范围让步。
      */
-    private String composeFilter(String callerFilterJson, Map<String, Object> condition) {
+    private String composeFilter(String callerFilterJson, List<List<Map<String, Object>>> groups) {
         Map<String, Object> caller = parseFilter(callerFilterJson);
-        if (caller.isEmpty()) {
-            return writeFilter(condition);
+        caller.remove(FilterAware.ROW_SCOPE_KEY);
+        caller.put(FilterAware.ROW_SCOPE_KEY, groups);
+        return writeFilter(caller);
+    }
+
+    /** 无生效范围时也要丢弃客户端伪造的保留键，保证该通道只由服务端写入。 */
+    private void stripRowScope(FilterAware request) {
+        String json = request.getFilter();
+        if (json == null || !json.contains(FilterAware.ROW_SCOPE_KEY)) {
+            return;
         }
-        Object conditions = caller.get("conditions");
-        if (conditions == null) {
-            Map<String, Object> merged = new LinkedHashMap<>(caller);
-            merged.putAll(condition);
-            return writeFilter(merged);
+        Map<String, Object> caller = parseFilter(json);
+        if (caller.remove(FilterAware.ROW_SCOPE_KEY) != null) {
+            request.setFilter(writeFilter(caller));
         }
-        if (!(conditions instanceof List<?> callerConditions)) {
-            throw new BusinessException(400, "筛选参数 conditions 必须为数组");
-        }
-        String logic = String.valueOf(caller.getOrDefault("logic", "AND"));
-        if (!"AND".equalsIgnoreCase(logic)) {
-            throw new BusinessException(400,
-                    "该数据源已配置数据范围，OR 组合筛选暂不可用（范围条件无法在不放宽可见行的前提下与 OR 组合）；"
-                            + "请改用 AND 筛选，或调整该数据源的范围配置");
-        }
-        List<Object> composed = new ArrayList<Object>(callerConditions);
-        condition.forEach((column, value) -> composed.add(Map.of(
-                "column", column, "op", "eq", "value", value)));
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("logic", "AND");
-        out.put("conditions", composed);
-        return writeFilter(out);
     }
 
     @SuppressWarnings("unchecked")

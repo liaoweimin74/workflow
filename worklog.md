@@ -9402,3 +9402,17 @@ Work Log:
 Stage Summary:
 - 环境异常事件累计 #100（百次里程碑，自 r91 起窗口内恢复 26 次）；零 mvn 84 次；全绿 200×4 真绿，内存 3.28GB，oom 0
 - 新亚型：mariadb 重置+java 幸存（非标准全量重供给），定型流水线无需改动即可覆盖
+
+---
+Task ID: r168-r169
+Agent: cron-ops-loop
+Task: 2026-10-20 20:05(r168 沙箱失败) + 21:05(r169 catchup 巡检)
+
+Work Log:
+- r168(20:05)：沙箱第 22 次失败，零执行
+- r169(21:05)：沙箱恢复。dump-db 正确拒绝无效快照；四链路 200×4 但 auth=no such table → 事件 #101（标准重供给：vite 1141/mariadb 1300/node index.ts 1179/bun 1109 全新进程集，无 java，内存 3.24GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1409 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 事件累计 #101；零 mvn 85 次；全绿 200×4 真绿，内存 3.24GB，oom 0

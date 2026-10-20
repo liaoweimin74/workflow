@@ -199,6 +199,14 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '页面' }
       },
       {
+        // 【真机探测 spike，未合并】直接挂载出码产物，绕开 PageRendererPage，
+        // 用来量"产物在真机上跑不跑得动"，不进菜单、不给权限、不接 AI 桥
+        path: 'codegen-probe',
+        name: 'CodegenProbe',
+        component: () => import('@/views/page/codegen/probe/CardlistTest.vue'),
+        meta: { title: '出码产物探测' }
+      },
+      {
         // 远程物料管理页（remote-materials 6.3）：V57 预置菜单「物料管理」指向此路由
         path: 'material',
         name: 'MaterialList',

@@ -1,6 +1,6 @@
 import http from '@/utils/http'
 import type { R } from '@/types/common'
-import type { MenuTree, MenuCreateForm, MenuUpdateForm } from '@/types/menu'
+import type { MenuTree, MenuCreateForm, MenuUpdateForm, MenuMoveForm } from '@/types/menu'
 
 export function getMenuTree() {
   return http.get<any, R<MenuTree[]>>('/menus/tree')
@@ -12,6 +12,11 @@ export function createMenu(data: MenuCreateForm) {
 
 export function updateMenu(id: number, data: MenuUpdateForm) {
   return http.put<any, R<MenuTree>>(`/menus/${id}`, data)
+}
+
+/** 拖动调整层级与排序：后端会重排原父级/新父级两组兄弟节点的 sortOrder */
+export function moveMenu(id: number, data: MenuMoveForm) {
+  return http.put<any, R<MenuTree>>(`/menus/${id}/move`, data)
 }
 
 export function deleteMenu(id: number) {

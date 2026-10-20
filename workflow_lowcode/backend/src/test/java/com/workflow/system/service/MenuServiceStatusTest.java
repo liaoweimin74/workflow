@@ -67,7 +67,7 @@ class MenuServiceStatusTest {
         });
 
         menuService.create(new MenuCreateRequest(
-                null, "新菜单", 1, "/new", null, null, null, null, null));
+                null, "新菜单", 0, "/new", null, null, null, null, null));
 
         assertThat(captureSaved().getStatus()).isOne();
     }
@@ -80,8 +80,9 @@ class MenuServiceStatusTest {
             return saved;
         });
 
+        // 根级只允许挂目录（菜单必须在目录之下），这里用类型 0 保持用例合法
         menuService.create(new MenuCreateRequest(
-                null, "停用新菜单", 1, "/disabled", null, null, null, null, 0));
+                null, "停用新菜单", 0, "/disabled", null, null, null, null, 0));
 
         assertThat(captureSaved().getStatus()).isZero();
     }

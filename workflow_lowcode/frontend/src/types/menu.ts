@@ -35,3 +35,9 @@ export interface MenuUpdateForm {
   sortOrder?: number
   status?: number
 }
+
+/** PUT /menus/{id}/move 载荷：parentId=null 表示移到根级，index 为目标子项（排除自身后）的插入位 */
+export interface MenuMoveForm {
+  parentId: number | null
+  index: number
+}

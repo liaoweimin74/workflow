@@ -12,6 +12,7 @@ vi.mock('@/api/menu', () => ({
   createMenu: vi.fn(),
   updateMenu: vi.fn(),
   deleteMenu: vi.fn(),
+  moveMenu: vi.fn(),
 }))
 
 vi.mock('@/api/page', () => ({
@@ -19,7 +20,7 @@ vi.mock('@/api/page', () => ({
 }))
 
 import MenuPage from '../MenuPage.vue'
-import { createMenu, getMenuTree } from '@/api/menu'
+import { createMenu, getMenuTree, updateMenu } from '@/api/menu'
 
 /** SearchTable 桩：捕获 props 与 openFormDialog 预填值 */
 let capturedProps: any = null
@@ -108,6 +109,23 @@ describe('MenuPage 可见性开关', () => {
     await flushPromises()
     expect(openFormPayload).toMatchObject({ parentId: 9, menuType: 1, status: 1 })
     expect(openFormPayload.visible).toBeUndefined()
+    // 排序号留空由后端追加到同级末尾，预填 0 会让新项插到列表最前
+    expect(openFormPayload.sortOrder).toBeUndefined()
+  })
+
+  it('父类型决定子类型：菜单行下只能建按钮', async () => {
+    await createWrapper()
+    const addChild = capturedProps.actionButtons.find((b: any) => b.label === '新增子菜单')
+    addChild.onClick({ id: 10, menuType: 1 })
+    await flushPromises()
+    expect(openFormPayload).toMatchObject({ parentId: 10, menuType: 2 })
+  })
+
+  it('按钮行不提供新增子菜单入口', async () => {
+    await createWrapper()
+    const addChild = capturedProps.actionButtons.find((b: any) => b.label === '新增子菜单')
+    expect(addChild.show({ menuType: 2 })).toBe(false)
+    expect(addChild.show({ menuType: 0 })).toBe(true)
   })
 
   it('提交载荷携带 status，剔除前端辅助字段 linkedPage', async () => {
@@ -125,5 +143,65 @@ describe('MenuPage 可见性开关', () => {
     expect(sent.status).toBe(0)
     expect(sent.visible).toBeUndefined()
     expect(sent.linkedPage).toBeUndefined()
+    // 新增仍要带 parentId，否则挂不到所选父级
+    expect(sent.parentId).toBe(1)
+  })
+})
+
+describe('MenuPage 层级由拖动负责', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(getMenuTree as any).mockResolvedValue({
+      data: [
+        {
+          id: 10,
+          parentId: 0,
+          menuName: '用户管理',
+          menuType: 1,
+          path: '/system/user',
+          component: 'system/user/UserPage',
+          permission: 'system:user:read',
+          icon: 'User',
+          sortOrder: 0,
+          status: 1,
+          children: [],
+        },
+      ],
+    })
+  })
+
+  it('编辑态把「上级菜单」换成只读展示字段，并回显父级名称', async () => {
+    const wrapper = await createWrapper()
+    // SearchTable 桩不会调用 fetchApi，这里手动取一次数以填充页面里的菜单树
+    await capturedProps.fetchApi({})
+    const loaded = await capturedProps.formConfig.getApi(10)
+    expect(loaded.parentName).toBe('（根级）')
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+    expect(ruleOf('parentId')).toBeUndefined()
+    expect(ruleOf('parentName').props.disabled).toBe(true)
+  })
+
+  it('新增态仍提供可选择的「上级菜单」', async () => {
+    await createWrapper()
+    expect(ruleOf('parentId').type).toBe('treeSelect')
+    expect(ruleOf('parentName')).toBeUndefined()
+  })
+
+  it('更新载荷剔除 parentId/parentName（后端 update 不改层级）', async () => {
+    await createWrapper()
+    await capturedProps.formConfig.getApi(10)
+    ;(updateMenu as any).mockResolvedValue({ data: {} })
+    await capturedProps.formConfig.updateApi(10, {
+      parentId: 3,
+      parentName: '（根级）',
+      menuName: '改名',
+      linkedPage: 'k',
+    })
+    const sent = (updateMenu as any).mock.calls[0][1]
+    expect(sent.parentId).toBeUndefined()
+    expect(sent.parentName).toBeUndefined()
+    expect(sent.linkedPage).toBeUndefined()
+    expect(sent.menuName).toBe('改名')
   })
 })

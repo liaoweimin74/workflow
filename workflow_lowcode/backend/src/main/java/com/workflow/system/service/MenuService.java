@@ -11,5 +11,8 @@ public interface MenuService {
 
     MenuTree update(Long id, com.workflow.system.domain.dto.MenuUpdateRequest request);
 
+    /** 拖动调整层级与排序（parentId=null 表示根级）。 */
+    MenuTree move(Long id, com.workflow.system.domain.dto.MenuMoveRequest request);
+
     void delete(Long id);
 }

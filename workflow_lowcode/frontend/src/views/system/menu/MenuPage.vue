@@ -2,18 +2,25 @@
 defineOptions({ name: 'MenuManagement' })
 
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import { SearchTable } from '@/components/business'
-import { FolderAdd } from '@element-plus/icons-vue'
+import { FolderAdd, Rank } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
-import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/menu'
+import { getMenuTree, createMenu, updateMenu, deleteMenu, moveMenu } from '@/api/menu'
 import { pageApi, type PageDefinitionDTO } from '@/api/page'
 import type { MenuTree } from '@/types/menu'
+import { useAuthStore } from '@/stores/auth'
+import { MENU_TYPE_BUTTON, defaultChildType, findNode, normalizeParentId, resolveDrop } from './menuDrop'
+import { useMenuTreeDrag } from './useMenuTreeDrag'
 
 const searchTableRef = ref()
 const list = ref<MenuTree[]>([])
-/** 已发布页面列表（关联页面下拉候选） */
-const publishedPages = ref<PageDefinitionDTO[]>([])
+const authStore = useAuthStore()
+/** 无更新权限时不给把手，避免拖出一次注定 403 的请求 */
+const canDrag = computed(() => authStore.hasPermission('system:menu:update'))
+/** 弹窗态：编辑时「上级菜单」只做展示（层级由拖动调整） */
+const dialogMode = ref<'create' | 'edit'>('create')
 
 const menuTypeMap: Record<number, string> = { 0: '目录', 1: '菜单', 2: '按钮' }
 const menuTypeOptions = [
@@ -25,7 +32,7 @@ const searchFields: SearchField[] = []
 
 // ---------- 表格列 ----------
 const columns: TableColumn[] = [
-  { prop: 'menuName', label: '菜单名称', minWidth: 180 },
+  { prop: 'menuName', label: '菜单名称', minWidth: 180, slotName: 'menuName' },
   { label: '图标', width: 80, slotName: 'icon' },
   { label: '类型', width: 80, align: 'center', slotName: 'menuType' },
   { prop: 'path', label: '路由', width: 160 },
@@ -38,8 +45,30 @@ const columns: TableColumn[] = [
 async function fetchApi(_params: any) {
   const res = await getMenuTree()
   list.value = res.data
+  // tbody 可能因表格重建而更换节点，每次取数后重新绑定把手
+  initRowDrag()
   return { rows: res.data, total: res.data.length }
 }
+
+// ---------- 行拖动：层级 + 排序 ----------
+const { init: initRowDrag } = useMenuTreeDrag({
+  getTbody: () => searchTableRef.value?.$el?.querySelector('.el-table__body-wrapper tbody'),
+  judge: (dragId, hoverId, band) => resolveDrop(list.value, dragId, hoverId, band),
+  onDrop: async (dragId, target) => {
+    try {
+      await moveMenu(dragId, target)
+      ElMessage.success('层级/排序已更新')
+    } finally {
+      // 服务端会重排相关兄弟节点的排序号，无论如何都以服务端为准重取
+      await searchTableRef.value?.fetchList()
+    }
+  },
+  onRejected: (message) => ElMessage.warning(message),
+  disabled: () => !canDrag.value,
+})
+
+/** 已发布页面列表（关联页面下拉候选） */
+const publishedPages = ref<PageDefinitionDTO[]>([])
 
 // ---------- 加载已发布页面 ----------
 async function loadPublishedPages() {
@@ -55,31 +84,52 @@ async function loadPublishedPages() {
 // ---------- 加载已发布页面（延迟到首次打开表单） ----------
 let _pagesLoaded = false
 async function ensurePublishedPages() {
+  dialogMode.value = 'create'
   if (_pagesLoaded) return
   _pagesLoaded = true
   await loadPublishedPages()
 }
 
-// ---------- 新增子菜单 ----------
-function handleAddChild(parentId: number) {
-  searchTableRef.value?.openFormDialog({ parentId, menuType: 1, sortOrder: 0, status: 1 })
+// ---------- 新增子菜单（子类型由父类型决定：目录→菜单，菜单→按钮） ----------
+function handleAddChild(parent: MenuTree) {
+  const menuType = defaultChildType(parent.menuType)
+  if (menuType === null) return
+  // 不预填 sortOrder：留空由后端追加到同级末尾，避免新项挤到列表最前
+  searchTableRef.value?.openFormDialog({ parentId: parent.id, menuType, status: 1 })
 }
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '新增子菜单', icon: FolderAdd, size: 'small', link: true, show: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
+  { label: '新增子菜单', icon: FolderAdd, size: 'small', link: true, show: (row: MenuTree) => row.menuType !== MENU_TYPE_BUTTON, onClick: (row: MenuTree) => handleAddChild(row) },
 ]
+
+/** 上级菜单的展示名（编辑弹窗只读回显用） */
+function parentLabel(node: MenuTree): string {
+  const parentId = normalizeParentId(node.parentId)
+  if (parentId === null) return '（根级）'
+  return findNode(list.value, parentId)?.menuName ?? '（未知）'
+}
 
 // ---------- 表单配置（form-create rule） ----------
 const formConfig = computed<FormConfig<MenuTree>>(() => {
+  // 编辑态：后端 update 不改 parentId，层级由拖动负责，故此处只展示不可改
+  const parentRule: Rule = dialogMode.value === 'edit'
+    ? {
+        type: 'input', field: 'parentName', title: '上级菜单',
+        props: { disabled: true },
+        info: '调整层级或排序请在列表中拖动该行',
+      }
+    : {
+        type: 'treeSelect', field: 'parentId', title: '上级菜单',
+        props: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },
+      }
+
   const rule: Rule[] = [
-    {
-      type: 'treeSelect', field: 'parentId', title: '上级菜单',
-      props: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },
-    },
+    parentRule,
     {
       type: 'select', field: 'menuType', title: '菜单类型', options: menuTypeOptions,
-      value: 1,
+      // 顶层「新增」默认建目录：菜单必须挂在目录下，根级建菜单必被后端拒绝
+      value: 0,
       validate: [{ required: true }],
       update: (val: number, _rule: any, fApi: any) => {
         const isDir = val === 0
@@ -148,10 +198,14 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
 
   return {
     rule,
-    createApi: (data) => createMenu(stripLinkedPage(data)),
-    updateApi: (id, data) => updateMenu(id as number, stripLinkedPage(data)),
+    createApi: (data) => createMenu(stripClientOnly(data)),
+    updateApi: (id, data) => updateMenu(id as number, stripClientOnly(data, true)),
     deleteApi: async (id) => { await deleteMenu(id as number) },
-    getApi: async (id) => findNode(list.value, Number(id)) as MenuTree,
+    getApi: async (id) => {
+      dialogMode.value = 'edit'
+      const node = findNode(list.value, Number(id))
+      return node ? { ...node, parentName: parentLabel(node) } : node
+    },
     createPermission: 'system:menu:create',
     editPermission: 'system:menu:update',
     deletePermission: 'system:menu:delete',
@@ -159,22 +213,11 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
   } as FormConfig<MenuTree>
 })
 
-/** 提交时移除前端辅助字段 linkedPage（后端 MenuCreateRequest 无此字段） */
-function stripLinkedPage(data: any): any {
-  const { linkedPage, ...rest } = data || {}
+/** 提交时剔除前端辅助字段（后端 DTO 无这些字段）；编辑态连 parentId 一起去掉 */
+function stripClientOnly(data: any, dropParentId = false): any {
+  const { linkedPage, parentName, parentId, ...rest } = data || {}
+  if (!dropParentId && parentId !== undefined) rest.parentId = parentId
   return rest
-}
-
-// 从树递归查找
-function findNode(tree: MenuTree[], id: number): MenuTree | null {
-  for (const node of tree) {
-    if (node.id === id) return node
-    if (node.children) {
-      const found = findNode(node.children, id)
-      if (found) return found
-    }
-  }
-  return null
 }
 </script>
 
@@ -189,6 +232,15 @@ function findNode(tree: MenuTree[], id: number): MenuTree | null {
     :tree-props="{ rowKey: 'id', children: 'children', defaultExpandAll: true }"
     :show-search="false"
   >
+    <template #menuName="{ row }">
+      <el-icon
+        v-if="canDrag"
+        class="menu-drag-handle"
+        :data-menu-id="row.id"
+        title="拖动调整层级和排序"
+      ><Rank /></el-icon>
+      <span>{{ row.menuName }}</span>
+    </template>
     <template #icon="{ row }">
       <el-icon><component :is="row.icon || 'Menu'" /></el-icon>
     </template>
@@ -199,3 +251,29 @@ function findNode(tree: MenuTree[], id: number): MenuTree | null {
     </template>
   </SearchTable>
 </template>
+
+<style scoped>
+.menu-drag-handle {
+  cursor: grab;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--el-text-color-secondary);
+}
+.menu-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 拖动落点提示：上/下边缘=同级插入线，行中间=成为该行的子节点，红色=该落点违反层级规则 */
+:deep(.el-table__body tr.menu-drop-into > td.el-table__cell) {
+  background-color: var(--el-color-primary-light-9) !important;
+}
+:deep(.el-table__body tr.menu-drop-before > td.el-table__cell) {
+  box-shadow: inset 0 2px 0 var(--el-color-primary);
+}
+:deep(.el-table__body tr.menu-drop-after > td.el-table__cell) {
+  box-shadow: inset 0 -2px 0 var(--el-color-primary);
+}
+:deep(.el-table__body tr.menu-drop-invalid > td.el-table__cell) {
+  background-color: var(--el-color-danger-light-9) !important;
+}
+</style>

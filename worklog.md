@@ -9442,3 +9442,16 @@ Work Log:
 
 Stage Summary:
 - 事件累计 #103；零 mvn 87 次；全绿 200×4 真绿，内存 3.20GB，oom 0
+
+---
+Task ID: r172
+Agent: cron-ops-loop
+Task: 2026-10-21 00:05 巡检
+
+Work Log:
+- dump OK 20261020-160540；四链路 200×4 但 auth=no such table → 事件 #104（标准重供给：vite 1183/mariadb 1252/node index.ts 1280/bun 1107，无 java，内存 3.28GB，oom 0）
+- 定型流水线：pkill 占位 → 重拼 jar md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）→ java pid 1444 拉起
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + push
+
+Stage Summary:
+- 事件累计 #104；零 mvn 88 次；全绿 200×4 真绿，内存 3.28GB，oom 0

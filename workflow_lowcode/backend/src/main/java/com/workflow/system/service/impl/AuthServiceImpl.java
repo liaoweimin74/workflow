@@ -12,6 +12,7 @@ import com.workflow.system.domain.vo.MenuTree;
 import com.workflow.system.domain.vo.UserInfo;
 import com.workflow.system.repository.*;
 import com.workflow.system.service.AuthService;
+import com.workflow.system.service.WechatMiniprogramClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,12 +30,16 @@ public class AuthServiceImpl implements AuthService {
     private final SysUserRoleRepository userRoleRepository;
     private final SysRoleMenuRepository roleMenuRepository;
     private final SysOrganizationRepository orgRepository;
+    private final SysUserOpenidRepository userOpenidRepository;
+    private final WechatMiniprogramClient miniprogramClient;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
 
     public AuthServiceImpl(SysUserRepository userRepository, SysRoleRepository roleRepository,
                            SysMenuRepository menuRepository, SysUserRoleRepository userRoleRepository,
                            SysRoleMenuRepository roleMenuRepository, SysOrganizationRepository orgRepository,
+                           SysUserOpenidRepository userOpenidRepository,
+                           WechatMiniprogramClient miniprogramClient,
                            JwtTokenProvider jwtTokenProvider, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -42,6 +47,8 @@ public class AuthServiceImpl implements AuthService {
         this.userRoleRepository = userRoleRepository;
         this.roleMenuRepository = roleMenuRepository;
         this.orgRepository = orgRepository;
+        this.userOpenidRepository = userOpenidRepository;
+        this.miniprogramClient = miniprogramClient;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordEncoder = passwordEncoder;
     }
@@ -57,12 +64,7 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != 1) {
             throw new BusinessException("账号已被禁用");
         }
-
-        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername());
-
-        UserInfo userInfo = buildUserInfo(user);
-        return new LoginResponse(accessToken, refreshToken, userInfo);
+        return tokenResponse(user);
     }
 
     @Override
@@ -78,11 +80,72 @@ public class AuthServiceImpl implements AuthService {
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
         SysUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
-        String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername());
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername());
+        return tokenResponse(user);
+    }
 
-        UserInfo userInfo = buildUserInfo(user);
-        return new LoginResponse(newAccessToken, newRefreshToken, userInfo);
+    @Override
+    @Transactional
+    public LoginResponse loginByMiniprogram(String code) {
+        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
+        SysUserOpenid binding = userOpenidRepository
+                .findByAppIdAndOpenidAndIsDeleted(session.appId(), session.openid(), GlobalConstant.DELETED_NO)
+                .orElseThrow(() -> new BusinessException(401, "该微信未绑定平台账号，请先使用账号密码绑定"));
+        return tokenResponse(requireActiveUser(binding.getUserId(), "绑定账号不存在或已删除"));
+    }
+
+    @Override
+    @Transactional
+    public LoginResponse bindMiniprogram(String code, String username, String password) {
+        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
+        SysUser user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new BusinessException(401, "用户名或密码错误");
+        }
+        if (user.getIsDeleted() != GlobalConstant.DELETED_NO) {
+            throw new BusinessException(401, "用户名或密码错误");
+        }
+        if (user.getStatus() == null || user.getStatus() != 1) {
+            throw new BusinessException(403, "账号已被禁用");
+        }
+
+        Optional<SysUserOpenid> byOpenid = userOpenidRepository
+                .findByAppIdAndOpenidAndIsDeleted(session.appId(), session.openid(), GlobalConstant.DELETED_NO);
+        if (byOpenid.isPresent()) {
+            if (byOpenid.get().getUserId().equals(user.getId())) {
+                return tokenResponse(user);
+            }
+            throw new BusinessException(409, "该微信已绑定其他平台账号，请联系管理员解绑");
+        }
+        Optional<SysUserOpenid> byUser = userOpenidRepository
+                .findByAppIdAndUserIdAndIsDeleted(session.appId(), user.getId(), GlobalConstant.DELETED_NO);
+        if (byUser.isPresent()) {
+            throw new BusinessException(409, "该平台账号已绑定其他微信，请联系管理员解绑");
+        }
+
+        SysUserOpenid binding = new SysUserOpenid();
+        binding.setUserId(user.getId());
+        binding.setAppId(session.appId());
+        binding.setOpenid(session.openid());
+        binding.setUnionid(session.unionid());
+        userOpenidRepository.save(binding);
+        return tokenResponse(user);
+    }
+
+    private SysUser requireActiveUser(Long userId, String missingMessage) {
+        SysUser user = userRepository.findById(userId)
+                .filter(candidate -> candidate.getIsDeleted() == GlobalConstant.DELETED_NO)
+                .orElseThrow(() -> new BusinessException(401, missingMessage));
+        if (user.getStatus() == null || user.getStatus() != 1) {
+            throw new BusinessException(403, "账号已被禁用");
+        }
+        return user;
+    }
+
+    private LoginResponse tokenResponse(SysUser user) {
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername());
+        return new LoginResponse(accessToken, refreshToken, buildUserInfo(user));
     }
 
     @Override

@@ -3,6 +3,8 @@ package com.workflow.system.controller;
 import com.workflow.common.domain.R;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.system.domain.dto.LoginRequest;
+import com.workflow.system.domain.dto.MiniprogramBindRequest;
+import com.workflow.system.domain.dto.MiniprogramLoginRequest;
 import com.workflow.system.domain.dto.RefreshTokenRequest;
 import com.workflow.system.domain.vo.LoginResponse;
 import com.workflow.system.domain.vo.MenuTree;
@@ -25,6 +27,18 @@ public class AuthController {
     @PostMapping("/login")
     public R<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return R.ok(authService.login(request));
+    }
+
+    /** 小程序静默登录：code 换 openid 后按已绑定账号发 token。 */
+    @PostMapping("/miniprogram/login")
+    public R<LoginResponse> miniprogramLogin(@Valid @RequestBody MiniprogramLoginRequest request) {
+        return R.ok(authService.loginByMiniprogram(request.code()));
+    }
+
+    /** 首次绑定：账号密码校验通过后把当前微信绑到该账号，并直接返回登录态。 */
+    @PostMapping("/miniprogram/bind")
+    public R<LoginResponse> miniprogramBind(@Valid @RequestBody MiniprogramBindRequest request) {
+        return R.ok(authService.bindMiniprogram(request.code(), request.username(), request.password()));
     }
 
     @PostMapping("/logout")

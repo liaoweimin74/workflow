@@ -37,9 +37,16 @@ logging:
     org.springframework.modulith: DEBUG
     org.flywaydb: DEBUG
 
+# 小程序客户端登录（P0.4）：code2session 换取 openid。
+# 未配置 app-id/app-secret 时小程序登录返回 503，网页账号密码登录不受影响。
+workflow:
+  auth:
+    miniprogram:
+      app-id: ${MINIPROGRAM_APP_ID:}
+      app-secret: ${MINIPROGRAM_APP_SECRET:}
+      base-url: ${MINIPROGRAM_API_BASE:https://api.weixin.qq.com}
 # AI 服务配置：默认走平台内置模型（经 NestJS 内部 LLM 网关，开箱即用，无需外部 API key）。
 # 外部部署时可用环境变量覆盖，接入任意 OpenAI 兼容服务（如 DeepSeek）。
-workflow:
   ai:
     enabled: true
     base-url: ${AI_BASE_URL:http://127.0.0.1:8080/api/internal/llm/v1}

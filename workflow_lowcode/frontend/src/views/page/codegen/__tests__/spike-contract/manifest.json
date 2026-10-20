@@ -1,0 +1,374 @@
+{
+  "kind": "page-codegen-manifest",
+  "manifestVersion": 2,
+  "generator": "lc-codegen@0.0.1-spike",
+  "source": {
+    "pageKey": "test_page",
+    "pageName": "测试页面",
+    "schemaDigest": "sha256:a41a81920337c5cd",
+    "digestRule": "对 schema 做键名升序规范化序列化后取 sha256 前 16 位",
+    "exportedAt": "2026-10-20"
+  },
+  "runtime": {
+    "package": "@lc/runtime",
+    "sdkVersion": "1",
+    "components": [
+      "page-table"
+    ],
+    "note": "表单容器不出 runtime 组件，出成 el-drawer + el-form 原生模板"
+  },
+  "contract": {
+    "comment": "回导（产物 → schema）只靠三份登记表才能零歧义，产物模板本身给不全语义",
+    "registers": {
+      "dropped": "身份键清单：codegen 丢弃、setRule 回导时补回（按叶名匹配）",
+      "warnings[].path": "丢弃登记表：path 相对 node.rulePath 且必须机器可读；kind ∈ dropKinds 的条目在回导对比时豁免，其余 kind 只是说明文字",
+      "renames": "重命名/派生登记表：from(schema 路径) ← to(产物侧证据)，回导先校验两侧值一致再剥离产物键；to 以 derived: 开头表示由产物形态推导",
+      "wireOnly": "行为归属登记表：产物里有、schema 里没有的接线键（事件绑定/临时 prop），回导剥离不报多造",
+      "defaults": "默认值登记表：form-create 结构键取默认值时产物省略不写，回导按此补；值不等于默认必须显式出码",
+      "dropKinds": [
+        "ignored-by-runtime",
+        "no-consumer",
+        "overridden-at-runtime",
+        "not-in-artifact",
+        "runtime-derived",
+        "default-elided",
+        "step-param-dropped"
+      ]
+    },
+    "defaults": {
+      "display": true,
+      "hidden": false,
+      "info": "",
+      "$required": false,
+      "title": ""
+    }
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "rulePath": "rule[0]",
+      "type": "page-table",
+      "field": "table1789468745852",
+      "dataSourceId": "ds_mu2jhb3n",
+      "anchor": "lc:node=n1 type=page-table field=table1789468745852 ds=ds_mu2jhb3n",
+      "file": "TestPage.vue",
+      "host": {
+        "tag": "page-table",
+        "ref": "tableRef"
+      },
+      "dropped": [
+        "_fc_id",
+        "name",
+        "_fc_drag_tag",
+        "designMode"
+      ],
+      "renames": [
+        {
+          "from": "props.viewActions.buttons",
+          "to": "props.buttons",
+          "note": "按钮组从面板嵌套结构提到组件根 prop"
+        },
+        {
+          "from": "props.viewDetail.formMode",
+          "to": "derived:containerDisplayMode",
+          "note": "展示方式落在容器标签上（el-drawer/el-dialog/覆盖层），回导按 tag 反推"
+        },
+        {
+          "from": "props.viewDetail.type",
+          "to": "derived:containerHasForm",
+          "note": "容器内是表单 → form"
+        },
+        {
+          "from": "props.dataSourceId",
+          "to": "derived:dsRefId",
+          "note": "产物只带运行期注入的 refId（PageRendererPage.vue:556 反查而来），回导经 manifest.dataSources 换回页面内标识",
+          "evidence": "props.dsRefId"
+        }
+      ],
+      "wireOnly": [
+        "on.rowClick",
+        "on.buttonClick",
+        "on.selectionChange"
+      ],
+      "warnings": [
+        {
+          "kind": "not-in-artifact",
+          "path": "props.viewDetail.width",
+          "message": "与容器 props.dialogWidth 同值（800px），产物只有一处 size 证据；两者不等时后写者无法还原——歧义点，出码报告必须标红"
+        },
+        {
+          "kind": "ignored-by-runtime",
+          "path": "props.sortable",
+          "message": "列排序由数据源 metadata + sortableFields 决定（schemaTypes.ts:21 已 deprecated），出码丢弃"
+        },
+        {
+          "kind": "ignored-by-runtime",
+          "path": "props.filterable",
+          "message": "无运行时消费者，出码丢弃"
+        },
+        {
+          "kind": "runtime-derived",
+          "path": "props.columns[0].prop",
+          "message": "换绑数据源后组件忽略 props.columns 改用 metadata 列（PageDataTable.vue:486-487），出码把 columns 当静态配置，需在报告标注可能与设计器实时行为不一致"
+        },
+        {
+          "kind": "default-elided",
+          "path": "props.actionColumnWidth",
+          "message": "值 0 等于组件默认值，产物不显式写；回导补默认",
+          "elidedValue": 0
+        },
+        {
+          "kind": "default-elided",
+          "path": "props.viewEvents",
+          "message": "空数组不落模板；回导补 []",
+          "elidedValue": []
+        },
+        {
+          "kind": "default-elided",
+          "path": "props.viewActions.permissions",
+          "message": "空权限串不落模板；回导补 \"\"",
+          "elidedValue": ""
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "rulePath": "rule[1]",
+      "type": "formContainer",
+      "field": "F7n9mu2jn6reabc",
+      "dataSourceId": "ds_mu2jhb3n",
+      "anchor": "lc:node=n2 type=formContainer field=F7n9mu2jn6reabc ds=ds_mu2jhb3n",
+      "file": "TestPage.vue",
+      "host": {
+        "tag": "el-drawer",
+        "ref": null
+      },
+      "displayMode": "drawer",
+      "displayModeSource": "rule[0].props.viewDetail.formMode",
+      "dropped": [
+        "_fc_id",
+        "name",
+        "_fc_drag_tag"
+      ],
+      "renames": [
+        {
+          "from": "props.tabTitle",
+          "to": "el-drawer@title"
+        },
+        {
+          "from": "props.dialogWidth",
+          "to": "el-drawer@size",
+          "note": "宽度按展示方式落到 size（drawer）或 width（dialog）"
+        },
+        {
+          "from": "props.dataSourceId",
+          "to": "anchor:n2@ds",
+          "note": "容器不渲染数据组件，数据源标识只存在于锚点注释"
+        },
+        {
+          "from": "props.showConfirmButton",
+          "to": "derived:footerConfirmButton"
+        },
+        {
+          "from": "props.showCancelButton",
+          "to": "derived:footerCancelButton"
+        }
+      ],
+      "warnings": [
+        {
+          "kind": "not-in-artifact",
+          "path": "title",
+          "message": "容器可见标题用 props.tabTitle（落到 el-drawer 的 title），rule 上的 title 只是设计器节点名，产物无落点"
+        },
+        {
+          "kind": "no-consumer",
+          "path": "props.recordLocator",
+          "message": "配置存在但运行时无消费者（空槽），出码丢弃并告警，避免产物语义看起来比实际强"
+        },
+        {
+          "kind": "overridden-at-runtime",
+          "path": "props.displayMode",
+          "message": "容器展示方式以数据表格 viewDetail.formMode 为准（本例 drawer），schema 上的 dialog 不生效"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.dialogHeight",
+          "message": "抽屉只吃 size，高度进不来；首版不出"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.inlineHeight",
+          "message": "展示方式非 inline，首版不出"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.showNewButton",
+          "message": "首版容器只出确定/取消/关闭三键"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.showCopyButton",
+          "message": "首版容器只出确定/取消/关闭三键"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.showDeleteButton",
+          "message": "首版容器只出确定/取消/关闭三键"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "props.customButtons",
+          "message": "空数组不落模板；回导补 []"
+        }
+      ]
+    },
+    {
+      "id": "n2.f1",
+      "rulePath": "rule[1].props.rule[0]",
+      "type": "input",
+      "field": "name",
+      "title": "姓名",
+      "anchor": "lc:node=n2.f1 type=input field=name title=姓名",
+      "file": "TestPage.vue",
+      "host": {
+        "tag": "el-input",
+        "vmodel": "form.name"
+      },
+      "dropped": [
+        "_fc_id",
+        "name",
+        "_fc_drag_tag"
+      ],
+      "renames": [
+        {
+          "from": "field",
+          "to": "anchor:n2.f1@field",
+          "note": "v-model 路径只在直绑 form.x 时可逆；计算属性/嵌套路径必须靠锚点，这是字段级锚点存在的理由"
+        },
+        {
+          "from": "title",
+          "to": "el-form-item@label"
+        }
+      ]
+    },
+    {
+      "id": "n3",
+      "rulePath": "option",
+      "type": "option",
+      "file": "TestPage.vue",
+      "host": {
+        "tag": "el-form",
+        "ref": "formRef"
+      },
+      "renames": [
+        {
+          "from": "form.labelPosition",
+          "to": "el-form@label-position"
+        },
+        {
+          "from": "form.size",
+          "to": "el-form@size"
+        },
+        {
+          "from": "form.inline",
+          "to": "el-form@inline"
+        },
+        {
+          "from": "form.hideRequiredAsterisk",
+          "to": "el-form@hide-required-asterisk"
+        }
+      ],
+      "warnings": [
+        {
+          "kind": "overridden-at-runtime",
+          "path": "submitBtn.show",
+          "message": "运行时无条件强制 submitBtn/resetBtn 为 {show:false}（PageRendererPage.vue:414），schema 的 true 不生效；产物直接不出提交按钮"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "submitBtn.innerText",
+          "message": "按钮不出，文案无落点"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "resetBtn.show",
+          "message": "运行时同样强制 false"
+        },
+        {
+          "kind": "not-in-artifact",
+          "path": "resetBtn.innerText",
+          "message": "按钮不出，文案无落点"
+        },
+        {
+          "kind": "overridden-at-runtime",
+          "path": "form.labelWidth",
+          "message": "容器场景 labelWidth 由 measureFormLabelWidth 运行期测量覆盖（PageRendererPage.vue:704），出码改用 CSS 变量 --lc-label-width，不做 DOM 测量（小程序不可用）"
+        }
+      ]
+    }
+  ],
+  "dataSources": [
+    {
+      "id": "ds_mu2jhb3n",
+      "refId": "20f476f047ca4386bfd1365ea5516832",
+      "apiModule": "api/test-page",
+      "searchFields": [
+        "code",
+        "name",
+        "dept"
+      ],
+      "dropped": [
+        "name"
+      ]
+    }
+  ],
+  "behaviors": [
+    {
+      "id": "b1",
+      "origin": "actions[0]",
+      "trigger": "row-edit",
+      "source": "ds_mu2jhb3n",
+      "steps": [
+        {
+          "op": "open-container",
+          "target": "ds_mu2jhb3n"
+        }
+      ],
+      "resolvedTarget": "n2",
+      "implementedBy": {
+        "file": "TestPage.vue",
+        "function": "onButtonClick",
+        "case": "edit"
+      },
+      "warnings": [
+        {
+          "kind": "step-param-dropped",
+          "path": "actions[0].steps[0].displayMode",
+          "message": "PageRendererPage 完全不读 step.displayMode，出码丢弃"
+        }
+      ]
+    },
+    {
+      "id": "b2",
+      "origin": "implicit:buttons",
+      "trigger": "row-view",
+      "source": "ds_mu2jhb3n",
+      "steps": [],
+      "implementedBy": {
+        "file": "TestPage.vue",
+        "function": "onButtonClick",
+        "case": "view"
+      },
+      "warnings": [
+        {
+          "kind": "fallback-behavior",
+          "message": "schema.actions 无 row-view 动作，运行时走 openLinkedContainer('view') 兜底（PageDataTable.vue:939-941）。出码把兜底行为显式化成代码，产物因此比原页面语义更明确——需在报告标注这是新增行为而非原配置"
+        }
+      ]
+    }
+  ],
+  "unsupported": [],
+  "identity": {
+    "policy": "出码丢弃 _fc_id/name/_fc_drag_tag；回导时由 FcDesigner.setRule 经 vendor loadRule/makeRule 补全（ruleIdentityStability.test.ts:14 保证缺失才补、已有值不改写）"
+  }
+}

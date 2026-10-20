@@ -9386,3 +9386,19 @@ Work Log:
 
 Stage Summary:
 - 重供给累计 #99；零 mvn 83 次；全绿 200×4 真绿，内存 3.26GB，oom 0
+
+---
+Task ID: r166-r167
+Agent: cron-ops-loop
+Task: 2026-10-20 18:05(r166 沙箱失败) + 19:05(r167 catchup 巡检)
+
+Work Log:
+- r166(18:05)：沙箱第 21 次失败，零执行
+- r167(19:05)：沙箱恢复。dump OK 但 push FAILED；四链路 200×4 但 auth=no such table → 环境异常事件 #100
+- 异常形态非典型：java pid 1450 与 r165 相同（幸存未死）+ vite pid 1139 相同，但 mariadb/node index.ts pid 均变 → 判定 mariadb 服务重启且 workflow 库数据被重置（表丢失），Java 带旧连接池继续服务故 auth 报 no such table；疑似容器重供给（pid 巧合）或 mariadb 数据目录重置
+- 定型流水线：pkill 占位（node index.ts 已换 pid=1178）→ 重拼 jar md5 e369839b ✓ → recover 被杀（幸存型）→ mariadb 重建+导入 db-workflow-full-20261020-090546.sql → 旧 java 实例恢复查询能力
+- 40s 复验 200×4 真绿 + node 探针 200；收口 dump + rebase 补推
+
+Stage Summary:
+- 环境异常事件累计 #100（百次里程碑，自 r91 起窗口内恢复 26 次）；零 mvn 84 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+- 新亚型：mariadb 重置+java 幸存（非标准全量重供给），定型流水线无需改动即可覆盖

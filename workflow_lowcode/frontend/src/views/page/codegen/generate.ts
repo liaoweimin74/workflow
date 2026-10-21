@@ -545,6 +545,16 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
 
 const containerSizeAttrOf = (ctx: Ctx) => (ctx.containerMode === 'drawer' ? 'size' : 'width')
 
+/**
+ * 该类型的标题有没有 el-form-item 载体（契约里 self.title 登记成 attr on el-form-item）。
+ * 有才包一层 form-item —— 现网 form-create 给每个顶层节点都套，但 dash 系列与容器类刻意置空
+ * title 就是为了不套（PageRendererPage.vue 的 transformComponent），补登记时得按类型自己表态。
+ */
+function labelCarrierOf(type: string): boolean {
+  const entry = TYPE_CONTRACTS[type]?.self?.title
+  return !!entry && entry.emit === 'attr' && entry.on === 'el-form-item'
+}
+
 /** 记一笔"这个数据源被这个节点消费了"：逐源登记的依据，值取自 schema 不取自产物片段 */
 function useDs(ctx: Ctx, value: unknown, rulePath: string): void {
   const id = String(value ?? '')
@@ -595,7 +605,9 @@ function planOption(option: any, ctx: Ctx, id: string): NodePlan {
     field: '',
     anchor: '',
     file: ctx.file,
-    host: { tag: 'el-form', ref: 'formRef' },
+    // 页面根 form 不出 ref：产物里没有页面级字段，没有要 validate 的表单实例；
+    // formRef 这个名字归容器内层表单（renderContainer 里硬编码）。
+    host: { tag: 'el-form', ref: null },
     dropped: [],
     renames: [],
     wireOnly: [],
@@ -784,16 +796,27 @@ function assembleVue(args: {
   L.push('<!-- 由 lc-codegen 从页面 schema 出码，勿手改登记表以外的部分；人工接管写在 handler 里 -->')
   L.push('<template>')
   L.push('  <div class="lc-page lc-page--stretch">')
+  // 页面主体一棵 el-form：option.form.* 的落点，也是列表节点标题的载体（现网这层是 form-create 给的）。
+  // 纯列表页照样包 —— 没有字段也有 label-position/size/labelWidth 要挂，去掉这层就等于把页面级配置丢掉。
+  const formAttrs = Object.entries(optionPlan.attrs['el-form'] || {}).map(([k, v]) =>
+    typeof v === 'boolean' || typeof v === 'number' ? `:${kebab(k)}="${lit(v)}"` : `${k}="${v}"`,
+  )
+  L.push(`    <el-form class="lc-page-form"${formAttrs.length ? ` ${formAttrs.join(' ')}` : ''}>`)
   for (const lp of listPlans) {
     const list = listOf(lp.node.type) || { events: [] }
     const head = lp.node.host.ref ? ` ref="${lp.node.host.ref}"` : ''
     const props = lp.propSnippets.length ? ` ${lp.propSnippets.join(' ')}` : ''
     const events = list.events.map((e) => `@${e.on}="${e.handler}"`)
-    L.push(`    <!-- ${lp.node.anchor} -->`)
-    L.push(`    <${lp.tag}${head}${props} ${events.join(' ')} />`)
+    const label = lp.attrs['el-form-item']?.label
+    const wrap = labelCarrierOf(lp.node.type)
+    L.push(`      <!-- ${lp.node.anchor} -->`)
+    if (wrap) L.push(`      <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
+    L.push(`${wrap ? '        ' : '      '}<${lp.tag}${head}${props} ${events.join(' ')} />`)
+    if (wrap) L.push('      </el-form-item>')
     lp.node.wireOnly.push(...list.events.map((e) => `on.${camel(e.on)}`))
   }
-  if (container) L.push(renderContainer(container, optionPlan, ctx))
+  L.push('    </el-form>')
+  if (container) L.push(renderContainer(container, ctx))
   L.push('  </div>')
   L.push('</template>')
   L.push('')
@@ -894,6 +917,18 @@ function assembleVue(args: {
   L.push('  display: flex;')
   L.push('  flex-direction: column;')
   L.push('}')
+  // 撑满链路要多接一层：现网是 .el-form > .el-row > .el-col > .el-form-item > __content
+  //（PageRendererPage.vue:746-757），产物没有 form-create 的栅格，高度从根 form 直接传到列表组件。
+  L.push('.lc-page--stretch .lc-page-form {')
+  L.push('  height: 100%;')
+  L.push('  min-height: 0;')
+  L.push('}')
+  L.push('.lc-page--stretch .lc-page-form :deep(.el-form-item),')
+  L.push('.lc-page--stretch .lc-page-form :deep(.el-form-item__content) {')
+  L.push('  height: 100%;')
+  L.push('  min-height: 0;')
+  L.push('  min-width: 0;')
+  L.push('}')
   L.push('.lc-container-body {')
   L.push('  overflow-y: auto;')
   L.push('  height: 600px;')
@@ -903,7 +938,7 @@ function assembleVue(args: {
   return L.join('\n')
 }
 
-function renderContainer(plan: NodePlan, optionPlan: NodePlan, ctx: Ctx): string {
+function renderContainer(plan: NodePlan, ctx: Ctx): string {
   const attrs = plan.attrs[plan.tag] || {}
   const sizeAttr = containerSizeAttrOf(ctx)
   // title 先写：容器锚点里读不到它，人 review 时第一眼要看的就是标题
@@ -914,15 +949,9 @@ function renderContainer(plan: NodePlan, optionPlan: NodePlan, ctx: Ctx): string
     return typeof v === 'string' && (k === 'title' || k === sizeAttr) ? `${k}="${v}"` : `:${k}="${lit(v)}"`
   })
   open.push(...attrSnippets)
-  const formLine = [
-    'ref="formRef"',
-    ':model="form"',
-    ...Object.entries(optionPlan.attrs['el-form'] || {}).map(([k, v]) =>
-      typeof v === 'boolean' || typeof v === 'number' ? `:${kebab(k)}="${lit(v)}"` : `${kebab(k)}="${v}"`,
-    ),
-    // labelWidth 运行期测量覆盖（小程序不可用），出码改用 CSS 变量
-    'label-width="var(--lc-label-width)"',
-  ]
+  // 容器内层 form 只带自己的接线：现网 containerOption（PageRendererPage.vue:700-706）是现造的，
+  // 不吃页面 option.form.*，labelWidth 用运行期测量值 —— 产物不测 DOM，留 CSS 变量占位。
+  const formLine = ['ref="formRef"', ':model="form"', 'label-width="var(--lc-label-width)"']
   const items = plan.children.map((c) => {
     // 未登记的字段类型没有标签可出。绝不能用空 tag 占位：`< v-model="…" />` 既过不了
     // Vue 编译，又会把回导侧的 el-form-item 祖先关系搅乱（语料体检里 8 条 label 错位的根因）。

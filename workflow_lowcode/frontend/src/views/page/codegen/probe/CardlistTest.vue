@@ -1,12 +1,16 @@
 <!-- 由 lc-codegen 从页面 schema 出码，勿手改登记表以外的部分；人工接管写在 handler 里 -->
 <template>
   <div class="lc-page lc-page--stretch">
-    <!-- lc:node=n1 type=page-list-cards field=cards1792036403314 -->
-    <page-list-cards :external-actions="true" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
+    <el-form class="lc-page-form" :inline="false" :hide-required-asterisk="false" label-position="right" size="default" label-width="125px">
+      <!-- lc:node=n1 type=page-list-cards field=cards1792036403314 -->
+      <el-form-item label="卡片列表">
+        <page-list-cards :external-actions="true" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
+      </el-form-item>
+    </el-form>
     <!-- lc:node=n2 type=formContainer field=Fcb4mva5poegabc ds=ds_mvck4gv9 -->
     <el-dialog v-model="containerVisible" title="编辑记录" width="800px">
       <div class="lc-container-body">
-        <el-form ref="formRef" :model="form" :inline="false" :hide-required-asterisk="false" label-position="right" size="default" label-width="var(--lc-label-width)">
+        <el-form ref="formRef" :model="form" label-width="var(--lc-label-width)">
           <!-- lc:node=n2.f1 type=input field=order_no -->
           <el-form-item label="订单编号">
             <el-input v-model="form.order_no" placeholder="如 SO-20261015-001" />
@@ -245,6 +249,16 @@ function onRowClick(_row: Record<string, unknown>) {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+.lc-page--stretch .lc-page-form {
+  height: 100%;
+  min-height: 0;
+}
+.lc-page--stretch .lc-page-form :deep(.el-form-item),
+.lc-page--stretch .lc-page-form :deep(.el-form-item__content) {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
 }
 .lc-container-body {
   overflow-y: auto;

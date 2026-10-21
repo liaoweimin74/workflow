@@ -120,7 +120,13 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
-      title: { emit: 'drop', kind: 'not-in-artifact', note: 'PageDataTable 无 title prop：写进模板只会落到组件根 DOM 变成浏览器原生 title 悬停提示。现网这个标题其实看得见 —— form-create 把每个节点包在 el-form-item 里当 label（真机 /page/cardlist_test?preview=true 量到 el-form-item--label-right + el-col-24.fc-form-col），产物还没有「页面主体 el-form + 列表节点 label 载体」这层，先丢弃止血' },
+      /**
+       * 标题落 el-form-item 的 label，不落组件标签：PageDataTable 没有 title prop，
+       * 写上去只会变成根 DOM 的原生悬停提示。现网这个标题本来就是 form-create 给每个顶层
+       * 节点套的 el-form-item label（真机 /page/cardlist_test?preview=true 量到
+       * el-col-24.fc-form-col + el-form-item--label-right），产物侧同一层载体。
+       */
+      title: { emit: 'attr', as: 'label', on: 'el-form-item' },
     },
     props: {
       dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
@@ -314,7 +320,8 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
-      title: { emit: 'drop', kind: 'not-in-artifact', note: 'PageDataCards 无 title prop（同 PageDataTable）：写进模板只会落到组件根 DOM 变成原生 title 悬停提示；现网的可见标题走 form-create 的 el-form-item label，产物缺该载体（见 page-table.self.title 注）' },
+      /** 同 page-table：标题走页面根 form 的 el-form-item label，PageDataCards 没有 title prop */
+      title: { emit: 'attr', as: 'label', on: 'el-form-item' },
     },
     props: {
       dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
@@ -349,17 +356,18 @@ export const isFieldType = (type: string): boolean => !!TYPE_CONTRACTS[type]?.fi
 /** 列表类组件（页面主体不是表单字段） */
 export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_CONTRACTS[type]?.list
 
-/** 页面 option 的落点（宿主渲染项，不是 rule 节点） */
+/**
+ * 页面 option 的落点（宿主渲染项，不是 rule 节点）。
+ * attr 一律落**页面根 el-form**：现网页面主体就是 form-create 渲染的那棵 form
+ * （PageRendererPage.vue:414 只强制隐藏 submitBtn/resetBtn，form.* 原样交给它）。
+ * 容器内层 form 不吃这些键 —— 它的 option 由 containerOption 现造，labelWidth 是运行期测量值。
+ */
 export const OPTION_CONTRACT: Record<string, PropEmit> = {
   'form.labelPosition': { emit: 'attr', as: 'label-position' },
   'form.size': { emit: 'attr', as: 'size' },
   'form.inline': { emit: 'attr', as: 'inline' },
   'form.hideRequiredAsterisk': { emit: 'attr', as: 'hide-required-asterisk' },
-  'form.labelWidth': {
-    emit: 'drop',
-    kind: 'overridden-at-runtime',
-    note: '容器场景 labelWidth 由 measureFormLabelWidth 运行期测量覆盖（PageRendererPage.vue:704），产物改用 CSS 变量不做 DOM 测量',
-  },
+  'form.labelWidth': { emit: 'attr', as: 'label-width' },
   'submitBtn.show': { emit: 'drop', kind: 'overridden-at-runtime', note: '运行时无条件强制隐藏提交按钮（PageRendererPage.vue:414）' },
   'submitBtn.innerText': { emit: 'drop', kind: 'not-in-artifact', note: '按钮不出，文案无落点' },
   'resetBtn.show': { emit: 'drop', kind: 'not-in-artifact', note: '运行时同样强制隐藏' },

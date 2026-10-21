@@ -554,6 +554,13 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
         )
         useDs(ctx, leaf.value, rulePath)
       }
+      // 选择器的取数身份：产物不挂渲染器，activeDsBindings 恒空，组件只能吃现成的 refId
+      // （DataPicker.vue:265 的 binding?.refId || globalDataSourceId 那条回退）。
+      // 一律查表、不分首个源：同页两个 picker 各绑各的表，走 ds.refId 就是拿错源。
+      if (entry.by === 'globalDataSourceId') {
+        plan.propSnippets.push(`:global-data-source-id="dataSources['${String(leaf.value ?? '')}']"`)
+        useDs(ctx, leaf.value, rulePath)
+      }
       return
     case 'attr': {
       const attrName = entry.by === 'containerSizeAttr' ? containerSizeAttrOf(ctx) : entry.as!

@@ -109,11 +109,11 @@ public class FlowableEngineConfig {
             com.workflow.engine.form.bizdata.BizDataSupport bizDataSupport,
             com.workflow.engine.tenant.TenantProvider tenantProvider,
             com.workflow.notification.dispatch.MessageSender messageSender,
-            com.workflow.ai.model.ChatModel chatModel) {
+            ObjectProvider<com.workflow.ai.model.ChatModel> chatModelProvider) {
         return new com.workflow.engine.logicflow.engine.LogicFlowEngine(
                 httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper,
                 logicFlowDefRepository, jdbcTemplate, dynamicTableManager,
-                bizDataSupport, tenantProvider, messageSender, chatModel);
+                bizDataSupport, tenantProvider, messageSender, chatModelProvider.getIfAvailable());
     }
 
     @Bean

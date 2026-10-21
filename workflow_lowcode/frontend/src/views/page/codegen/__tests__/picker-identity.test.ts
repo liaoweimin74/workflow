@@ -2,12 +2,14 @@
 // dataPicker / LookupPicker 的 props.dataSourceId 存的是「页面级数据源绑定 id」（ds_xxx），
 // 组件运行期拿它去 activeDsBindings 查 refId 才取到数：
 //   · DataPicker.vue:259-265  binding?.refId || props.globalDataSourceId || ''
-//   · LookupPicker.vue:111-117 binding?.refId || ''（没有第二条入口）
+//   · LookupPicker.vue:111-117 原来 binding?.refId || ''（没有第二条入口，spike 7F 补成对称的回退式）
 // activeDsBindings 是模块级单例（utils/formDsBindingsStore.ts:19），只有 FormRenderer.vue:333-341、
 // PageRendererPage.vue:300 和设计器会写。出码产物是独立页、不挂渲染器，这张表恒空 ——
 // 把 ds_xxx 原样写进产物，选择器点开是一片空列表，配置看着接上了其实没接。
-// 所以 dataSourceId 不许透传，要换算成 refId 递进组件已有的入口（DataPicker 的 globalDataSourceId）。
-// LookupPicker 本轮不动：它没有可用入口，组件侧不表态就出不了诚实的产物（见 spike 7F）。
+// 所以 dataSourceId 不许透传，要换算成 refId 递进组件的 globalDataSourceId 入口
+// （项目里已有同款：DataPicker.vue:265、RelationCard.vue:189）。
+// LookupPicker 还剩一条带回债（idField/returnFields 走 formCreateInject.api.setValue），
+// 它另外 emit select/clear，产物可用 @select 自己写回 —— 那是 spike 7F 的第二步，不在本文件口径内。
 // 语料：cardlist_test / cardlistpage / cardviewlist 各 2 个 dataPicker + 1 个 LookupPicker，
 //       绑的都是非首个数据源 —— 正好验「逐节点查产物常量表」，不能沿用第一源的 ds.refId。
 // 附带结论（不在本轮做）：DataPicker 的 filter/filters/dependOn 里 field 型条件走
@@ -16,6 +18,8 @@
 // 跑：npx vitest run src/views/page/codegen/__tests__/picker-identity.test.ts
 
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import DataPicker from '@lc/runtime/dataPicker'
 import LookupPicker from '@lc/runtime/LookupPicker'
@@ -50,10 +54,19 @@ const DP_DS = 'ds_mvck4gv92'
 const DP_REF = '58c300fb631946c799ab07b8198a2a2b'
 
 describe('选择器取数身份', () => {
-  it('根据要站得住：DataPicker 有 globalDataSourceId 逃生口，LookupPicker 没有', () => {
+  it('根据要站得住：两个选择器都有 globalDataSourceId 入口，且回退顺序一致（绑定优先）', () => {
     expect(declared(DataPicker).has('globalDataSourceId'), '组件没这个 prop，改名就是错位 emit').toBe(true)
-    // 这条断言是 spike 7F 的前置：哪天给 LookupPicker 补了入口，它会红，提醒一起改登记
-    expect(declared(LookupPicker).has('globalDataSourceId'), 'LookupPicker 补了入口，本轮登记要跟着改').toBe(false)
+    expect(declared(LookupPicker).has('globalDataSourceId'), 'LookupPicker 缺对称入口，产物递 refId 就是错位 emit').toBe(true)
+    // 回退顺序钉死：绑定解析在前、显式入口兜底。反过来会让现网已配绑定页面优先吃到别的值。
+    // DataPicker.vue:265、RelationCard.vue:189 是这个形状，LookupPicker 补的时候必须照抄。
+    const srcOf = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8')
+    for (const p of [
+      'src/views/form/components/DataPicker.vue',
+      'src/components/business/LookupPicker.vue',
+      'src/components/business/RelationCard.vue',
+    ]) {
+      expect(srcOf(p), p).toMatch(/currentBinding(?:\.value)?\?\.refId \|\| props\.globalDataSourceId \|\| ''/)
+    }
   })
 
   it('dataPicker 出 refId 不出绑定 id：查产物常量表，各节点各源', () => {
@@ -89,12 +102,26 @@ describe('选择器取数身份', () => {
     expect(run(clone()).source).toContain(`'${DP_DS}': '${DP_REF}'`)
   })
 
-  it('LookupPicker 无入口：继续透传绑定成语义债，不许假接线', () => {
+  it('LookupPicker 同一条路：出 refId、绑定 id 不再透传，身份这条债销账', () => {
     const { gen, source } = run(clone())
-    // 现状照实出：产物里就是那个查不到东西的绑定 id
-    expect(source).toMatch(/<LookupPicker[^>]*data-source-id="ds_mvck4gv91"/)
-    const debt = gen.manifest.unsupported.filter((u) => u.type === 'LookupPicker' && u.key === 'dataSourceId')
-    expect(debt.length).toBeGreaterThan(0)
-    expect(debt[0].message).toContain('globalDataSourceId')
+    expect(source).toMatch(/<LookupPicker[^>]*:global-data-source-id="dataSources\['ds_mvck4gv91'\]"/)
+    expect(source).not.toMatch(/<LookupPicker[^>]*\sdata-source-id=/)
+    expect(TYPE_CONTRACTS.LookupPicker!.props.dataSourceId).toMatchObject({
+      emit: 'derived',
+      by: 'globalDataSourceId',
+    })
+    // 只剩带回那条：idField/returnFields 靠 formCreateInject.api.setValue，产物里没有 form-create 实例
+    const debt = gen.manifest.unsupported.filter((u) => u.type === 'LookupPicker').map((u) => u.key)
+    expect(debt).toEqual(['returnFields'])
+  })
+
+  it('LookupPicker 的身份也走反查：往返不差，证据链和 dataPicker 同一条', () => {
+    const { renames } = run(clone())
+    const check = renames.find((r) => String(r.path).startsWith('rule[1].props.rule[3]') && String(r.path).endsWith('dataSourceId'))
+    expect(check, 'LookupPicker 没有改名核对 = 回读没验证据').toBeTruthy()
+    expect(check!.ok, JSON.stringify(check)).toBe(true)
+    expect(check!.to).toBe('derived:globalDataSourceId')
+    expect(check!.artifact).toBe('ds_mvck4gv91')
+    expect(run(clone()).source).toContain(`'ds_mvck4gv91': '35bccab82a284257ad935529d518905a'`)
   })
 })

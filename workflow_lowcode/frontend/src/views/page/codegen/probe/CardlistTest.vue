@@ -25,7 +25,7 @@
           </el-form-item>
           <!-- lc:node=n2.f4 type=LookupPicker field=customer -->
           <el-form-item label="选择客户">
-            <LookupPicker v-model="form.customer" data-source-id="ds_mvck4gv91" display-field="name" :search-columns="searchColumns" id-field="customer_id" :return-fields="returnFields" :columns="columns2" />
+            <LookupPicker v-model="form.customer" :global-data-source-id="dataSources['ds_mvck4gv91']" display-field="name" :search-columns="searchColumns" id-field="customer_id" :return-fields="returnFields" :columns="columns2" />
           </el-form-item>
           <!-- lc:node=n2.f5 type=input field=contact_name -->
           <el-form-item label="联系人">

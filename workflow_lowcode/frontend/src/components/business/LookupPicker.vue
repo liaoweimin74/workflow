@@ -113,8 +113,8 @@ const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
   return activeDsBindings.value.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
 })
 
-/** 全局数据源 refId（由绑定解析） */
-const dsRefId = computed(() => currentBinding.value?.refId || '')
+/** 全局数据源 refId：绑定上下文优先，独立页面（出码产物）没有绑定表时吃 globalDataSourceId */
+const dsRefId = computed(() => currentBinding.value?.refId || props.globalDataSourceId || '')
 
 const dialogVisible = ref(false)
 const loading = ref(false)

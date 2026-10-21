@@ -327,7 +327,9 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     field: true,
     self: FIELD_SELF,
     props: {
-      dataSourceId: { emit: 'prop' },
+      // 与 dataPicker 同口径：绑定 id 在独立页换不出 refId（activeDsBindings 恒空），
+      // 组件已补 globalDataSourceId 入口（LookupPicker.vue:117 的回退式），产物递 refId。
+      dataSourceId: { emit: 'derived', by: 'globalDataSourceId', evidence: 'props.globalDataSourceId' },
       displayField: { emit: 'prop' },
       idField: { emit: 'prop' },
       returnFields: { emit: 'prop' },
@@ -336,12 +338,8 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     },
     requires: [
       {
-        key: 'dataSourceId',
-        note: 'LookupPicker 只有 dataSourceId 一条入口，refId 全靠 activeDsBindings（LookupPicker.vue:111-117），无 globalDataSourceId 可用；产物要跑得先给组件加 refId prop 或在页面里注册绑定',
-      },
-      {
         key: 'returnFields',
-        note: '带回靠 formCreateInject.api.setValue 写别的字段（含 idField），出码产物是裸 v-model 表单，没有 form-create 实例；需把带回写成 handler 里的显式赋值',
+        note: '带回靠 formCreateInject.api.setValue 写别的字段（含 idField），出码产物是裸 v-model 表单，没有 form-create 实例；需把带回写成 handler 里的显式赋值 —— 组件另有 select/clear 两个 emit（LookupPicker.vue:92-93）可让产物自己写回',
       },
     ],
   },

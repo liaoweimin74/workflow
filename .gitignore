@@ -69,3 +69,6 @@ tmp/
 .vscode/
 cases.yaml
 login.yaml
+
+# 并行 spike 的 worktree 检出目录（只留本地，绝不进版本库）
+.worktrees/

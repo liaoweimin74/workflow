@@ -9496,3 +9496,19 @@ Work Log:
 
 Stage Summary:
 - 事件累计 #107；零 mvn 91 次；全绿 200×4 真绿，内存 3.28GB，oom 0
+---
+Task ID: r181
+Agent: ops-cron
+Task: 2026-10-21 10:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- dump OK（20261021-020540），四链路 200×4 但真伪核验「no such table: SYS_USER」→ 判定事件 #108（标准重供给）
+- 进程集全新：vite 1244/mariadb 1220/node index.ts 1285/bun 1109，无 java
+- pkill 占位进程；backups/jar 目录消失，mkdir 后重拼 jar：121300861B，md5 e369839b ✓
+- timeout 170 recover 被 Bash 195s 上限杀掉（幸存型）；ss 复验：3000=vite 1244、3306=mariadb 1220、8080=java 1448 ✓
+- auth 真绿 accessToken；40s 复验全绿 200×4 + node 探针 200 OK
+- recover.log 仍现「无 jar 备份→mvn」误报（实际以重拼 jar 拉起）+ ERROR 1045 尾巴（导入后验证步骤无密码访问，不影响结果）
+
+Stage Summary:
+- 事件 #108 单轮闭环，零 mvn 第 92 次；内存 3.13GB，oom 0
+- 收口 dump 20261021-021049 已推送 HEAD 668d72ac

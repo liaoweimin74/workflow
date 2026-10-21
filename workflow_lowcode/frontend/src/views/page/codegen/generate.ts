@@ -476,7 +476,10 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   applyLeaves(plan, flatten(self, '', contract.self || {}), rulePath, ctx)
   applyLeaves(plan, flatten(node.props ?? {}, 'props', prefixTable('props', contract.props)), rulePath, ctx)
 
-  if (Array.isArray(node.props?.rule)) {
+  // 子规则递归的唯一开关：契约把 props.rule 登记成 children 才摊成真模板。
+  // 登记成 prop 的（page-data-container 的 childRules）是交给组件自己解释的数据，
+  // 再递归一遍就会出现两份真相 —— 子节点既进 plan 要出码，原件又整块透传，回读必然报多造。
+  if (contract.props?.rule?.emit === 'children' && Array.isArray(node.props?.rule)) {
     node.props.rule.forEach((child: any, ci: number) => {
       plan.children.push(planNode(child, `${rulePath}.props.rule[${ci}]`, `${id}.f${ci + 1}`, ctx))
     })

@@ -574,6 +574,39 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       direction: { emit: 'prop' },
     },
   },
+
+  /**
+   * 数据容器：一个组件三种形状（dataContainer.ts:1-14），schema 落盘的是保存态 `props.rule`，
+   * 渲染吃的是运行态 `props.childRules`（宿主 normalizeDataContainerForRender 改名，
+   * PageRendererPage.vue:496-517）。产物出运行态那一面，改名进重命名登记。
+   *
+   * 子树**不摊成模板**：容器内部另起一棵 form-create（PageDataContainer.vue:9），
+   * `{rows}` / `{row}` 作用域插值是数据到达后由 applyScopeToRules 现场改写子规则的（:89）。
+   * 摊平了就是把「运行期取值」提前成「出码期取值」，容器注释里明写这条会让联动失效。
+   */
+  'page-data-container': {
+    tag: 'page-data-container',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...SIZE_MIRROR,
+      ...RUNTIME_INJECTED,
+      /** 容器自己的标题行（pdc-head），与节点 title 无关 —— 后者被宿主置空 */
+      title: { emit: 'prop' },
+      queryMode: { emit: 'prop' },
+      pageSize: { emit: 'prop' },
+      filter: { emit: 'prop' },
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+      rule: { emit: 'prop', as: 'childRules' },
+    },
+    requires: [
+      {
+        key: 'childRules',
+        note: '子树原样交给组件内嵌的 form-create 解释（PageDataContainer.vue:9、applyScopeToRules :89），产物不摊成真模板；{rows}/{row} 作用域插值要靠运行期改写子规则，摊平要先解决「第 i 份怎么寻址」（dataContainer.ts:20-26 的边界）',
+      },
+    ],
+  },
 }
 
 /** 字段控件判定：以前靠并行的 FIELD_TAGS 表登记，漏一张就出码丢 v-model —— 现在从能力表反推 */

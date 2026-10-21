@@ -20,6 +20,7 @@ import DashTodo from '@lc/runtime/dash-todo'
 import FormulaField from '@lc/runtime/FormulaField'
 import LookupPicker from '@lc/runtime/LookupPicker'
 import PageChart from '@lc/runtime/page-chart'
+import PageDataContainer from '@lc/runtime/page-data-container'
 import PageDetail from '@lc/runtime/page-detail'
 import PageListCards from '@lc/runtime/page-list-cards'
 import PageSteps from '@lc/runtime/page-steps'
@@ -48,6 +49,7 @@ const RUNTIME_COMPONENTS: Record<string, unknown> = {
   'dash-todo': DashTodo,
   'page-chart': PageChart,
   'page-detail': PageDetail,
+  'page-data-container': PageDataContainer,
   'page-steps': PageSteps,
   dataPicker: DataPicker,
   LookupPicker,

@@ -301,6 +301,8 @@ export function reverseToSchema(
 
   function resolveEvidence(to: string, node: NodeArtifact): unknown {
     if (to.startsWith('derived:')) return derived[to.slice(8)]?.(node)
+    // 行/列配置常量：产物模板与 handler 真在读的那份值（嵌套容器不带这些 prop，不能落锚点注释）
+    if (to.startsWith('const:')) return getPath(t.consts, to.slice(6))
     if (to.startsWith('anchor:')) {
       const [id, key] = to.slice(7).split('@')
       return t.anchors[id]?.[key]

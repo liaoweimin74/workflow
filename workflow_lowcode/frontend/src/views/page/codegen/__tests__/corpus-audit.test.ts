@@ -66,7 +66,9 @@ function collectNodes(rule: any[], prefix = 'rule', out: NodeRef[] = [], blocked
     if (Array.isArray(node.children)) collectNodes(node.children, `${path}.children`, out, own ?? `children:${node.type}`)
     ;(node.props?.columns || []).forEach((col: any, ci: number) => {
       if (Array.isArray(col?.rule)) {
-        collectNodes(col.rule, `${path}.props.columns[${ci}].rule`, out, own ?? `columns:${node.type}`)
+        // 列载体与 props.rule 同一口径：契约把 columns 登记成 children 的（tableForm）才递归得进去
+        const colCarrier = own ?? (contract?.props?.columns?.emit === 'children' ? null : `columns:${node.type}`)
+        collectNodes(col.rule, `${path}.props.columns[${ci}].rule`, out, colCarrier)
       }
     })
   })
@@ -211,11 +213,12 @@ describe('语料体检：现网真实页面批量出码回读', () => {
     const total = rs.reduce((s, r) => s + r.nodes.length, 0)
     const registered = rs.reduce((s, r) => s + r.registeredNodes, 0)
     const emittable = rs.reduce((s, r) => s + r.emittableNodes, 0)
-    // 旧口径把 registered 当分子，报出 82.8%；真走得到的只有 56.1%，差值就是那批
-    // 「类型登记了、生成器却进不去」的假覆盖。数字掉下来是仪器修好了，不是产物变差。
+    // 旧口径把 registered 当分子，报出 82.8%；7D 修仪器后只有 56.1%，差值就是那批
+    // 「类型登记了、生成器却进不去」的假覆盖。9 登记嵌套容器（group/tableForm/subForm/select）
+    // 并把 columns 载体接进递归后，可出码 88/98：剩下的 10 个是 fcTable 子树与数据容器 childRules。
     expect(total).toBe(98)
-    expect(registered).toBe(82)
-    expect(emittable).toBe(55)
+    expect(registered).toBe(94)
+    expect(emittable).toBe(88)
 
     const of = (key: string) => rs.find((r) => r.key === key)!
     // fcTable：子节点挂 node.children，生成器不 walk。这 5 个全是已登记类型，旧口径白送 5 分。

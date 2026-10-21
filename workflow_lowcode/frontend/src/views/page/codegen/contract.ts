@@ -127,6 +127,13 @@ export interface TypeContract {
    * 只按标签找第一个就会把 A 卡片的属性套到 B 卡片上还回读零差异。
    */
   widget?: true
+  /**
+   * dash-filter 广播接线（PageRendererPage.vue:263-278、505-549）：
+   * source = 筛选器，变更时触发广播（autoBroadcast 非 false 才接 filter-change）；
+   * target = 挂载后 emit('ready') 上报实例、暴露 setFilter 的组件，收进产物的 dashInstances。
+   * 运行期的实例表由渲染器持有，产物自己持一份 —— 不接这个能力位的类型不参与广播。
+   */
+  dashFilter?: 'source' | 'target'
 }
 
 /** form-create 结构键：取默认值时产物省略不写，回导按此补 */
@@ -523,6 +530,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'dash-filter',
     runtime: true,
     widget: true,
+    dashFilter: 'source',
     self: WIDGET_SELF,
     props: {
       ...WIDGET_SHARED_PROPS,
@@ -532,19 +540,15 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       label: { emit: 'default', value: '', note: '空标签等于组件默认值（DashFilter.vue withDefaults）' },
       placeholder: { emit: 'default', value: '', note: '等于组件默认值' },
       options: { emit: 'default', value: '', note: '逗号分隔枚举，空 = select 无候选' },
+      /** 编译期开关：false 时产物不接 filter-change（运行期渲染器当前无条件广播，见旁路缺陷记录） */
       autoBroadcast: { emit: 'prop' },
     },
-    requires: [
-      {
-        key: 'autoBroadcast',
-        note: '广播 setFilter 由渲染器执行（PageRendererPage.vue:530-540 把 filter-change 转给 dashInstances 全量 setFilter），产物没有实例登记表：需把 @filter-change 手工接到同页各组件的 setFilter，或改用页面 actions 编排',
-      },
-    ],
   },
   'dash-kpi': {
     tag: 'dash-kpi',
     runtime: true,
     widget: true,
+    dashFilter: 'target',
     self: WIDGET_SELF,
     props: {
       ...WIDGET_SHARED_PROPS,
@@ -568,6 +572,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'dash-chart',
     runtime: true,
     widget: true,
+    dashFilter: 'target',
     self: WIDGET_SELF,
     props: {
       ...WIDGET_SHARED_PROPS,
@@ -592,6 +597,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'dash-notice',
     runtime: true,
     widget: true,
+    dashFilter: 'target',
     self: WIDGET_SELF,
     props: {
       ...WIDGET_SHARED_PROPS,
@@ -606,6 +612,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'dash-todo',
     runtime: true,
     widget: true,
+    dashFilter: 'target',
     self: WIDGET_SELF,
     props: {
       ...WIDGET_SHARED_PROPS,
@@ -688,6 +695,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     tag: 'page-data-container',
     runtime: true,
     widget: true,
+    dashFilter: 'target',
     self: WIDGET_SELF,
     props: {
       ...SIZE_MIRROR,

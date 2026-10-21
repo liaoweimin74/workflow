@@ -2,7 +2,7 @@
 <template>
   <div class="lc-page lc-page--stretch">
     <!-- lc:node=n1 type=page-list-cards field=cards1792036403314 -->
-    <page-list-cards :external-actions="true" title="卡片列表" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :sortable-fields="sortableFields" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
+    <page-list-cards :external-actions="true" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
     <!-- lc:node=n2 type=formContainer field=Fcb4mva5poegabc ds=ds_mvck4gv9 -->
     <el-dialog v-model="containerVisible" title="编辑记录" width="800px">
       <div class="lc-container-body">
@@ -111,17 +111,6 @@ const columns = [
     prop: 'contact_phone',
     label: '联系电话'
   }
-]
-
-const sortableFields = [
-  "order_no",
-  "order_date",
-  "customer",
-  "contact_name",
-  "contact_phone",
-  "order_amount",
-  "discount_rate",
-  "due_amount"
 ]
 
 const viewActions = {

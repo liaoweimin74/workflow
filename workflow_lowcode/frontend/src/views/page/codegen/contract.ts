@@ -120,7 +120,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
-      title: { emit: 'default', value: '', note: '数据组件无可见标题' },
+      title: { emit: 'drop', kind: 'not-in-artifact', note: 'PageDataTable 无 title prop：写进模板只会落到组件根 DOM 变成浏览器原生 title 悬停提示。现网这个标题其实看得见 —— form-create 把每个节点包在 el-form-item 里当 label（真机 /page/cardlist_test?preview=true 量到 el-form-item--label-right + el-col-24.fc-form-col），产物还没有「页面主体 el-form + 列表节点 label 载体」这层，先丢弃止血' },
     },
     props: {
       dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
@@ -133,8 +133,8 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       pageSizes: { emit: 'prop' },
       pagination: { emit: 'prop' },
       showSearch: { emit: 'prop' },
-      border: { emit: 'prop' },
-      stripe: { emit: 'prop' },
+      border: { emit: 'drop', kind: 'overridden-at-runtime', note: 'PageDataTable 未声明 border、也没往 SearchTable 传；SearchTable.vue:138 的 el-table 硬编码 border，配 false 也不会没边框' },
+      stripe: { emit: 'drop', kind: 'no-consumer', note: 'PageDataTable 未声明 stripe，SearchTable 也没有 stripe 通道；这键是调色板骨架默认塞进来的（PageDesigner.vue:1051）' },
       stretch: { emit: 'prop' },
       selectionMode: { emit: 'prop' },
       /**
@@ -314,13 +314,14 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     self: {
       type: { emit: 'anchor', key: 'type' },
       field: { emit: 'anchor', key: 'field' },
-      title: { emit: 'default', value: '', note: '列表组件标题不落模板（PageDataCards 无 title prop）' },
+      title: { emit: 'drop', kind: 'not-in-artifact', note: 'PageDataCards 无 title prop（同 PageDataTable）：写进模板只会落到组件根 DOM 变成原生 title 悬停提示；现网的可见标题走 form-create 的 el-form-item label，产物缺该载体（见 page-table.self.title 注）' },
     },
     props: {
       dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
       columns: { emit: 'prop' },
       searchFields: { emit: 'default', value: [], note: '空搜索字段不落模板' },
-      sortableFields: { emit: 'prop' },
+      /** 卡片没有列头，PageDataCards 全文无排序消费者（这键是查询/列配置面板跟 page-table 共用时带进来的） */
+      sortableFields: { emit: 'drop', kind: 'no-consumer', note: 'PageDataCards 不读 sortableFields，卡片无列头可排；出成 prop 只会落到根 DOM 当摆设' },
       pageSize: { emit: 'default', value: 20, note: '等于组件默认值' },
       pageSizes: { emit: 'default', value: [10, 20, 50], note: '等于组件默认值' },
       pagination: { emit: 'default', value: true, note: '等于组件默认值' },

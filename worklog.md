@@ -9527,3 +9527,17 @@ Work Log:
 Stage Summary:
 - 冷启动事件 #109 单轮闭环（拦截 mvn 分支），零 mvn 第 93 次；内存 3.18GB，oom 0
 - 收口 dump 20261021-030823（push 初次 FAILED，rebase 后补推成功）已推送 HEAD 5e81bae9
+---
+Task ID: r185
+Agent: ops-cron
+Task: 2026-10-21 14:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」→ 事件 #110（标准重供给）：vite 1244/mariadb 1218/node 1283/bun 1104，无 java
+- pkill 占位 → 重拼 jar 121300861B md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）
+- ss 复验：3000=vite 1244、3306=mariadb 1218、8080=java 1456 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+- 前两轮（r183/r184）沙箱故障二连空窗，本轮自愈恢复执行
+
+Stage Summary:
+- 事件 #110 单轮闭环，零 mvn 第 94 次；内存 3.17GB，oom 0
+- 收口 dump 已推送（见 git log）

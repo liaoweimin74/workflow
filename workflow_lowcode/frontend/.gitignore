@@ -25,3 +25,6 @@ dist-ssr
 
 # Playwright test artifacts
 test-results/
+
+# 出码真机探测产物（生成物，PROBE_PAGE=... vitest run runtime-probe 重新生成）
+src/views/page/codegen/probe/

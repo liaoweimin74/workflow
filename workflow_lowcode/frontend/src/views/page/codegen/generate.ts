@@ -146,6 +146,8 @@ interface Ctx {
   dsUse: Map<string, string[]>
   /** 产物常量 ds 只表示 dataSources[0]；绑其他源的组件必须走 dataSources 表取 refId */
   firstDsId: string
+  /** 页面 key：现网由渲染器注入给数据组件的 props.pageKey，产物侧要自己传 */
+  pageKey: string
 }
 
 interface NodePlan {
@@ -290,6 +292,7 @@ export function generatePage(
       .join('')}.vue`,
     dsUse: new Map(),
     firstDsId: String(schema.dataSources?.[0]?.id ?? ''),
+    pageKey: meta.pageKey,
   }
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
@@ -453,6 +456,12 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   for (const [k, v] of Object.entries(contract.constAttrs || {})) {
     plan.propSnippets.push(propSnippet(ctx, k, v, `const:${k}`))
     plan.node.wireOnly.push(k)
+  }
+  // 页面 key：现网由渲染器注入（PageRendererPage.vue:553），产物不传就是漏组件必填 prop，
+  // 且 Excel 导入导出会拿空 pageKey 拼 URL
+  if (contract.needsPageKey) {
+    plan.propSnippets.push(propSnippet(ctx, 'pageKey', ctx.pageKey, 'const:pageKey'))
+    plan.node.wireOnly.push('pageKey')
   }
   // 语义债登记：契约能把键出码，组件跑起来还差一段接线，按节点记账
   for (const req of contract.requires || []) {

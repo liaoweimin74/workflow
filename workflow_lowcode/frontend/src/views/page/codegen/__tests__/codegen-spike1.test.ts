@@ -33,11 +33,12 @@ describe('出码 spike 1：generate → reverse 闭环', () => {
     expect(rev.explained.defaults).toBeGreaterThan(5)
     expect(rev.explained.rename).toBeGreaterThan(10)
     expect(rev.explained.identity).toBeGreaterThanOrEqual(9)
-    // 产物侧接线：三个事件 + externalActions（按钮语义交回产物）。四个键 schema 里都没有，
-    // 全靠登记表解释掉，少登记一个回导就报多造
+    // 产物侧接线：三个事件 + externalActions（按钮语义交回产物）+ pageKey（现网由渲染器注入）。
+    // 五个键 schema 里都没有，全靠登记表解释掉，少登记一个回导就报多造
     expect(rev.wireStripped.sort()).toEqual([
       'rule[0].props.buttonClick',
       'rule[0].props.externalActions',
+      'rule[0].props.pageKey',
       'rule[0].props.rowClick',
       'rule[0].props.selectionChange',
     ])

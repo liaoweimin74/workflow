@@ -4,7 +4,7 @@
     <el-form class="lc-page-form" :inline="false" :hide-required-asterisk="false" label-position="right" size="default" label-width="125px">
       <!-- lc:node=n1 type=page-list-cards field=cards1792036403314 -->
       <el-form-item label="卡片列表">
-        <page-list-cards :external-actions="true" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
+        <page-list-cards :external-actions="true" page-key="cardlist_test" :ds-ref-id="ds.refId" :columns="columns" :show-search="true" :stretch="true" :view-actions="viewActions" :view-detail="viewDetail" actions-placement="bottom" :card-style="cardStyle" @row-click="onRowClick" @button-click="onButtonClick" />
       </el-form-item>
     </el-form>
     <!-- lc:node=n2 type=formContainer field=Fcb4mva5poegabc ds=ds_mvck4gv9 -->

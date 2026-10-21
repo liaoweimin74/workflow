@@ -83,6 +83,13 @@ export interface TypeContract {
    * 不是补契约能消的广度债 —— 混在一起就会把 emit 缺口的大小又读成零。
    */
   requires?: Array<{ key: string; note: string }>
+  /**
+   * 展示组件（仪表盘组件族）：不是字段控件、也不是列表组件。
+   * 顶层按 rule.col.span 出 el-row > el-col.fc-form-col > el-form-item 栅格（现网这层是 form-create 给的，
+   * 「撑满(100%)」高度档靠它传高），元素带 lc:node 锚点属性 —— 同类型多实例必须各回各的元素，
+   * 只按标签找第一个就会把 A 卡片的属性套到 B 卡片上还回读零差异。
+   */
+  widget?: true
 }
 
 /** form-create 结构键：取默认值时产物省略不写，回导按此补 */
@@ -102,6 +109,33 @@ const FIELD_SELF: Record<string, PropEmit> = {
   type: { emit: 'anchor', key: 'type' },
   field: { emit: 'anchor', key: 'field' },
   title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+}
+
+/**
+ * 展示组件共有 self：type/field 进锚点，col.span 落栅格列。
+ *
+ * 节点的 title/info 被渲染器无条件置空（PageRendererPage.vue:522-523），可见标题来自 props.title，
+ * 所以这里不能像字段控件那样把 title 出成 el-form-item 的 label —— 写上去就是「错位 emit」
+ * （dash 组件没声明 title，值落到根 DOM 当悬停提示）。但 el-form-item 这一层壳照样要出：
+ * 现网每个节点都被 form-create 套了 el-col.fc-form-col > el-form-item > __content，
+ * 撑满档（props.height='100%'）靠 dash-fill-height.css:16-19 的 :has() 沿这条链传高，少一层就静默退化。
+ */
+const WIDGET_SELF: Record<string, PropEmit> = {
+  type: { emit: 'anchor', key: 'type' },
+  field: { emit: 'anchor', key: 'field' },
+  title: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 title（PageRendererPage.vue:522），可见标题来自 props.title' },
+  info: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 info（PageRendererPage.vue:523）' },
+  /** 栅格跨度真身：form-create 用它包 el-col；props.span 只是组件留白镜像（PageDesigner.vue:819-823 双写） */
+  'col.span': { emit: 'attr', as: 'span', on: 'el-col' },
+}
+
+/** 展示组件共有 props：宽高镜像 + 只有运行期才有的注入键 */
+const WIDGET_SHARED_PROPS: Record<string, PropEmit> = {
+  /** 组件侧留白镜像（dashSpanGapStyle），与 col.span 各自独立出码 */
+  span: { emit: 'prop' },
+  height: { emit: 'prop' },
+  designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器画布态标记，产物恒为运行态' },
+  dsRefId: { emit: 'drop', kind: 'overridden-at-runtime', note: '运行期由渲染器按 dataSourceId 注入（PageRendererPage.vue:524-528），产物侧的值来自 dataSources 常量表' },
 }
 
 export const TYPE_CONTRACTS: Record<string, TypeContract> = {
@@ -348,6 +382,110 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     },
     constAttrs: { externalActions: true },
   },
+
+  // ===== 仪表盘组件族：展示组件，非字段控件、非列表组件 =====
+
+  /**
+   * 筛选器：自身不取数（无 dataSourceId），只在改动时向同页广播 setFilter。
+   * 广播是渲染器干的活（PageRendererPage.vue:530-540 → broadcastDashFilter :267-278，
+   * 靠各组件 ready 上报的实例），产物里没有这层，所以整类只登记得出配置、登记不出联动。
+   */
+  'dash-filter': {
+    tag: 'dash-filter',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...WIDGET_SHARED_PROPS,
+      filterType: { emit: 'prop' },
+      /** 目标列名；与节点自身 field（容器地址）同名不同层 */
+      field: { emit: 'prop' },
+      label: { emit: 'default', value: '', note: '空标签等于组件默认值（DashFilter.vue withDefaults）' },
+      placeholder: { emit: 'default', value: '', note: '等于组件默认值' },
+      options: { emit: 'default', value: '', note: '逗号分隔枚举，空 = select 无候选' },
+      autoBroadcast: { emit: 'prop' },
+    },
+    requires: [
+      {
+        key: 'autoBroadcast',
+        note: '广播 setFilter 由渲染器执行（PageRendererPage.vue:530-540 把 filter-change 转给 dashInstances 全量 setFilter），产物没有实例登记表：需把 @filter-change 手工接到同页各组件的 setFilter，或改用页面 actions 编排',
+      },
+    ],
+  },
+  'dash-kpi': {
+    tag: 'dash-kpi',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...WIDGET_SHARED_PROPS,
+      title: { emit: 'default', value: '', note: '空标题不落模板（组件回退显示「指标」）' },
+      subtitle: { emit: 'default', value: '', note: '等于组件默认值' },
+      unit: { emit: 'prop' },
+      agg: { emit: 'prop' },
+      metric: { emit: 'default', value: null, note: 'count 聚合不需要度量列，null = 组件默认' },
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+      /** 组件级固定过滤：JSON 文本，含双引号，出码必须走具名常量而不是裸属性 */
+      filter: { emit: 'prop' },
+      numberFormat: { emit: 'default', value: '', note: '等于组件默认值（不格式化）' },
+      trendEnabled: { emit: 'default', value: false, note: '关闭环比 = 组件默认' },
+      trendGrain: { emit: 'default', value: 'day', note: '等于组件默认值' },
+      trendField: { emit: 'default', value: '', note: '空时间字段 = 不算上期' },
+      sparkline: { emit: 'default', value: false, note: '不开迷你图 = 组件默认' },
+      sparkRange: { emit: 'default', value: 12, note: '等于组件默认值' },
+    },
+  },
+  'dash-chart': {
+    tag: 'dash-chart',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...WIDGET_SHARED_PROPS,
+      title: { emit: 'default', value: '', note: '空标题不落模板' },
+      chartType: { emit: 'prop' },
+      group: { emit: 'prop' },
+      timeGrain: { emit: 'default', value: null, note: 'null = 不分时间桶（组件默认）' },
+      agg: { emit: 'prop' },
+      metric: { emit: 'default', value: null, note: 'count 聚合不需要度量列' },
+      sort: { emit: 'prop' },
+      order: { emit: 'prop' },
+      limit: { emit: 'prop' },
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+      filter: { emit: 'prop' },
+    },
+  },
+  /**
+   * 公告栏：数据来自用户端消息接口，压根没有数据源键（register.ts 的 dashNoticeRule 也不带），
+   * 可见范围由后端按登录态判定 —— 契约里出现 dataSourceId 之类就是虚报能力。
+   */
+  'dash-notice': {
+    tag: 'dash-notice',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...WIDGET_SHARED_PROPS,
+      title: { emit: 'default', value: '', note: '空标题不落模板（组件回退「公告」）' },
+      limit: { emit: 'prop' },
+      display: { emit: 'prop' },
+      interval: { emit: 'prop' },
+    },
+  },
+  /** 待办清单：取工作流任务接口，查询身份（assignee/userId）由组件内部取当前登录用户，配置面没有身份槽位 */
+  'dash-todo': {
+    tag: 'dash-todo',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF,
+    props: {
+      ...WIDGET_SHARED_PROPS,
+      title: { emit: 'default', value: '', note: '空标题不落模板（组件回退「我的待办/已办」）' },
+      view: { emit: 'prop' },
+      limit: { emit: 'prop' },
+      orderBy: { emit: 'prop' },
+    },
+  },
 }
 
 /** 字段控件判定：以前靠并行的 FIELD_TAGS 表登记，漏一张就出码丢 v-model —— 现在从能力表反推 */
@@ -355,6 +493,9 @@ export const isFieldType = (type: string): boolean => !!TYPE_CONTRACTS[type]?.fi
 
 /** 列表类组件（页面主体不是表单字段） */
 export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_CONTRACTS[type]?.list
+
+/** 展示组件（仪表盘组件族）：出栅格列，不出 v-model 也不挂 ref */
+export const widgetOf = (type: string): boolean => !!TYPE_CONTRACTS[type]?.widget
 
 /**
  * 页面 option 的落点（宿主渲染项，不是 rule 节点）。

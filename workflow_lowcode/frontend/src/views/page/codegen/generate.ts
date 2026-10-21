@@ -7,8 +7,9 @@
  *
  * 边界（超出即 unsupported，出码报告里是 error，不静默丢）：
  *  - 组件契约见 contract.ts：列表组件 page-table / page-list-cards、容器 formContainer、
- *    字段控件 input / textarea / inputNumber / datePicker / dataPicker / LookupPicker
- *  - group / tableForm / subForm 等嵌套容器与 dash-* 组件仍未登记，整节点算广度债
+ *    字段控件 input / textarea / inputNumber / datePicker / dataPicker / LookupPicker、
+ *    展示组件族 dash-filter / dash-kpi / dash-chart / dash-notice / dash-todo
+ *  - group / tableForm / subForm 等嵌套容器、fcTable 栅格与 page-chart 仍未登记，整节点算广度债
  *  - 动作流只认总线容器动作 + 按钮内建行为；配了动作链的按钮不出码
  *  - 事件脚本（type=script）不出码
  */
@@ -21,6 +22,7 @@ import {
   TYPE_CONTRACTS,
   isFieldType,
   listOf,
+  widgetOf,
   type PropEmit,
   type TypeContract,
 } from './contract'
@@ -142,6 +144,8 @@ interface Ctx {
   file: string
   /** 数据源被谁消费：schema.dataSources[i].id → 消费节点 rulePath，逐源登记的依据 */
   dsUse: Map<string, string[]>
+  /** 产物常量 ds 只表示 dataSources[0]；绑其他源的组件必须走 dataSources 表取 refId */
+  firstDsId: string
 }
 
 interface NodePlan {
@@ -233,9 +237,14 @@ function addConst(ctx: Ctx, hint: string, value: unknown): string {
   return name
 }
 
-/** prop 片段：简单值内联，对象/数组走顶层常量 */
+/** prop 片段：简单值内联，对象/数组配置提到顶层常量 */
 function propSnippet(ctx: Ctx, name: string, value: unknown, hint: string): string {
-  if (typeof value === 'string') return `${kebab(name)}="${value}"`
+  if (typeof value === 'string') {
+    // 带引号的字符串（dash 组件级 filter 是 JSON 文本）不能裸写进属性：filter="{"a":1}" 在第一个
+    // 双引号处就把属性截断了。HTML 属性不认反斜杠转义，只能具名化成常量再用 v-bind 引它。
+    if (value.includes('"') || value.includes("'")) return `:${kebab(name)}="${addConst(ctx, hint, value)}"`
+    return `${kebab(name)}="${value}"`
+  }
   if (typeof value === 'boolean' || typeof value === 'number') return `:${kebab(name)}="${lit(value)}"`
   // 空数组必须走常量：`:x="[]"` 字面上好看，回导侧解析器会把它读成一个空字符串元素
   if (Array.isArray(value) && value.length && value.every((x) => typeof x === 'number')) return `:${kebab(name)}="${lit(value)}"`
@@ -280,6 +289,7 @@ export function generatePage(
       .map((s) => s[0].toUpperCase() + s.slice(1))
       .join('')}.vue`,
     dsUse: new Map(),
+    firstDsId: String(schema.dataSources?.[0]?.id ?? ''),
   }
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
@@ -410,8 +420,9 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
 
   const mode = contract.displayModeDriven ? ctx.containerMode : undefined
   const tag = mode ? containerTag(mode) : contract.tag
-  // 组件没 defineExpose（list.expose=none）就别写 ref：产物里挂个取不到方法的 ref 是假接线
-  const refable = !!contract.runtime && contract.list?.expose !== 'none'
+  // 组件没 defineExpose（list.expose=none）就别写 ref：产物里挂个取不到方法的 ref 是假接线。
+  // 展示组件（dash-*）更没有可取用的 expose（实例只经 ready 上报给渲染器登记表），产物不挂 ref。
+  const refable = !!contract.runtime && !contract.widget && contract.list?.expose !== 'none'
   const plan: NodePlan = {
     node: {
       id,
@@ -430,7 +441,9 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
       warnings: [],
     },
     tag,
-    propSnippets: [],
+    // 展示组件的元素必须自带节点地址：同类型多实例（两个 dash-notice 并排）只按标签找元素的话，
+    // 找到的永远是第一个，回读把第一张卡的属性套到所有卡上还能零差异。
+    propSnippets: contract.widget ? [`lc:node="${id}"`] : [],
     attrs: {},
     anchorKv: {},
     children: [],
@@ -519,7 +532,12 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
     case 'derived':
       node.renames.push({ from: rel, to: `derived:${entry.by}`, evidence: entry.evidence })
       if (entry.by === 'dsRefId') {
-        plan.propSnippets.push(':ds-ref-id="ds.refId"')
+        // 逐节点取自己的源：ds 常量只代表 dataSources[0]，仪表盘上第二个 KPI 绑别的源时
+        // 沿用 ds.refId 就是拿错 refId 取数（查错表），必须走产物里的 dataSources 表
+        const id = String(leaf.value ?? '')
+        plan.propSnippets.push(
+          id && id !== ctx.firstDsId ? `:ds-ref-id="dataSources['${id}']"` : ':ds-ref-id="ds.refId"',
+        )
         useDs(ctx, leaf.value, rulePath)
       }
       return
@@ -795,26 +813,50 @@ function assembleVue(args: {
   const L: string[] = []
   L.push('<!-- 由 lc-codegen 从页面 schema 出码，勿手改登记表以外的部分；人工接管写在 handler 里 -->')
   L.push('<template>')
-  L.push('  <div class="lc-page lc-page--stretch">')
+  // stretch 只给列表页：那条高度链是「表单撑满、列表占余下空间」，仪表盘页按自然流出高度，
+  // 组件的显示高度另有 props.height 档位（并排留白与固定高都在组件根上，见 dash-shared.ts）
+  const hasList = listPlans.length > 0
+  L.push(`  <div class="lc-page${hasList ? ' lc-page--stretch' : ''}">`)
   // 页面主体一棵 el-form：option.form.* 的落点，也是列表节点标题的载体（现网这层是 form-create 给的）。
   // 纯列表页照样包 —— 没有字段也有 label-position/size/labelWidth 要挂，去掉这层就等于把页面级配置丢掉。
   const formAttrs = Object.entries(optionPlan.attrs['el-form'] || {}).map(([k, v]) =>
     typeof v === 'boolean' || typeof v === 'number' ? `:${kebab(k)}="${lit(v)}"` : `${k}="${v}"`,
   )
   L.push(`    <el-form class="lc-page-form"${formAttrs.length ? ` ${formAttrs.join(' ')}` : ''}>`)
-  for (const lp of listPlans) {
-    const list = listOf(lp.node.type) || { events: [] }
-    const head = lp.node.host.ref ? ` ref="${lp.node.host.ref}"` : ''
-    const props = lp.propSnippets.length ? ` ${lp.propSnippets.join(' ')}` : ''
-    const events = list.events.map((e) => `@${e.on}="${e.handler}"`)
-    const label = lp.attrs['el-form-item']?.label
-    const wrap = labelCarrierOf(lp.node.type)
-    L.push(`      <!-- ${lp.node.anchor} -->`)
-    if (wrap) L.push(`      <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
-    L.push(`${wrap ? '        ' : '      '}<${lp.tag}${head}${props} ${events.join(' ')} />`)
-    if (wrap) L.push('      </el-form-item>')
-    lp.node.wireOnly.push(...list.events.map((e) => `on.${camel(e.on)}`))
+  // 按画布顺序出节点：dash 组件连续的一段并进同一个 el-row（筛选器排在它影响的卡片之前就是靠顺序）
+  const pendingWidgets: NodePlan[] = []
+  const flushWidgets = () => {
+    if (!pendingWidgets.length) return
+    L.push(...renderWidgetRow(pendingWidgets, '      '))
+    pendingWidgets.length = 0
   }
+  for (const p of plans) {
+    if (widgetOf(p.node.type)) {
+      pendingWidgets.push(p)
+      continue
+    }
+    flushWidgets()
+    if (p.node.type === 'formContainer') continue // 覆盖层容器出在 </el-form> 之后
+    if (listOf(p.node.type)) {
+      const list = listOf(p.node.type) || { events: [] }
+      const head = p.node.host.ref ? ` ref="${p.node.host.ref}"` : ''
+      const props = p.propSnippets.length ? ` ${p.propSnippets.join(' ')}` : ''
+      const events = list.events.map((e) => `@${e.on}="${e.handler}"`)
+      const label = p.attrs['el-form-item']?.label
+      const wrap = labelCarrierOf(p.node.type)
+      L.push(`      <!-- ${p.node.anchor} -->`)
+      if (wrap) L.push(`      <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
+      L.push(`${wrap ? '        ' : '      '}<${p.tag}${head}${props} ${events.join(' ')} />`)
+      if (wrap) L.push('      </el-form-item>')
+      p.node.wireOnly.push(...list.events.map((e) => `on.${camel(e.on)}`))
+      continue
+    }
+    // 未登记类型：留一行挂点注释（与容器子节点同一口径），别让整节点静默消失
+    if (!TYPE_CONTRACTS[p.node.type]) {
+      L.push(`      <!-- lc:todo node=${p.node.id} type=${p.node.type} field=${p.node.field} 组件类型无出码契约，整节点未出码 -->`)
+    }
+  }
+  flushWidgets()
   L.push('    </el-form>')
   if (container) L.push(renderContainer(container, ctx))
   L.push('  </div>')
@@ -947,6 +989,28 @@ function assembleVue(args: {
   return L.join('\n')
 }
 
+/**
+ * 展示组件段：连续的几个节点并进一段栅格。
+ * el-row > el-col.fc-form-col > el-form-item（无 label）> 组件 —— 现网这四层都是 form-create 给的，
+ * 撑满档靠 dash-fill-height.css 沿 el-col.fc-form-col > el-form-item > __content 传高，
+ * 少任意一层，props.height='100%' 就退化成内容高。
+ */
+function renderWidgetRow(widgets: NodePlan[], indent: string): string[] {
+  const L: string[] = [`${indent}<el-row>`]
+  for (const p of widgets) {
+    const span = p.attrs['el-col']?.span ?? 24
+    const props = p.propSnippets.length ? ` ${p.propSnippets.join(' ')}` : ''
+    L.push(`${indent}  <el-col class="fc-form-col" :span="${lit(span)}">`)
+    L.push(`${indent}    <!-- ${p.node.anchor} -->`)
+    L.push(`${indent}    <el-form-item>`)
+    L.push(`${indent}      <${p.tag}${props} />`)
+    L.push(`${indent}    </el-form-item>`)
+    L.push(`${indent}  </el-col>`)
+  }
+  L.push(`${indent}</el-row>`)
+  return L
+}
+
 function renderContainer(plan: NodePlan, ctx: Ctx): string {
   const attrs = plan.attrs[plan.tag] || {}
   const sizeAttr = containerSizeAttrOf(ctx)
@@ -961,25 +1025,44 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
   // 容器内层 form 只带自己的接线：现网 containerOption（PageRendererPage.vue:700-706）是现造的，
   // 不吃页面 option.form.*，labelWidth 用运行期测量值 —— 产物不测 DOM，留 CSS 变量占位。
   const formLine = ['ref="formRef"', ':model="form"', 'label-width="var(--lc-label-width)"']
-  const items = plan.children.map((c) => {
-    // 未登记的字段类型没有标签可出。绝不能用空 tag 占位：`< v-model="…" />` 既过不了
-    // Vue 编译，又会把回导侧的 el-form-item 祖先关系搅乱（语料体检里 8 条 label 错位的根因）。
-    // 只留一行 lc:todo 注释，节点本体作为广度债进 holes，由补契约来消。
-    // 注释里带 node=<id>：回导侧据此把该子节点补回数组占位，否则整个 rule 数组只报一次
-    // 「长度不符」，到底是哪几个字段没出码就看不见了（广度债会被容器掩盖）。
+  const items: string[] = []
+  const nestedWidgets: NodePlan[] = []
+  const flushNested = () => {
+    if (!nestedWidgets.length) return
+    items.push(...renderWidgetRow(nestedWidgets, '          '))
+    nestedWidgets.length = 0
+  }
+  for (const c of plan.children) {
+    // 容器里的展示组件同样走栅格：内层表单也是 form-create 渲染的，层级与页面主体一致
+    if (widgetOf(c.node.type)) {
+      nestedWidgets.push(c)
+      continue
+    }
+    flushNested()
     if (!c.tag) {
-      return `          <!-- lc:todo node=${c.node.id} type=${c.node.type} field=${c.node.field} 组件类型无出码契约，整字段未出码 -->`
+      // 未登记的字段类型没有标签可出。绝不能用空 tag 占位：`< v-model="…" />` 既过不了
+      // Vue 编译，又会把回导侧的 el-form-item 祖先关系搅乱（语料体检里 8 条 label 错位的根因）。
+      // 只留一行 lc:todo 注释，节点本体作为广度债进 holes，由补契约来消。
+      // 注释里带 node=<id>：回导侧据此把该子节点补回数组占位，否则整个 rule 数组只报一次
+      // 「长度不符」，到底是哪几个字段没出码就看不见了（广度债会被容器掩盖）。
+      items.push(
+        `          <!-- lc:todo node=${c.node.id} type=${c.node.type} field=${c.node.field} 组件类型无出码契约，整字段未出码 -->`,
+      )
+      continue
     }
     const f = c.node.field
     const label = c.attrs['el-form-item']?.label ?? f
     const control = c.propSnippets.length ? ` ${c.propSnippets.join(' ')}` : ''
-    return [
-      `          <!-- ${c.node.anchor} -->`,
-      `          <el-form-item label="${label}">`,
-      `            <${c.tag} v-model="form.${f}"${control} />`,
-      '          </el-form-item>',
-    ].join('\n')
-  })
+    items.push(
+      [
+        `          <!-- ${c.node.anchor} -->`,
+        `          <el-form-item label="${label}">`,
+        `            <${c.tag} v-model="form.${f}"${control} />`,
+        '          </el-form-item>',
+      ].join('\n'),
+    )
+  }
+  flushNested()
   return [
     `    <!-- ${plan.node.anchor} -->`,
     `    <${plan.tag} ${open.join(' ')}>`,

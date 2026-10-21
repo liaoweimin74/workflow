@@ -463,8 +463,8 @@ describe('PageDataCards', () => {
         provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } },
         stubs: {
           'el-dialog': {
-            props: ['modelValue', 'title'],
-            template: '<div v-if="modelValue" class="dialog" :data-title="title"><slot /></div>',
+            props: ['modelValue', 'title', 'width'],
+            template: '<div v-if="modelValue" class="dialog" :data-title="title" :data-width="width"><slot /></div>',
           },
         },
       },
@@ -474,9 +474,12 @@ describe('PageDataCards', () => {
     await cardsStub.vm.$emit('action-click', { key: 'view', label: '查看' }, { id: 7, name: '订单' })
     await flushPromises()
 
-    // 独立详情弹窗打开（标题"详情"），且宽度传递为 viewDetail.width
+    // 独立详情弹窗打开（标题"详情"）
     const detailDialog = wrapper.find('.dialog[data-title="详情"]')
     expect(detailDialog.exists()).toBe(true)
+    // 宽度真吃到 viewDetail.width：viewDetail 必须是已声明的 prop，
+    // 否则 Vue 把它放进 attrs，props.viewDetail 恒为 undefined，宽度永远回退 800px
+    expect(detailDialog.attributes('data-width')).toBe('700px')
     // 本地编辑表单弹窗未打开
     expect(wrapper.find('.dialog[data-title="编辑数据"]').exists()).toBe(false)
     wrapper.unmount()

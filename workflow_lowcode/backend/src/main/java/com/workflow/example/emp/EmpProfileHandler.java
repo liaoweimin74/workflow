@@ -55,6 +55,12 @@ public class EmpProfileHandler implements BizDataHandler {
         return true;
     }
 
+    /** 下面的 query 把收到的请求原样交给通用查询，服务端注入的可见集合因此仍然生效。 */
+    @Override
+    public boolean honorsRowScope() {
+        return true;
+    }
+
     @Override
     public BizDataPageVO query(BizDataQueryRequest req) {
         BizDataPageVO page = support.queryGeneric(FORM_KEY, req);

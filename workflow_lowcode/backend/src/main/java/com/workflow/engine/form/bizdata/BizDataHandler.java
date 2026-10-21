@@ -79,6 +79,19 @@ public interface BizDataHandler {
     default boolean overridesQuery() { return false; }
 
     /**
+     * 本实现是否会把服务端注入的可见集合（{@code req.getFilter()} 中的保留键）透传给通用查询。
+     *
+     * <p>仅在 {@link #overridesQuery()} 为 true 时有意义。数据范围由服务端写进请求的筛选条件里，
+     * 接管查询的钩子若自行构造条件而丢掉该 filter，范围等于没加。配置期无法读源码判断，
+     * 只能由实现方显式声明；未声明的表单不允许关联权限对象（见
+     * {@code DataSourceDefinitionService#requireScopeConfigurable}）。
+     *
+     * <p>正确写法：把收到的 {@code req} 整个交给通用查询，如
+     * {@code support.queryGeneric(getFormKey(), req)}。
+     */
+    default boolean honorsRowScope() { return false; }
+
+    /**
      * 覆盖新增。仅当 {@link #overridesCreate()} 返回 true 时被调用；
      * 签名不含 formKey（handler 绑定即专属）。
      *

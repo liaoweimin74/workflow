@@ -528,12 +528,13 @@ function transformComponent(node: any): any {
       }
     }
     if (next.type === 'dash-filter') {
-      // 筛选器：filter-change → 全页广播（autoBroadcast）+ 动作总线可编程响应
+      // 筛选器：autoBroadcast（默认 true）时全页广播；关掉则只发动作总线，由页面 actions 自行编排。
       // 处理器键必须写 camelCase：form-create 的 toProps 把连字符键先 toCase 后再回 rule.on 取值，
       // 于是 filter-change 这个键会被读成 undefined，$emit('filter-change') 找不到 onFilterChange（实测广播静默失效）。
+      const autoBroadcast = next.props.autoBroadcast !== false
       next.on['filterChange'] = (payload: { field: string; op: string; value: unknown }) => {
         if (payload && payload.field) {
-          broadcastDashFilter(payload.field, payload.op, payload.value)
+          if (autoBroadcast) broadcastDashFilter(payload.field, payload.op, payload.value)
           dispatchActions('filter-change', payload)
         }
       }

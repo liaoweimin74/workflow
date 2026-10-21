@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick, defineComponent, h } from 'vue'
+import { nextTick, defineComponent, h, onMounted } from 'vue'
 import ElementPlus from 'element-plus'
 
 vi.mock('@/api/page', () => ({
@@ -60,6 +60,28 @@ vi.mock('@/components/business/SearchTable.vue', () => {
   return { default: SearchTableStub }
 })
 
+// 仪表盘桩：dash-todo 按真实组件协议在 ready 上报 { setFilter, refresh }；dash-filter 由用例直接 emit filter-change
+const dashSetFilterSpy = vi.hoisted(() => vi.fn())
+const dashRefreshSpy = vi.hoisted(() => vi.fn())
+const DashFilterStub = defineComponent({
+  name: 'DashFilterStub',
+  props: ['autoBroadcast'],
+  setup(_props, { expose }) {
+    expose({ isDashFilter: true })
+    return () => h('div', { class: 'dash-filter-stub' })
+  },
+})
+const DashTodoStub = defineComponent({
+  name: 'DashTodoStub',
+  emits: ['ready'],
+  setup(_props, { expose, emit }) {
+    const api = { setFilter: dashSetFilterSpy, refresh: dashRefreshSpy }
+    expose(api)
+    onMounted(() => emit('ready', api))
+    return () => h('div', { class: 'dash-todo-stub' })
+  },
+})
+
 // form-create 桩：page-table 渲染为真实 PageDataTable（保留其内部 dispatch 链路）
 import PageDataTable from '../components/PageDataTable.vue'
 import PageDataCards from '../components/PageDataCards.vue'
@@ -88,6 +110,12 @@ vi.mock('@form-create/element-ui', () => {
                 pageKey: node.props?.pageKey,
                 onReady: node.on?.['ready'],
               })
+            }
+            if (node?.type === 'dash-filter') {
+              return h(DashFilterStub, { key: i, ...node.props, onFilterChange: node.on?.['filterChange'] })
+            }
+            if (node?.type === 'dash-todo') {
+              return h(DashTodoStub, { key: i, ...node.props, onReady: node.on?.['ready'] })
             }
             return h('div', { key: i, class: 'fc-node' }, JSON.stringify(node))
           }),
@@ -390,6 +418,53 @@ describe('PAGE 页面强制刷新（keep-alive 场景）', () => {
     await flushPromises()
 
     expect(refreshSpy).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('dash-filter autoBroadcast 开关（运行期语义）', () => {
+  function dashFilterPageSchema(autoBroadcast?: boolean) {
+    return {
+      type: 'PAGE',
+      rule: [
+        {
+          type: 'dash-filter',
+          field: 'f1',
+          props: autoBroadcast === undefined ? {} : { autoBroadcast },
+        },
+        {
+          type: 'dash-todo',
+          field: 'todo1',
+          props: { dataSourceId: 'ds_todo', limit: 5 },
+        },
+      ],
+      dataSources: [{ id: 'ds_todo', refId: 'global1' }],
+      // 动作总线仍要收到 filter-change（与广播开关无关）
+      actions: [{ trigger: 'filter-change', steps: [{ op: 'refresh', target: 'ds_todo' }] }],
+    }
+  }
+
+  const filterPayload = { field: 'createTime', op: 'range', value: ['2026-10-01T00:00:00', '2026-10-31T23:59:59'] }
+
+  it('autoBroadcast 缺省（true）：筛选变更向 dash 实例广播 setFilter，并执行动作总线', async () => {
+    const wrapper = await mountPage(dashFilterPageSchema())
+
+    wrapper.findComponent(DashFilterStub).vm.$emit('filter-change', filterPayload)
+    await flushPromises()
+
+    expect(dashSetFilterSpy).toHaveBeenCalledWith({ createTime: { op: 'range', value: filterPayload.value } })
+    expect(dashRefreshSpy).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('autoBroadcast=false：不广播到 dash 实例，动作总线仍执行（开关真能关掉广播）', async () => {
+    const wrapper = await mountPage(dashFilterPageSchema(false))
+
+    wrapper.findComponent(DashFilterStub).vm.$emit('filter-change', filterPayload)
+    await flushPromises()
+
+    expect(dashSetFilterSpy).not.toHaveBeenCalled()
+    expect(dashRefreshSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

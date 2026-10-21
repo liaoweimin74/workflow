@@ -164,6 +164,17 @@ interface Ctx {
   pageKey: string
   /** 带回声明（LookupPicker 等 contract.writes）：节点 id → 写回目标 */
   writes: Map<string, Writeback>
+  /** 注入接线（FormulaField 等 contract.injects）：节点 id → 组件声明过的注入 prop */
+  injections: Map<string, Injection>
+}
+
+/** 注入接线：产物把组件声明过的 formCreateInject 类 prop 接上 form 后端 */
+interface Injection {
+  nodeId: string
+  rulePath: string
+  type: string
+  prop: string
+  constName: string
 }
 
 interface NodePlan {
@@ -238,6 +249,15 @@ function scanNested(value: unknown, base: string, table: Record<string, PropEmit
   else if (isPlainObject(value)) for (const k of Object.keys(value)) walk(value[k], `${base}.${k}`)
 }
 
+/**
+ * 注入 adapter 的产物实现（按 contract.injects.constName 取）：都落在容器 form 声明之后，
+ * 所以可以直接吃 form。新增注入类型时在这里补一行，别在装配处写分支。
+ */
+const INJECT_ADAPTERS: Record<string, string> = {
+  // FormulaField 逐依赖 api.getValue（FormulaField.vue:79-89）→ 后端就是容器 form
+  formulaApi: 'const formulaApi = { api: { getValue: (field: string) => form[field] } }',
+}
+
 /** 展示方式 → 容器标签（尺寸属性名见 containerSizeAttrOf：drawer 吃 size，dialog 吃 width） */
 function containerTag(mode: string): string {
   if (mode === 'drawer') return 'el-drawer'
@@ -310,6 +330,7 @@ export function generatePage(
     firstDsId: String(schema.dataSources?.[0]?.id ?? ''),
     pageKey: meta.pageKey,
     writes: new Map(),
+    injections: new Map(),
   }
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
@@ -485,6 +506,16 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   // 语义债登记：契约能把键出码，组件跑起来还差一段接线，按节点记账
   for (const req of contract.requires || []) {
     ctx.unsupported.push({ path: `${rulePath}.props.${req.key}`, type: node.type, key: req.key, message: req.note })
+  }
+  // 注入接线（contract.injects）：字段控件才需要 form 后端，容器归属在 assembleVue 定
+  if (contract.injects && contract.field) {
+    ctx.injections.set(id, {
+      nodeId: id,
+      rulePath,
+      type: node.type,
+      prop: contract.injects.prop,
+      constName: contract.injects.constName,
+    })
   }
   // 带回声明（LookupPicker 的 idField/returnFields）：此处只记账，容器归属与 handler
   // 命名在 assembleVue 定 —— 字段控件可能不在容器里，那种没有 form 可写，不能假接线。
@@ -866,15 +897,35 @@ function assembleVue(args: {
     container.children.forEach(walk)
   }
 
-  // 带回接线（contract.writes）：只有容器子树内的字段控件才接 @select/@clear ——
-  // 页面级字段没有 form 可写，硬接线就是把债改成假绿灯。
+  // 带回接线（contract.writes）与注入接线（contract.injects）：只有容器子树内的字段控件才接
+  // @select/@clear 与注入 prop —— 页面级字段没有 form 可写，硬接线就是把债改成假绿灯。
   const inContainer = new Set<string>()
+  const plansById = new Map<string, NodePlan>()
   if (container) {
     const collect = (p: NodePlan) => {
       inContainer.add(p.node.id)
+      plansById.set(p.node.id, p)
       p.children.forEach(collect)
     }
     container.children.forEach(collect)
+  }
+  // 注入 prop 的具名 adapter：值绑到 script 顶层常量（元素上的 v-bind 表达式不是 schema 证据），
+  // 常量名去重后逐个落进容器块，form 声明之后
+  const injectConsts = new Map<string, string>()
+  for (const inj of ctx.injections.values()) {
+    if (!inContainer.has(inj.nodeId)) {
+      ctx.unsupported.push({
+        path: inj.rulePath,
+        type: inj.type,
+        key: inj.prop,
+        message: `${inj.type} 需要 ${inj.prop} 后端（容器 form），但不在容器子树里，产物不接线`,
+      })
+      continue
+    }
+    const plan = plansById.get(inj.nodeId)!
+    plan.propSnippets.push(`:${kebab(inj.prop)}="${inj.constName}"`)
+    plan.node.wireOnly.push(inj.prop)
+    injectConsts.set(inj.constName, inj.prop)
   }
   const writebacks: Writeback[] = []
   const usedNames = new Set<string>()
@@ -994,6 +1045,20 @@ function assembleVue(args: {
     L.push('const containerVersion = ref<number | undefined>(undefined)')
     L.push('const formRef = ref()')
     L.push(`const form = reactive<Record<string, unknown>>({ ${fields.map((f) => `${f}: ''`).join(', ')} })`)
+    // 注入 prop 的 form 后端：值绑组件自己声明过的 prop（FormulaField.vue:53），求值逻辑留在组件里
+    for (const [constName, prop] of injectConsts) {
+      const line = INJECT_ADAPTERS[constName]
+      if (!line) {
+        ctx.unsupported.push({
+          path: 'script',
+          type: 'codegen',
+          key: constName,
+          message: `契约声明了注入 ${prop}，但产物没有 ${constName} 的实现（INJECT_ADAPTERS 缺一条），未接线`,
+        })
+        continue
+      }
+      L.push(line)
+    }
     L.push('')
     L.push(`/** lc:node=${container.node.id} → 打开容器并取记录（原总线 load-record / open-container 的合并语义） */`)
     L.push("async function openContainer(recordId: string, readonly: boolean, mode: 'create' | 'edit' | 'view') {")

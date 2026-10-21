@@ -96,6 +96,12 @@ export interface TypeContract {
    */
   writes?: { on: string; clearOn: string; idKey?: string; mapKey?: string }
   /**
+   * 组件声明过的注入 prop（如 FormulaField 的 formCreateInject）：产物给它接一个
+   * 以 form 为后端的具名 adapter，运行期行为留在组件单点里 —— 与"不搬求值逻辑"是同一件事。
+   * 只在容器子树内接（adapter 吃 form），容器外保持 unsupported 记债。
+   */
+  injects?: { prop: string; constName: string; note: string }
+  /**
    * 产物要传页面 key：现网由 PageRendererPage.vue:552-553 给数据组件统一注入 props.pageKey，
    * 产物没有这层注入。PageDataTable 把它声明成必填无默认（PageDataTable.vue:185-187），
    * 还拿它拼 Excel 导入导出 URL（:723），漏传就是运行时缺参 + 导出指向空页面。
@@ -364,12 +370,11 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       placeholder: { emit: 'default', value: '—', note: '等于组件默认值' },
       disabled: { emit: 'default', value: false, note: '等于组件默认值' },
     },
-    requires: [
-      {
-        key: 'expression',
-        note: '求值逐依赖走 formCreateInject.api.getValue（FormulaField.vue:79-89）并 watchEffect 回写自身字段；产物是裸 v-model 表单没有 form-create 实例，需改成对 form 的 computed（formulaEval.parseFormula 可直接复用），否则该字段恒为空',
-      },
-    ],
+    injects: {
+      prop: 'formCreateInject',
+      constName: 'formulaApi',
+      note: '求值逐依赖走 formCreateInject.api.getValue（FormulaField.vue:79-89）并 watchEffect 回写自身字段；spike 8 起产物把声明过的 formCreateInject prop 接上 form 后端（const formulaApi），求值/舍入/显示留在组件里',
+    },
   },
   'page-list-cards': {
     tag: 'page-list-cards',

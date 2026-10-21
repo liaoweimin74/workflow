@@ -1,7 +1,7 @@
 // ----- 真机探测 harness：把语料页面的出码产物原样落盘到 codegen/probe/ -----
 // 产物由路由 /codegen-probe 直接挂载（不经过 PageRendererPage），用来量
 // "纸面零空洞"的产物在真机上到底缺什么。
-// 换页面：PROBE_PAGE=skel_instance_1 npx vitest run ...（改完要同步 router/index.ts 的 /codegen-probe 指向）
+// 换页面：PROBE_PAGE=skel_instance_1 npx vitest run ...（路由 /codegen-probe 按 glob 自动挂第一个产物，不用同步）
 // npx vitest run src/views/page/codegen/__tests__/runtime-probe.test.ts
 
 import { describe, expect, it } from 'vitest'

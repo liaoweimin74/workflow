@@ -1,23 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import type { RouteComponent, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 /**
  * 【真机探测脚手架，非产品路由】出码 spike 用来把产物直接挂到浏览器上量真机表现的
  * （详见 codegen/__tests__/runtime-probe.test.ts）。只登记到 dev：生产构建里连那条
- * 懒 import 一起不进包，探测页带着的 vue-tsc 脚手架债也不会伪装成产品代码。
- * 换探测页面时改这里的 component，同时同步 runtime-probe.test.ts 的 PROBE_PAGE。
+ * 懒 import 一起不进包。探测产物是生成物不进 git（.gitignore codegen/probe/），
+ * 要用时跑 PROBE_PAGE=<页名> npx vitest run runtime-probe.test.ts 落盘，glob 有文件才挂路由。
  */
-const codegenProbeRoutes: RouteRecordRaw[] = import.meta.env.DEV
-  ? [
-      {
-        path: 'codegen-probe',
-        name: 'CodegenProbe',
-        component: () => import('@/views/page/codegen/probe/CardlistTest.vue'),
-        meta: { title: '出码产物探测' },
-      },
-    ]
-  : []
+const probePages = import.meta.glob<RouteComponent>('@/views/page/codegen/probe/*.vue')
+const probeEntry = Object.keys(probePages).sort()[0]
+const codegenProbeRoutes: RouteRecordRaw[] =
+  import.meta.env.DEV && probeEntry
+    ? [
+        {
+          path: 'codegen-probe',
+          name: 'CodegenProbe',
+          component: probePages[probeEntry]!,
+          meta: { title: '出码产物探测' },
+        },
+      ]
+    : []
 
 const routes: RouteRecordRaw[] = [
   {

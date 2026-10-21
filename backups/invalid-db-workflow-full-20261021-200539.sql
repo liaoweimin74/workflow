@@ -1,0 +1,3672 @@
+/*M!999999\- enable the sandbox mode */ 
+-- MariaDB dump 10.19-11.8.6-MariaDB, for debian-linux-gnu (x86_64)
+--
+-- Host: localhost    Database: workflow
+-- ------------------------------------------------------
+-- Server version	11.8.6-MariaDB-0+deb13u1 from Debian
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
+
+--
+-- Current Database: `workflow`
+--
+
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `workflow` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */;
+
+USE `workflow`;
+
+--
+-- Table structure for table `act_evt_log`
+--
+
+DROP TABLE IF EXISTS `act_evt_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_evt_log` (
+  `LOG_NR_` bigint(20) NOT NULL AUTO_INCREMENT,
+  `TYPE_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `TIME_STAMP_` timestamp(3) NOT NULL DEFAULT current_timestamp(3),
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `DATA_` longblob DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `LOCK_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `IS_PROCESSED_` tinyint(4) DEFAULT 0,
+  PRIMARY KEY (`LOG_NR_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_evt_log`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_evt_log` WRITE;
+/*!40000 ALTER TABLE `act_evt_log` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_evt_log` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ge_bytearray`
+--
+
+DROP TABLE IF EXISTS `act_ge_bytearray`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ge_bytearray` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `DEPLOYMENT_ID_` varchar(64) DEFAULT NULL,
+  `BYTES_` longblob DEFAULT NULL,
+  `GENERATED_` tinyint(4) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_BYTEAR_DEPL` (`DEPLOYMENT_ID_`),
+  CONSTRAINT `ACT_FK_BYTEARR_DEPL` FOREIGN KEY (`DEPLOYMENT_ID_`) REFERENCES `act_re_deployment` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ge_bytearray`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ge_bytearray` WRITE;
+/*!40000 ALTER TABLE `act_ge_bytearray` DISABLE KEYS */;
+INSERT INTO `act_ge_bytearray` VALUES
+('e00400f8-c58f-11f1-92ce-b6a8b1076472',NULL,'leave_approval_demo.bpmn20.xml','e00400f7-c58f-11f1-92ce-b6a8b1076472','<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n                  xmlns:flowable=\"http://flowable.org/bpmn\"\n                  xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n                  xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n                  xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n                  targetNamespace=\"http://workflow.local/demo\">\n  <bpmn:process id=\"leave_approval_demo\" name=\"ËØ∑ÂÅáÂÆ°Êâπ-ÈÄªËæëÊµÅÊºîÁ§∫\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"start_1\" name=\"Êèê‰∫§ËØ∑ÂÅáÁî≥ËØ∑\" />\n    <bpmn:sequenceFlow id=\"flow_0\" sourceRef=\"start_1\" targetRef=\"apply_1\" />\n    <bpmn:userTask id=\"apply_1\" name=\"Êèê‰∫§ËØ∑ÂÅáÁî≥ËØ∑\" flowable:assignee=\"${initiator}\" />\n    <bpmn:sequenceFlow id=\"flow_1\" sourceRef=\"apply_1\" targetRef=\"approve_1\" />\n    <bpmn:userTask id=\"approve_1\" name=\"‰∏ªÁÆ°ÂÆ°Êâπ\" flowable:assignee=\"1\" />\n    <!-- assignee Áî® userIdÔºàÂπ≥Âè∞ÂæÖÂäûÊåâ user.id Êü•ËØ¢ÔºâÔºå1=adminÔºõÂèëËµ∑ËäÇÁÇπ apply_1 ‰∏∫Á¨¨‰∏Ä‰∏™ UserTaskÔºàÂêØÂä®Êó∂Ëá™Âä®ÂÆåÊàêÔºâ -->\n    <bpmn:sequenceFlow id=\"flow_2\" sourceRef=\"approve_1\" targetRef=\"end_1\" />\n    <bpmn:endEvent id=\"end_1\" name=\"ÂÆ°ÊâπÂÆåÊàê\" />\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"Diagram_1\">\n    <bpmndi:BPMNPlane id=\"Plane_1\" bpmnElement=\"leave_approval_demo\">\n      <bpmndi:BPMNShape id=\"start_1_di\" bpmnElement=\"start_1\">\n        <dc:Bounds x=\"160\" y=\"180\" width=\"36\" height=\"36\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"apply_1_di\" bpmnElement=\"apply_1\">\n        <dc:Bounds x=\"250\" y=\"158\" width=\"110\" height=\"80\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"approve_1_di\" bpmnElement=\"approve_1\">\n        <dc:Bounds x=\"430\" y=\"158\" width=\"110\" height=\"80\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"end_1_di\" bpmnElement=\"end_1\">\n        <dc:Bounds x=\"610\" y=\"180\" width=\"36\" height=\"36\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNEdge id=\"flow_0_di\" bpmnElement=\"flow_0\">\n        <di:waypoint x=\"196\" y=\"198\" />\n        <di:waypoint x=\"250\" y=\"198\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"flow_1_di\" bpmnElement=\"flow_1\">\n        <di:waypoint x=\"360\" y=\"198\" />\n        <di:waypoint x=\"430\" y=\"198\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"flow_2_di\" bpmnElement=\"flow_2\">\n        <di:waypoint x=\"540\" y=\"198\" />\n        <di:waypoint x=\"610\" y=\"198\" />\n      </bpmndi:BPMNEdge>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>\n',0),
+('e00dc4f9-c58f-11f1-92ce-b6a8b1076472',NULL,'leave_approval_demo.leave_approval_demo.png','e00400f7-c58f-11f1-92ce-b6a8b1076472','âPNG\r\n\Z\n\0\0\0\rIHDR\0\0ê\0\0\0¯\0\0\0[ç÷N\0\0ÔIDATx^Ì›	¥UeŸ\0‡ÃÊ’`¶Õ6ÿds´Ÿ&\Z¥Ï∑¥Z¿e”2\n°“\nÃÊV©®`Y*§ï&≠–,â2Q©√R\'d¯ôb2¿¸sˇ˚››}◊aü}Òw8ﬂÂy÷z◊Ωgü}ˆ˛Ó=Ô>Ôwæ==‚\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0@/À≤Ï1w›u◊≈◊]w›øÊŒùõ]u’U¢E#Z∞`¡äyÛÊY}˘˘úN»gÄÑÂ≈ˆí¸C<[µjU∂uÎ÷ÏÅ-\ZÒ˛ƒ˚4˛¸çy>º˙^\"üS\n˘ê∞©âÒÍáªh›XπrÂ⁄º‡ﬁP}/ëœ)Ü|HPÏÊ3RìVƒ˚ï‹m’˜˘úb»gÄ≈±H’t—˙Ô[ıΩD>ß\ZÚ 1]-∏˜oXô›u„yŸí´O)\"~èi’˘DÔÑÇ[O>ßÚ 1])∏õ◊/œ˛zÂó≤õ}‚v”‚πÍ¸¢ÁC¡≠\'ü”˘êòÆ‹˚ñÃi*∂e,[rY”¸¢ÁC¡≠\'ü”˘êòÆ‹ø]Û≠¶B[F<Wù_Ù|(∏ı‰sö!ü”ïÇ˚◊´¶4⁄2‚πÍ¸¢ÁC¡≠\'ü”˘ê7ÕPpÎ…Á4C>$¶+7ŒR≠⁄2‚πÍ¸¢ÁC¡≠\'ü”˘êòÆ‹;Æ=≥©–ñœUÁ=\nn=˘úf»gÄƒt•‡Æ[æ8˚Î•©ÿ∆¥xÆ:øË˘PpÎ…Á4C>$¶+7‚ÓE3õ\nnL´Œ\'z\'‹zÚ9Õêœ\0âÈR¡›∂-ª„è”õ\nnLãÁöÊ=\nn=˘úf»gÄƒ<\\¡ç;s‹~Ì¥¶b[F<ÁÓΩ\nn=˘úf»gÄƒtZp∑mÀVﬁ1/ªÂ∑_l*≤’àyb^£7Ω\nn=˘úf»gÄƒ‘‹á•È,åﬁÙ^(∏ı‰sö!üSWpª2J”Yƒk´À›\nn=˘úf»gÄƒ‘‹j›Ÿ®.Ot(∏ı‰sö!üSWpEÎáÇ[O>ßÚπ{å=zü!CÜlkk;#ˇ97èªÛÿíG÷˛3œm~`Ã_]Ïq6n‹∏Ôú9sN9ÛÃ3oû:uÍ⁄…ì\'o=ˆÿcä\rg¸¯ÒNú8q”I\'ù¥ÙîSNπÏƒO<,…^’eÏâ‹4C¡≠\'ü”˘º{Üzh^ÎfÁÒ@{g±´Ûœé◊Wó	˝ﬁı◊_?˛¥”N[>n‹∏,Ô4fó\\rIˆß?˝)ªÛŒ;≥uÎ÷e!~∆„òœOö4È°1c∆<êw$Ø6lÿÅ’eÓI‹4C¡≠\'ü”˘ºkÚéﬂ¡ypaM«pWba,Ø∫Ëw/^¸_gü}ˆäcé9&ªÙ“K≥5k÷ù≈Æä˘„uyGÚ_&L∏8ﬂpˆ´ÆcO†‡¶\nn=˘úf»Áù3zÙË«µµµùïw˙äΩlçÒôœ|&ª¬w8êœ«|’◊∆Úbπ±¸Í:!y˘v∞˜W\\1\':é\\pA∂yÛÊÌ{Ü;)^À…7ò-#Få¯Hu}˝ùÇõf(∏ı‰sö!üª.Ô‰0tË–õ;~√Ü\rÀŒ9ÁúlŸ≤e’∑C1º.^_ÈHﬁÎ©ÆíïÁ˚>≥fÕ∫˝∏„éÀÓ∫ÎÆÍ∂∞[byyßtÎò1c¶V◊€ü)∏iÜÇ[O>ßÚπkÚé„Ay,oÏÏ}Î[ﬂ ÓªÔæjI€)Ò˙XN•y_¨Ø⁄HNû„˚úq∆ÎO>˘‰l˝˙ı’¸Ô±‹…ì\'o5j‘ÃÍ˙˚+7ÕPpÎ…Á4C>?ºˆë«éŒcå\ZŒô3ßZ∆vK,Ø2\ZyüëHíñÁıﬁ≥fÕ∫#:èÒa”ìb˘\'N‹0|¯ì™ÌËè‹4C¡≠\'ü”˘ºcqLb„nÎ£é:*˚À_˛R-_›\"ñÀoËDﬁ‰òHí«<¸Ò=6ÚXÎ;vÏ¶|√9¢⁄ñ˛F¡M3‹zÚ9Õêœ;÷~¬L«»cOuK±¸∆ë»XµM–ÚÚD><NòÈÓcN¨oƒàÎ\r\Z¥µM˝âÇõf(∏ı‰sö!ü;◊~©ûóùπÀ.ª¨ZÆzD¨ßaÚﬂ.ÒCr‚R=qñt_ò>}˙ä|√9Ω⁄¶˛D¡M3‹zÚ9Õêœù“pù«8—•7UN¨YXm¥¨∏Hxå>n⁄¥©ö◊Ω\"÷;r‰»ç˝˘b„\nnö°‡÷ìœiÜ|Æ7x‡C \\ÏRﬁ›≥≠wV¨ØqWv¥ß⁄FhIqáôŸ≥gWs∫WÕú9ÛŒ|√9ß⁄∂˛B¡M3‹zÚ9ÕêœıÜ¸ÁˆÑEÁ-Æ◊ÿbΩ\r£ê≥´mÑñ≥i”¶ßç?>[Ωzu5ü{Uæ˛ˇÀøÅ≠ö2e #´mÏ‹4C¡≠\'ü”˘‹,Ø;O“poÎﬁ},≈z:êDª™mÖñr˘ÂóOç{[∑Ç±c«ﬁìo8o´∂±ïÂÌΩ&èwWßW)∏i∆ûVpÂsˇ˘‹,~`Ÿqã€ˆ• mV€\n-e⁄¥i∑\\r…%’<Ó3fÃà€:}≥⁄∆V÷∞±ÔÉJ¡M3ˆ¿Ç+ü˚q»Áf˘ÙiÂ|?˘…O™e©W≈˙⁄<≠⁄Vh)SßN]7}o,X‹÷÷6ß⁄∆V÷∞±ÔÉJ¡M3ˆ‡Ç+ü˚a»ÁÊ|:tËºÚ˘EãUÀRØäıómâv5∂ZŒ§Iì∂ˆˆµ;s€m∑≈.Ï´mle5PµT\nnö°‡ Á˛Úπ9üÛüKÀÈ}]c˝\rm\\Z˘s†µå?˛°¸„’<ÓÎ÷≠€úo4À´mle5L’(>®‹4C¡m\n˘úp»Á¶à|˛g˘∏Øka¨ølÀ–°C7Uˇh)#GéÃ|¡j˜âºq[√Íﬁ/¢ß\nÓ˝˜ﬂü˝˘œŒ∂m€÷Ù‹é‚á?¸aå¯6M/#ñ∑b≈ä¶Èø˙’Ø≤õn∫©izD¥•:Ì·‚¯CˆÎ_ˇ∫izª“éÓåÍ˚(˛=ïœª\Z[∂l…>ˇ˘œ∏˙‹é\"Œ|›∞aC”Ù∆8˝Ù”≥˘ÛÁ7MoåXláÒsÒ‚≈≈-Íb˙’W_ù≠\\π≤i˛æäÍ˚(∂èæÆÖ±˛Üˆ¸_µ^CK7n‹É}˝≠´¥fÕöˇ“F Ø“ª¸Óæ˚ÓQ(:oøˇ˝Ô≥◊ºÊ5€E\\ﬂ≥˙öà∂∂∂ÏÄË¥˘µØ}-{Î[ﬂZƒ(û—·åx’´^}Ôx|›u◊uºÊü¯Dˆ•/})õ8qbG¸Úóø,\n¥i”≤n∏°i=_¸‚≥Å6Mﬂùvtg±È›|ﬁ’XµjUˆÍWø:{˚€ﬂû≠]ª∂È˘àòæˇ˛˚g?˚Ÿœ≤?˛Òè≈Òf/{ŸÀ≤N8°∏ù\\ƒµ◊^õ›~˚Ìq<vG|‡»ˆﬁ{ÔÏ?¯¡v”ó,Y“±Ï∏Z˛o):ã«w\\v‘QG”üı¨geW^yeS[˙*‰ss>«H_9ΩØk°HíÚπœ}nS_˜Q∫ı÷[\rIˇ»Ì\nm©ß\nÓÚÂÀ≥G>Úë≈ÔsÁŒÕ^ÒäW#!Ô|Á;≥/º∞xÓø¯EˆÌo;˚Ówø[D‹:+oV1O9Ì;ﬂ˘N6k÷¨b˛(àœ}Ós≥©Sßfqñ~åÓDº‰%/…?¸‚˜∏¸”W\\——ñæÖEq~Ïcõ˝Ùß?Õˆ›wﬂ‚‚∏±‹∑ºÂ-Ÿ©ßûö˝ÓwøÀ>˙—èù∆ËƒF—˛Ûü_¸”‚π9sÊt,sW⁄—ù°‡ˆn>ÔL¨[∑Æ¡é/&—Qãéﬁß?˝Èéi—!\\∂lY1|¡â/Uè¸„ãº€€ﬁV‰Ë{ﬂ˚ﬁb˙‘ß>U‰\\7ÚÎ√˛pëg˘üúΩÔ}ÔÎòyπZ∂e„∆ç≈<—¶¸3µXFLèmbﬁºyMmÔ´êœÕ˘<ƒ1ê∞kN>˘‰˚ZÂ,Ï´Øæzn¬ga7}05ÍâÇE*\n·^{ÌïΩ˚›ÔŒŒ>˚Ï¢ Êﬂ\\ãxˆ≥üù]|Ò≈≈ºÁùw^6i“§\"ÚÊméŒ◊Ò«_<ée≈sgûyf«Úc˜[t„˜πyﬁÛûWﬂß=Ìi≈Ô/z—ã:ÊçøÔ†É*>\0Ûò«£9˚Ì∑_±˛Ö<‰êCädt,£8ˇÊ7ø)b‘®QŸ{ﬁÛûé«o~Ûõ≥”N;mªøsg⁄—›±‹^œÁùçoº1{Â+_ôΩ˛ıØ/\":áy”≤◊ΩÓu”b§:F·\'LòP<éŒ‰E]îvÿa≈ºﬂ¯∆7ä—˚è¸„Eé∆rc[àm£\\œ?ˇ˘œbﬁ;Ó∏£cZ‰hŸÅå«ÛºÎ]Ô*FAÀ‰ÅX|±ãNe|ŒVˇÜﬁ˘‹ÃYÿ∞ã¶LôrY´\\2Ô`ƒÌ§RªdßLçz¢‡Fg->pb‘%vª≈»›3ü˘ÃéQ∫ËXÕú9≥c˛≠[∑f„∆ç+:aÒ⁄ò#òQ¢S◊∏;˚«?˛q±k8éOå›»Â.Èø¯≈EÒ-«Ë_‹À<Fd¢h∆.ıhO<˜⁄◊æ∂ÿ}]ÿËúF2÷◊àÿ=ªÀ«/x¡∂Î@ÓL;™ˇüÓà=∞‡ˆY>ÔnD.?¢}∞˙\\l\'—Åå/(Ò{Ã#ÑÂ¥»√Ø|Â+ŸÕ7ﬂ\\åú«õ2bﬁÿN «1b_í9Î≠∑Ûƒqπ«{lv¡g_˝ÍW≥\'?˘…≈Ôœx∆3äy™ÌÍÌêœÕÜ∏$Ïöº~`“§IUπ<8lÿ∞≈CªMWıT¡-waG«0FÍæ˘Õon1˙«~≈s±À.FDbî§ôå„\n˜Ÿgü¢3EÓŒ;Ô,¶«.„#è<≤(ñ?ˇ˘œ≥¸Ω…‰ù¿ÈåàÈ\'ùtR—¡ã›œèz‘£ä‰=˜‹S¸£çÁû{nv˛˘ÁggúqFÒ\\t c‘p˙ÙÈEqƒ≈ÓÌÚqtD;ê]mGå∞Vˇ7›{Z¡Ì™û Áùç8Ê0:pKó.-:oy”≤øˇ˝Ô≈„ò€GÃù∑ß?˝È≈≠8Óˆ¨≥Œ æ˜ΩÔe_ˇ˙◊≥/˘ÀEûFß0é´ç˘#Oc$≥<$ñ˚€ﬂ˛∂¯˝˝Ô1oc; ]ÿü¸‰\'ãQıËê∆Ò¿Oz“ìäŒjg«\Z˜v»ÁfCZËN4\'úp¬C\rHw¢°µ≈Ωß«é˚@_ﬂ{Ÿ≤e◊ÊÃJ˜¬ÓZƒhbÏ~ãŒ`Ï¬éb¯éwº£ËP≈Æ‰Âãﬂ„˘82:gQ(◊Ø__t– W‚x±yá,Œvæ‡Ç∂;õ;F˛bÒ˚°áö\r\Z4®£c¯Úóøº81&Êèëñ/|·€u Àa¥#vF\'7vFaé—√Ú§Ö#F¡ÚÒõﬁÙ¶¶]ÿ]iGıˇ”]°‡÷ÎÓ|ﬁ’àŒ`|Òâ√5bÙ=oZq‚J<éÈ1˙ÛE/éóå›ﬁ—ë,ôàà—˙~ÉŸΩ˜ﬁ€qbL‰iäÀâàÂñÎâ√\' dú‹€·Äˆ]ÿ±\r}ˆ≥ü›n∂c [õ{a√n8ÒƒØå„Ñ˙Rﬁ	π(ﬂhŒ©∂≠øËâÇù∂ÿ’ªå„qÏ çêrd/vÂ≈ÉÍÎ¢#˜‘ß>µ}åüó^zi”<e«-:vq|X”£áÂ1àç∑¯=äf·Ë–F«5F<c$Ê\roxC1öÛEaéu∆Òcq“Oú\r^>é\"›Y≤+ÌËÓPpÎıD>ÔnÏhv±+˚—è~ÙvW*xÈK_Zål7Œy\ZπÀ,ó«0∆Ô1\"ﬁ8ùÿe/◊€aµÕj[˙\"‰sΩºˆƒ·SEÁ->S˚B¨∑°9ª⁄FhI˘áÁÅc∆å˘WÀ÷÷Ø_Cæ¡¨évT€÷_ÙT¡çÇVv „Ñö8ì4:ê—Iã]gqr@ı5q<aú-\'€Tü+#:n1Z«)∆≤?Ù°mwtg»XnÏBå„,„∏Ã¸œ/v∆|—yçë†ÚuS¶LŸÆ\r1BTüπ+ÌËÓPpÎıT>ÔNt•ù¿\'>Òâ≈ev™±fÕöé˘¢y\\~QâÂ>Á9œ)~¬û–È.Ï∆‰-∑‹“—Åå/?Ò•Æ⁄ûﬁ˘\\o‡¡áîù∑¯2—€£ê±æ¸s∞c˜u¥ß⁄FhY&L∏8vøÙÖ|›?œ7ö”´mÍOz™‡ñ»ø˝Ìo≈Æ„Ë8∆`„%F™«EFÁÚ)OyJˆ∆7æ±„¢«’à„ctªéÛ/≈±ÜÒ˙Œ:ê±ÎoÛÊÕŸè~Ù£bD1F#£.\\∏∞iq“B|`VßÔj;∫;‹z=ïœ;1ÍW(óàN]ﬁ¥‚ƒ≠rZ<?c∆åé◊ƒ1åëìqÕ‘¯\"ó˙âëÏ¯“SŒw˝ı◊«óècπÂõX^ı⁄é’À¯ƒ…`—yå]ﬁÒøäQıºS–Ù7Ùv»ÁŒÂüCÀ\\\\Ê¨7≈˙\ZFV€-m–†A˚è=zKo_k—¢E±Îzu¨ø⁄¶˛§\'\nnú¿™8ˆ+v«Ÿüq÷u»eâ›s1=NDπ¸ÚÀ≥·√ágù∆»Jπ82é◊ä_Ã«C6v∆‚‚Ãeßo¿Ä≈s±+.Æá\'ƒ2Àyøˇ˝ÔgG}tqíB˛Áù”∏ƒJú·œ«Hct0´wÃâQƒè}ÏcM[cÏL;∫;‹z=ëœ;qlmå∞WG#ˇLÀé9Êòé◊DEæ7ûa_¬\Z;êç_ÜÚ?π”a‚ãwúÑáVD~«:„åÓ¯2\'∑≈ˆœ5vH˚*‰sÁÜzp^ã˛]v‰b‘∏7ƒz\Z:èˇévT€-oƒà…?∂F«¢7¨^Ω˙w˘soGT€“ﬂÙD¡çQ«8Ä?FPN9Âî‚r:1Ωº≠Zt¨‚¬»qvÍ5◊\\Súa\Z£3’B◊∑ããå«Û1jX]ODÏÜã≥[„˜∏hw„nËà∏@x\\¨<\nhå¬ƒ∞’e‘EÏ6¨ªUagÒpÌËÓPpÎıD>˜Fƒà}\\*•:=vm«ı´”#b{ä]⁄ùÌ\ZèéeúÕóˇâ«1Rﬁ∏ç≈â9±=∆ÁjıµΩÚy«⁄⁄⁄Œ*;s±\'\'ˆŒÙ§X~„ÆÎXµMêå1c∆Lù<yÚñ¯∞ÈIyG„÷|Ω1ﬂxæPmCîj¡›”C¡≠\'ü”˘ºc£Gè~\\ﬁëª©Ï–≈(vOu\"cπ˘˙:F<cΩ±˛jõ )£Fçö9q‚ƒ\r=5πzıÍ˘—yÃ7òs´ÎÓØ‹4C¡≠\'ü”˘¸Ú∫t@˜5éD∆…Ä›)ñ◊8Úÿææ™mÅ$\r>¸§1c∆t˚}≤€èy\\∫ßå<ñ‹4C¡≠\'ü”˘‹5y}:®±\'∫ÏÓŸŸÒ˙ 	3EÁ1÷Wm$-OÏ#Få±~˙ÙÈ+‚@Ú›±a√ÜÎ€œ∂^À≠Æ´øSp”∑û|N3‰s◊≈à‡êÜ›Ÿ1\Z◊kåÀëÌåò?^Wu,v[«z™ÎÜ~!O¯˝Ú?}‰»ëœ?ˇ¸;◊¨YÛ`u„ÿÅó/_~Ì‘©Sã3≠c9±ºÍ:ˆ\nnö°‡÷ìœiÜ|ﬁ9qLb˚â5’é_q€√∏ÀWúÄ\'N≈IV!~∆„òœWnOX∆C±\\«<≤Gàã|ÁINﬁ\\}Ù—Gﬂ;c∆åø,X∞`Òm∑›∂tÌ⁄µ˜Á€ÕÊ’´Wﬂµd…íE˘á‘UßûzÍÏˆ{[ˇoºÆ?_$º+‹4C¡≠\'ü”˘ºk⁄/Ò”qù»›åÖ.’√ûjØ¡Éø=ﬂ\0æëÉöìoqôÚXë¯yCLèÁcæòø∫Ä=ëÇõf(∏ı‰sö!üwO^◊Úü€v‹;ªãÛœé◊Wó	∞C\nnö°‡÷ìœiÜ|Ó£Gèﬁ\'Ôlkk;#ˇ97èªÛÿ“ﬁYåüÒxn˚Ûc˛Í2\0∫D¡M3‹zÚ9Õêœ\0âQp”∑û|N3‰3@b‹4C¡≠\'ü”˘ê7ÕPpÎ…Á4C>$F¡M3‹zÚ9Õêœ\0âQp”∑û|N3‰3@b‹4C¡≠\'ü”˘ê7ÕPpÎ…Á4C>$F¡M3‹zÚ9Õêœ\0âQp”∑û|N3‰3@b‹4C¡≠\'ü”˘ê7ÕPpÎ…Á4C>$F¡M3‹zÚ9Õêœ\0âQp”∑û|N3‰3@b‹4C¡≠\'ü”˘ê7ÕPpÎ…Á4C>$F¡M3‹zÚ9Õêœ\0âô;wÓC[∑nm˙@≠˘˚µ\"/∏€™Ô%Ú9≈êœ\0	Z∞`¡äU´V5}®ã÷ç{ÔΩ˜gy¡Ω°˙^\"üS˘ê†yÛÊ9˛¸ç+WÆ\\k‰¶µ#Vﬁsœ=Â≈viáWﬂK‰sJ!üﬁ1ê«q,íhŸà˜\'ﬁ\'≈v‚ˇ”˛íœ≠Ú\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0†∑¸?é⁄ÒPV=∆Ò\0\0\0\0IENDÆB`Ç',1);
+/*!40000 ALTER TABLE `act_ge_bytearray` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ge_property`
+--
+
+DROP TABLE IF EXISTS `act_ge_property`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ge_property` (
+  `NAME_` varchar(64) NOT NULL,
+  `VALUE_` varchar(300) DEFAULT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  PRIMARY KEY (`NAME_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ge_property`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ge_property` WRITE;
+/*!40000 ALTER TABLE `act_ge_property` DISABLE KEYS */;
+INSERT INTO `act_ge_property` VALUES
+('cfg.execution-related-entities-count','true',1),
+('cfg.task-related-entities-count','true',1),
+('common.schema.version','8.0.0.0',1),
+('eventregistry.schema.version','8.0.0.0',1),
+('next.dbid','1',1),
+('schema.history','create(8.0.0.0)',1),
+('schema.version','8.0.0.0',1);
+/*!40000 ALTER TABLE `act_ge_property` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_actinst`
+--
+
+DROP TABLE IF EXISTS `act_hi_actinst`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_actinst` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT 1,
+  `PROC_DEF_ID_` varchar(64) NOT NULL,
+  `PROC_INST_ID_` varchar(64) NOT NULL,
+  `EXECUTION_ID_` varchar(64) NOT NULL,
+  `ACT_ID_` varchar(255) NOT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `CALL_PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `ACT_NAME_` varchar(255) DEFAULT NULL,
+  `ACT_TYPE_` varchar(255) NOT NULL,
+  `ASSIGNEE_` varchar(255) DEFAULT NULL,
+  `COMPLETED_BY_` varchar(255) DEFAULT NULL,
+  `START_TIME_` datetime(3) NOT NULL,
+  `END_TIME_` datetime(3) DEFAULT NULL,
+  `TRANSACTION_ORDER_` int(11) DEFAULT NULL,
+  `DURATION_` bigint(20) DEFAULT NULL,
+  `DELETE_REASON_` varchar(4000) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_ACT_INST_START` (`START_TIME_`),
+  KEY `ACT_IDX_HI_ACT_INST_END` (`END_TIME_`),
+  KEY `ACT_IDX_HI_ACT_INST_PROCINST` (`PROC_INST_ID_`,`ACT_ID_`),
+  KEY `ACT_IDX_HI_ACT_INST_EXEC` (`EXECUTION_ID_`,`ACT_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_actinst`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_actinst` WRITE;
+/*!40000 ALTER TABLE `act_hi_actinst` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_actinst` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_attachment`
+--
+
+DROP TABLE IF EXISTS `act_hi_attachment`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_attachment` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `DESCRIPTION_` varchar(4000) DEFAULT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `URL_` varchar(4000) DEFAULT NULL,
+  `CONTENT_ID_` varchar(64) DEFAULT NULL,
+  `TIME_` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_attachment`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_attachment` WRITE;
+/*!40000 ALTER TABLE `act_hi_attachment` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_attachment` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_comment`
+--
+
+DROP TABLE IF EXISTS `act_hi_comment`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_comment` (
+  `ID_` varchar(64) NOT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  `TIME_` datetime(3) NOT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `ACTION_` varchar(255) DEFAULT NULL,
+  `MESSAGE_` varchar(4000) DEFAULT NULL,
+  `FULL_MSG_` longblob DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_comment`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_comment` WRITE;
+/*!40000 ALTER TABLE `act_hi_comment` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_comment` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_detail`
+--
+
+DROP TABLE IF EXISTS `act_hi_detail`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_detail` (
+  `ID_` varchar(64) NOT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `ACT_INST_ID_` varchar(64) DEFAULT NULL,
+  `NAME_` varchar(255) NOT NULL,
+  `VAR_TYPE_` varchar(255) DEFAULT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `TIME_` datetime(3) NOT NULL,
+  `BYTEARRAY_ID_` varchar(64) DEFAULT NULL,
+  `DOUBLE_` double DEFAULT NULL,
+  `LONG_` bigint(20) DEFAULT NULL,
+  `TEXT_` varchar(4000) DEFAULT NULL,
+  `TEXT2_` varchar(4000) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_DETAIL_PROC_INST` (`PROC_INST_ID_`),
+  KEY `ACT_IDX_HI_DETAIL_ACT_INST` (`ACT_INST_ID_`),
+  KEY `ACT_IDX_HI_DETAIL_TIME` (`TIME_`),
+  KEY `ACT_IDX_HI_DETAIL_NAME` (`NAME_`),
+  KEY `ACT_IDX_HI_DETAIL_TASK_ID` (`TASK_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_detail`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_detail` WRITE;
+/*!40000 ALTER TABLE `act_hi_detail` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_detail` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_entitylink`
+--
+
+DROP TABLE IF EXISTS `act_hi_entitylink`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_entitylink` (
+  `ID_` varchar(64) NOT NULL,
+  `LINK_TYPE_` varchar(255) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `PARENT_ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `ROOT_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `ROOT_SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `HIERARCHY_TYPE_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_ENT_LNK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_HI_ENT_LNK_REF_SCOPE` (`REF_SCOPE_ID_`,`REF_SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_HI_ENT_LNK_ROOT_SCOPE` (`ROOT_SCOPE_ID_`,`ROOT_SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_HI_ENT_LNK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`,`LINK_TYPE_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_entitylink`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_entitylink` WRITE;
+/*!40000 ALTER TABLE `act_hi_entitylink` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_entitylink` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_identitylink`
+--
+
+DROP TABLE IF EXISTS `act_hi_identitylink`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_identitylink` (
+  `ID_` varchar(64) NOT NULL,
+  `GROUP_ID_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_USER` (`USER_ID_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_TASK` (`TASK_ID_`),
+  KEY `ACT_IDX_HI_IDENT_LNK_PROCINST` (`PROC_INST_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_identitylink`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_identitylink` WRITE;
+/*!40000 ALTER TABLE `act_hi_identitylink` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_identitylink` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_procinst`
+--
+
+DROP TABLE IF EXISTS `act_hi_procinst`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_procinst` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT 1,
+  `PROC_INST_ID_` varchar(64) NOT NULL,
+  `BUSINESS_KEY_` varchar(255) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) NOT NULL,
+  `START_TIME_` datetime(3) NOT NULL,
+  `END_TIME_` datetime(3) DEFAULT NULL,
+  `DURATION_` bigint(20) DEFAULT NULL,
+  `START_USER_ID_` varchar(255) DEFAULT NULL,
+  `START_ACT_ID_` varchar(255) DEFAULT NULL,
+  `END_ACT_ID_` varchar(255) DEFAULT NULL,
+  `SUPER_PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `DELETE_REASON_` varchar(4000) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `NAME_` varchar(255) DEFAULT NULL,
+  `CALLBACK_ID_` varchar(255) DEFAULT NULL,
+  `CALLBACK_TYPE_` varchar(255) DEFAULT NULL,
+  `REFERENCE_ID_` varchar(255) DEFAULT NULL,
+  `REFERENCE_TYPE_` varchar(255) DEFAULT NULL,
+  `PROPAGATED_STAGE_INST_ID_` varchar(255) DEFAULT NULL,
+  `BUSINESS_STATUS_` varchar(255) DEFAULT NULL,
+  `END_USER_ID_` varchar(255) DEFAULT NULL,
+  `STATE_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `PROC_INST_ID_` (`PROC_INST_ID_`),
+  KEY `ACT_IDX_HI_PRO_INST_END` (`END_TIME_`),
+  KEY `ACT_IDX_HI_PRO_I_BUSKEY` (`BUSINESS_KEY_`),
+  KEY `ACT_IDX_HI_PRO_SUPER_PROCINST` (`SUPER_PROCESS_INSTANCE_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_procinst`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_procinst` WRITE;
+/*!40000 ALTER TABLE `act_hi_procinst` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_procinst` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_taskinst`
+--
+
+DROP TABLE IF EXISTS `act_hi_taskinst`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_taskinst` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT 1,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `TASK_DEF_ID_` varchar(64) DEFAULT NULL,
+  `TASK_DEF_KEY_` varchar(255) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `PROPAGATED_STAGE_INST_ID_` varchar(255) DEFAULT NULL,
+  `STATE_` varchar(255) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `PARENT_TASK_ID_` varchar(64) DEFAULT NULL,
+  `DESCRIPTION_` varchar(4000) DEFAULT NULL,
+  `OWNER_` varchar(255) DEFAULT NULL,
+  `ASSIGNEE_` varchar(255) DEFAULT NULL,
+  `START_TIME_` datetime(3) NOT NULL,
+  `IN_PROGRESS_TIME_` datetime(3) DEFAULT NULL,
+  `IN_PROGRESS_STARTED_BY_` varchar(255) DEFAULT NULL,
+  `CLAIM_TIME_` datetime(3) DEFAULT NULL,
+  `CLAIMED_BY_` varchar(255) DEFAULT NULL,
+  `SUSPENDED_TIME_` datetime(3) DEFAULT NULL,
+  `SUSPENDED_BY_` varchar(255) DEFAULT NULL,
+  `END_TIME_` datetime(3) DEFAULT NULL,
+  `COMPLETED_BY_` varchar(255) DEFAULT NULL,
+  `DURATION_` bigint(20) DEFAULT NULL,
+  `DELETE_REASON_` varchar(4000) DEFAULT NULL,
+  `PRIORITY_` int(11) DEFAULT NULL,
+  `IN_PROGRESS_DUE_DATE_` datetime(3) DEFAULT NULL,
+  `DUE_DATE_` datetime(3) DEFAULT NULL,
+  `FORM_KEY_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `LAST_UPDATED_TIME_` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_TASK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_TASK_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_TASK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_TASK_INST_PROCINST` (`PROC_INST_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_taskinst`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_taskinst` WRITE;
+/*!40000 ALTER TABLE `act_hi_taskinst` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_taskinst` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_tsk_log`
+--
+
+DROP TABLE IF EXISTS `act_hi_tsk_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_tsk_log` (
+  `ID_` bigint(20) NOT NULL AUTO_INCREMENT,
+  `TYPE_` varchar(64) DEFAULT NULL,
+  `TASK_ID_` varchar(64) NOT NULL,
+  `TIME_STAMP_` timestamp(3) NOT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `DATA_` varchar(4000) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_ACT_HI_TSK_LOG_TASK` (`TASK_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_tsk_log`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_tsk_log` WRITE;
+/*!40000 ALTER TABLE `act_hi_tsk_log` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_tsk_log` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_hi_varinst`
+--
+
+DROP TABLE IF EXISTS `act_hi_varinst`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_hi_varinst` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT 1,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `NAME_` varchar(255) NOT NULL,
+  `VAR_TYPE_` varchar(100) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `BYTEARRAY_ID_` varchar(64) DEFAULT NULL,
+  `DOUBLE_` double DEFAULT NULL,
+  `LONG_` bigint(20) DEFAULT NULL,
+  `TEXT_` varchar(4000) DEFAULT NULL,
+  `TEXT2_` varchar(4000) DEFAULT NULL,
+  `META_INFO_` varchar(4000) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) DEFAULT NULL,
+  `LAST_UPDATED_TIME_` datetime(3) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_HI_PROCVAR_NAME_TYPE` (`NAME_`,`VAR_TYPE_`),
+  KEY `ACT_IDX_HI_VAR_SCOPE_ID_TYPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_VAR_SUB_ID_TYPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_HI_PROCVAR_PROC_INST` (`PROC_INST_ID_`),
+  KEY `ACT_IDX_HI_PROCVAR_TASK_ID` (`TASK_ID_`),
+  KEY `ACT_IDX_HI_PROCVAR_EXE` (`EXECUTION_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_hi_varinst`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_hi_varinst` WRITE;
+/*!40000 ALTER TABLE `act_hi_varinst` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_hi_varinst` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_bytearray`
+--
+
+DROP TABLE IF EXISTS `act_id_bytearray`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_bytearray` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `BYTES_` longblob DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_bytearray`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_bytearray` WRITE;
+/*!40000 ALTER TABLE `act_id_bytearray` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_bytearray` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_group`
+--
+
+DROP TABLE IF EXISTS `act_id_group`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_group` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_group`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_group` WRITE;
+/*!40000 ALTER TABLE `act_id_group` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_group` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_info`
+--
+
+DROP TABLE IF EXISTS `act_id_info`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_info` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `USER_ID_` varchar(64) DEFAULT NULL,
+  `TYPE_` varchar(64) DEFAULT NULL,
+  `KEY_` varchar(255) DEFAULT NULL,
+  `VALUE_` varchar(255) DEFAULT NULL,
+  `PASSWORD_` longblob DEFAULT NULL,
+  `PARENT_ID_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_info`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_info` WRITE;
+/*!40000 ALTER TABLE `act_id_info` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_info` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_membership`
+--
+
+DROP TABLE IF EXISTS `act_id_membership`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_membership` (
+  `USER_ID_` varchar(64) NOT NULL,
+  `GROUP_ID_` varchar(64) NOT NULL,
+  PRIMARY KEY (`USER_ID_`,`GROUP_ID_`),
+  KEY `ACT_FK_MEMB_GROUP` (`GROUP_ID_`),
+  CONSTRAINT `ACT_FK_MEMB_GROUP` FOREIGN KEY (`GROUP_ID_`) REFERENCES `act_id_group` (`ID_`),
+  CONSTRAINT `ACT_FK_MEMB_USER` FOREIGN KEY (`USER_ID_`) REFERENCES `act_id_user` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_membership`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_membership` WRITE;
+/*!40000 ALTER TABLE `act_id_membership` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_membership` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_priv`
+--
+
+DROP TABLE IF EXISTS `act_id_priv`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_priv` (
+  `ID_` varchar(64) NOT NULL,
+  `NAME_` varchar(255) NOT NULL,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `ACT_UNIQ_PRIV_NAME` (`NAME_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_priv`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_priv` WRITE;
+/*!40000 ALTER TABLE `act_id_priv` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_priv` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_priv_mapping`
+--
+
+DROP TABLE IF EXISTS `act_id_priv_mapping`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_priv_mapping` (
+  `ID_` varchar(64) NOT NULL,
+  `PRIV_ID_` varchar(64) NOT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `GROUP_ID_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_FK_PRIV_MAPPING` (`PRIV_ID_`),
+  KEY `ACT_IDX_PRIV_USER` (`USER_ID_`),
+  KEY `ACT_IDX_PRIV_GROUP` (`GROUP_ID_`),
+  CONSTRAINT `ACT_FK_PRIV_MAPPING` FOREIGN KEY (`PRIV_ID_`) REFERENCES `act_id_priv` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_priv_mapping`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_priv_mapping` WRITE;
+/*!40000 ALTER TABLE `act_id_priv_mapping` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_priv_mapping` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_property`
+--
+
+DROP TABLE IF EXISTS `act_id_property`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_property` (
+  `NAME_` varchar(64) NOT NULL,
+  `VALUE_` varchar(300) DEFAULT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  PRIMARY KEY (`NAME_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_property`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_property` WRITE;
+/*!40000 ALTER TABLE `act_id_property` DISABLE KEYS */;
+INSERT INTO `act_id_property` VALUES
+('schema.version','8.0.0.0',1);
+/*!40000 ALTER TABLE `act_id_property` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_token`
+--
+
+DROP TABLE IF EXISTS `act_id_token`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_token` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `TOKEN_VALUE_` varchar(255) DEFAULT NULL,
+  `TOKEN_DATE_` timestamp(3) NULL DEFAULT NULL,
+  `IP_ADDRESS_` varchar(255) DEFAULT NULL,
+  `USER_AGENT_` varchar(255) DEFAULT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `TOKEN_DATA_` varchar(2000) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_token`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_token` WRITE;
+/*!40000 ALTER TABLE `act_id_token` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_token` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_id_user`
+--
+
+DROP TABLE IF EXISTS `act_id_user`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_id_user` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `FIRST_` varchar(255) DEFAULT NULL,
+  `LAST_` varchar(255) DEFAULT NULL,
+  `DISPLAY_NAME_` varchar(255) DEFAULT NULL,
+  `EMAIL_` varchar(255) DEFAULT NULL,
+  `PWD_` varchar(255) DEFAULT NULL,
+  `PICTURE_ID_` varchar(64) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_id_user`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_id_user` WRITE;
+/*!40000 ALTER TABLE `act_id_user` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_id_user` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_procdef_info`
+--
+
+DROP TABLE IF EXISTS `act_procdef_info`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_procdef_info` (
+  `ID_` varchar(64) NOT NULL,
+  `PROC_DEF_ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `INFO_JSON_ID_` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `ACT_UNIQ_INFO_PROCDEF` (`PROC_DEF_ID_`),
+  KEY `ACT_IDX_INFO_PROCDEF` (`PROC_DEF_ID_`),
+  KEY `ACT_FK_INFO_JSON_BA` (`INFO_JSON_ID_`),
+  CONSTRAINT `ACT_FK_INFO_JSON_BA` FOREIGN KEY (`INFO_JSON_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_INFO_PROCDEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_procdef_info`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_procdef_info` WRITE;
+/*!40000 ALTER TABLE `act_procdef_info` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_procdef_info` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_re_deployment`
+--
+
+DROP TABLE IF EXISTS `act_re_deployment`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_re_deployment` (
+  `ID_` varchar(64) NOT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `KEY_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `DEPLOY_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `DERIVED_FROM_` varchar(64) DEFAULT NULL,
+  `DERIVED_FROM_ROOT_` varchar(64) DEFAULT NULL,
+  `PARENT_DEPLOYMENT_ID_` varchar(255) DEFAULT NULL,
+  `ENGINE_VERSION_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_re_deployment`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_re_deployment` WRITE;
+/*!40000 ALTER TABLE `act_re_deployment` DISABLE KEYS */;
+INSERT INTO `act_re_deployment` VALUES
+('e00400f7-c58f-11f1-92ce-b6a8b1076472','ËØ∑ÂÅáÂÆ°Êâπ-ÈÄªËæëÊµÅÊºîÁ§∫',NULL,NULL,'default','2026-10-11 16:21:55.455',NULL,NULL,'e00400f7-c58f-11f1-92ce-b6a8b1076472',NULL);
+/*!40000 ALTER TABLE `act_re_deployment` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_re_model`
+--
+
+DROP TABLE IF EXISTS `act_re_model`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_re_model` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `KEY_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LAST_UPDATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `VERSION_` int(11) DEFAULT NULL,
+  `META_INFO_` varchar(4000) DEFAULT NULL,
+  `DEPLOYMENT_ID_` varchar(64) DEFAULT NULL,
+  `EDITOR_SOURCE_VALUE_ID_` varchar(64) DEFAULT NULL,
+  `EDITOR_SOURCE_EXTRA_VALUE_ID_` varchar(64) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_FK_MODEL_SOURCE` (`EDITOR_SOURCE_VALUE_ID_`),
+  KEY `ACT_FK_MODEL_SOURCE_EXTRA` (`EDITOR_SOURCE_EXTRA_VALUE_ID_`),
+  KEY `ACT_FK_MODEL_DEPLOYMENT` (`DEPLOYMENT_ID_`),
+  CONSTRAINT `ACT_FK_MODEL_DEPLOYMENT` FOREIGN KEY (`DEPLOYMENT_ID_`) REFERENCES `act_re_deployment` (`ID_`),
+  CONSTRAINT `ACT_FK_MODEL_SOURCE` FOREIGN KEY (`EDITOR_SOURCE_VALUE_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_MODEL_SOURCE_EXTRA` FOREIGN KEY (`EDITOR_SOURCE_EXTRA_VALUE_ID_`) REFERENCES `act_ge_bytearray` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_re_model`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_re_model` WRITE;
+/*!40000 ALTER TABLE `act_re_model` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_re_model` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_re_procdef`
+--
+
+DROP TABLE IF EXISTS `act_re_procdef`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_re_procdef` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `KEY_` varchar(255) NOT NULL,
+  `VERSION_` int(11) NOT NULL,
+  `DEPLOYMENT_ID_` varchar(64) DEFAULT NULL,
+  `RESOURCE_NAME_` varchar(4000) DEFAULT NULL,
+  `DGRM_RESOURCE_NAME_` varchar(4000) DEFAULT NULL,
+  `DESCRIPTION_` varchar(4000) DEFAULT NULL,
+  `HAS_START_FORM_KEY_` tinyint(4) DEFAULT NULL,
+  `HAS_GRAPHICAL_NOTATION_` tinyint(4) DEFAULT NULL,
+  `SUSPENSION_STATE_` int(11) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `ENGINE_VERSION_` varchar(255) DEFAULT NULL,
+  `DERIVED_FROM_` varchar(64) DEFAULT NULL,
+  `DERIVED_FROM_ROOT_` varchar(64) DEFAULT NULL,
+  `DERIVED_VERSION_` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `ACT_UNIQ_PROCDEF` (`KEY_`,`VERSION_`,`DERIVED_VERSION_`,`TENANT_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_re_procdef`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_re_procdef` WRITE;
+/*!40000 ALTER TABLE `act_re_procdef` DISABLE KEYS */;
+INSERT INTO `act_re_procdef` VALUES
+('leave_approval_demo:9:e00dec0a-c58f-11f1-92ce-b6a8b1076472',1,'http://workflow.local/demo','ËØ∑ÂÅáÂÆ°Êâπ-ÈÄªËæëÊµÅÊºîÁ§∫','leave_approval_demo',9,'e00400f7-c58f-11f1-92ce-b6a8b1076472','leave_approval_demo.bpmn20.xml','leave_approval_demo.leave_approval_demo.png',NULL,0,1,1,'default',NULL,NULL,NULL,0);
+/*!40000 ALTER TABLE `act_re_procdef` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_actinst`
+--
+
+DROP TABLE IF EXISTS `act_ru_actinst`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_actinst` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT 1,
+  `PROC_DEF_ID_` varchar(64) NOT NULL,
+  `PROC_INST_ID_` varchar(64) NOT NULL,
+  `EXECUTION_ID_` varchar(64) NOT NULL,
+  `ACT_ID_` varchar(255) NOT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `CALL_PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `ACT_NAME_` varchar(255) DEFAULT NULL,
+  `ACT_TYPE_` varchar(255) NOT NULL,
+  `ASSIGNEE_` varchar(255) DEFAULT NULL,
+  `COMPLETED_BY_` varchar(255) DEFAULT NULL,
+  `START_TIME_` datetime(3) NOT NULL,
+  `END_TIME_` datetime(3) DEFAULT NULL,
+  `DURATION_` bigint(20) DEFAULT NULL,
+  `TRANSACTION_ORDER_` int(11) DEFAULT NULL,
+  `DELETE_REASON_` varchar(4000) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_RU_ACTI_START` (`START_TIME_`),
+  KEY `ACT_IDX_RU_ACTI_END` (`END_TIME_`),
+  KEY `ACT_IDX_RU_ACTI_PROC` (`PROC_INST_ID_`),
+  KEY `ACT_IDX_RU_ACTI_PROC_ACT` (`PROC_INST_ID_`,`ACT_ID_`),
+  KEY `ACT_IDX_RU_ACTI_EXEC` (`EXECUTION_ID_`),
+  KEY `ACT_IDX_RU_ACTI_EXEC_ACT` (`EXECUTION_ID_`,`ACT_ID_`),
+  KEY `ACT_IDX_RU_ACTI_TASK` (`TASK_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_actinst`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_actinst` WRITE;
+/*!40000 ALTER TABLE `act_ru_actinst` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_actinst` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_deadletter_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_deadletter_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_deadletter_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `EXCLUSIVE_` tinyint(1) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `ELEMENT_NAME_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `CORRELATION_ID_` varchar(255) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `DUEDATE_` timestamp(3) NULL DEFAULT NULL,
+  `REPEAT_` varchar(255) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_DEADLETTER_JOB_EXCEPTION_STACK_ID` (`EXCEPTION_STACK_ID_`),
+  KEY `ACT_IDX_DEADLETTER_JOB_CUSTOM_VALUES_ID` (`CUSTOM_VALUES_ID_`),
+  KEY `ACT_IDX_DEADLETTER_JOB_CORRELATION_ID` (`CORRELATION_ID_`),
+  KEY `ACT_IDX_DJOB_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_DJOB_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_DJOB_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_DEADLETTER_JOB_EXECUTION` (`EXECUTION_ID_`),
+  KEY `ACT_FK_DEADLETTER_JOB_PROCESS_INSTANCE` (`PROCESS_INSTANCE_ID_`),
+  KEY `ACT_FK_DEADLETTER_JOB_PROC_DEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_DEADLETTER_JOB_CUSTOM_VALUES` FOREIGN KEY (`CUSTOM_VALUES_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_DEADLETTER_JOB_EXCEPTION` FOREIGN KEY (`EXCEPTION_STACK_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_DEADLETTER_JOB_EXECUTION` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_DEADLETTER_JOB_PROCESS_INSTANCE` FOREIGN KEY (`PROCESS_INSTANCE_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_DEADLETTER_JOB_PROC_DEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_deadletter_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_deadletter_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_deadletter_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_deadletter_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_entitylink`
+--
+
+DROP TABLE IF EXISTS `act_ru_entitylink`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_entitylink` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) DEFAULT NULL,
+  `LINK_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `PARENT_ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `REF_SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `ROOT_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `ROOT_SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `HIERARCHY_TYPE_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_ENT_LNK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_ENT_LNK_REF_SCOPE` (`REF_SCOPE_ID_`,`REF_SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_ENT_LNK_ROOT_SCOPE` (`ROOT_SCOPE_ID_`,`ROOT_SCOPE_TYPE_`,`LINK_TYPE_`),
+  KEY `ACT_IDX_ENT_LNK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`,`LINK_TYPE_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_entitylink`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_entitylink` WRITE;
+/*!40000 ALTER TABLE `act_ru_entitylink` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_entitylink` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_event_subscr`
+--
+
+DROP TABLE IF EXISTS `act_ru_event_subscr`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_event_subscr` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `EVENT_TYPE_` varchar(255) NOT NULL,
+  `EVENT_NAME_` varchar(255) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `ACTIVITY_ID_` varchar(64) DEFAULT NULL,
+  `CONFIGURATION_` varchar(255) DEFAULT NULL,
+  `CREATED_` timestamp(3) NOT NULL DEFAULT current_timestamp(3),
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_DEFINITION_KEY_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(64) DEFAULT NULL,
+  `LOCK_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_EVENT_SUBSCR_CONFIG_` (`CONFIGURATION_`),
+  KEY `ACT_IDX_EVENT_SUBSCR_EXEC_ID` (`EXECUTION_ID_`),
+  KEY `ACT_IDX_EVENT_SUBSCR_PROC_ID` (`PROC_INST_ID_`),
+  KEY `ACT_IDX_EVENT_SUBSCR_SCOPEREF_` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  CONSTRAINT `ACT_FK_EVENT_EXEC` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_event_subscr`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_event_subscr` WRITE;
+/*!40000 ALTER TABLE `act_ru_event_subscr` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_event_subscr` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_execution`
+--
+
+DROP TABLE IF EXISTS `act_ru_execution`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_execution` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `BUSINESS_KEY_` varchar(255) DEFAULT NULL,
+  `PARENT_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `SUPER_EXEC_` varchar(64) DEFAULT NULL,
+  `ROOT_PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `ACT_ID_` varchar(255) DEFAULT NULL,
+  `IS_ACTIVE_` tinyint(4) DEFAULT NULL,
+  `IS_CONCURRENT_` tinyint(4) DEFAULT NULL,
+  `IS_SCOPE_` tinyint(4) DEFAULT NULL,
+  `IS_EVENT_SCOPE_` tinyint(4) DEFAULT NULL,
+  `IS_MI_ROOT_` tinyint(4) DEFAULT NULL,
+  `SUSPENSION_STATE_` int(11) DEFAULT NULL,
+  `CACHED_ENT_STATE_` int(11) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `NAME_` varchar(255) DEFAULT NULL,
+  `START_ACT_ID_` varchar(255) DEFAULT NULL,
+  `START_TIME_` datetime(3) DEFAULT NULL,
+  `START_USER_ID_` varchar(255) DEFAULT NULL,
+  `LOCK_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `IS_COUNT_ENABLED_` tinyint(4) DEFAULT NULL,
+  `EVT_SUBSCR_COUNT_` int(11) DEFAULT NULL,
+  `TASK_COUNT_` int(11) DEFAULT NULL,
+  `JOB_COUNT_` int(11) DEFAULT NULL,
+  `TIMER_JOB_COUNT_` int(11) DEFAULT NULL,
+  `SUSP_JOB_COUNT_` int(11) DEFAULT NULL,
+  `DEADLETTER_JOB_COUNT_` int(11) DEFAULT NULL,
+  `EXTERNAL_WORKER_JOB_COUNT_` int(11) DEFAULT NULL,
+  `VAR_COUNT_` int(11) DEFAULT NULL,
+  `ID_LINK_COUNT_` int(11) DEFAULT NULL,
+  `CALLBACK_ID_` varchar(255) DEFAULT NULL,
+  `CALLBACK_TYPE_` varchar(255) DEFAULT NULL,
+  `REFERENCE_ID_` varchar(255) DEFAULT NULL,
+  `REFERENCE_TYPE_` varchar(255) DEFAULT NULL,
+  `PROPAGATED_STAGE_INST_ID_` varchar(255) DEFAULT NULL,
+  `BUSINESS_STATUS_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_EXEC_BUSKEY` (`BUSINESS_KEY_`),
+  KEY `ACT_IDC_EXEC_ROOT` (`ROOT_PROC_INST_ID_`),
+  KEY `ACT_IDX_EXEC_REF_ID_` (`REFERENCE_ID_`),
+  KEY `ACT_FK_EXE_PROCINST` (`PROC_INST_ID_`),
+  KEY `ACT_FK_EXE_PARENT` (`PARENT_ID_`),
+  KEY `ACT_FK_EXE_SUPER` (`SUPER_EXEC_`),
+  KEY `ACT_FK_EXE_PROCDEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_EXE_PARENT` FOREIGN KEY (`PARENT_ID_`) REFERENCES `act_ru_execution` (`ID_`) ON DELETE CASCADE,
+  CONSTRAINT `ACT_FK_EXE_PROCDEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`),
+  CONSTRAINT `ACT_FK_EXE_PROCINST` FOREIGN KEY (`PROC_INST_ID_`) REFERENCES `act_ru_execution` (`ID_`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `ACT_FK_EXE_SUPER` FOREIGN KEY (`SUPER_EXEC_`) REFERENCES `act_ru_execution` (`ID_`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_execution`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_execution` WRITE;
+/*!40000 ALTER TABLE `act_ru_execution` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_execution` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_external_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_external_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_external_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `LOCK_EXP_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `EXCLUSIVE_` tinyint(1) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `ELEMENT_NAME_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `CORRELATION_ID_` varchar(255) DEFAULT NULL,
+  `RETRIES_` int(11) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `DUEDATE_` timestamp(3) NULL DEFAULT NULL,
+  `REPEAT_` varchar(255) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_EXTERNAL_JOB_EXCEPTION_STACK_ID` (`EXCEPTION_STACK_ID_`),
+  KEY `ACT_IDX_EXTERNAL_JOB_CUSTOM_VALUES_ID` (`CUSTOM_VALUES_ID_`),
+  KEY `ACT_IDX_EXTERNAL_JOB_CORRELATION_ID` (`CORRELATION_ID_`),
+  KEY `ACT_IDX_EJOB_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_EJOB_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_EJOB_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  CONSTRAINT `ACT_FK_EXTERNAL_JOB_CUSTOM_VALUES` FOREIGN KEY (`CUSTOM_VALUES_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_EXTERNAL_JOB_EXCEPTION` FOREIGN KEY (`EXCEPTION_STACK_ID_`) REFERENCES `act_ge_bytearray` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_external_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_external_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_external_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_external_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_history_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_history_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_history_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `LOCK_EXP_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `RETRIES_` int(11) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `ADV_HANDLER_CFG_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_history_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_history_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_history_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_history_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_identitylink`
+--
+
+DROP TABLE IF EXISTS `act_ru_identitylink`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_identitylink` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `GROUP_ID_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  `USER_ID_` varchar(255) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_IDENT_LNK_USER` (`USER_ID_`),
+  KEY `ACT_IDX_IDENT_LNK_GROUP` (`GROUP_ID_`),
+  KEY `ACT_IDX_IDENT_LNK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_IDENT_LNK_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_IDENT_LNK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_ATHRZ_PROCEDEF` (`PROC_DEF_ID_`),
+  KEY `ACT_FK_TSKASS_TASK` (`TASK_ID_`),
+  KEY `ACT_FK_IDL_PROCINST` (`PROC_INST_ID_`),
+  CONSTRAINT `ACT_FK_ATHRZ_PROCEDEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`),
+  CONSTRAINT `ACT_FK_IDL_PROCINST` FOREIGN KEY (`PROC_INST_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_TSKASS_TASK` FOREIGN KEY (`TASK_ID_`) REFERENCES `act_ru_task` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_identitylink`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_identitylink` WRITE;
+/*!40000 ALTER TABLE `act_ru_identitylink` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_identitylink` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `LOCK_EXP_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `EXCLUSIVE_` tinyint(1) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `ELEMENT_NAME_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `CORRELATION_ID_` varchar(255) DEFAULT NULL,
+  `RETRIES_` int(11) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `DUEDATE_` timestamp(3) NULL DEFAULT NULL,
+  `REPEAT_` varchar(255) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_JOB_EXCEPTION_STACK_ID` (`EXCEPTION_STACK_ID_`),
+  KEY `ACT_IDX_JOB_CUSTOM_VALUES_ID` (`CUSTOM_VALUES_ID_`),
+  KEY `ACT_IDX_JOB_CORRELATION_ID` (`CORRELATION_ID_`),
+  KEY `ACT_IDX_JOB_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_JOB_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_JOB_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_JOB_EXECUTION` (`EXECUTION_ID_`),
+  KEY `ACT_FK_JOB_PROCESS_INSTANCE` (`PROCESS_INSTANCE_ID_`),
+  KEY `ACT_FK_JOB_PROC_DEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_JOB_CUSTOM_VALUES` FOREIGN KEY (`CUSTOM_VALUES_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_JOB_EXCEPTION` FOREIGN KEY (`EXCEPTION_STACK_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_JOB_EXECUTION` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_JOB_PROCESS_INSTANCE` FOREIGN KEY (`PROCESS_INSTANCE_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_JOB_PROC_DEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_suspended_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_suspended_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_suspended_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `EXCLUSIVE_` tinyint(1) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `ELEMENT_NAME_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `CORRELATION_ID_` varchar(255) DEFAULT NULL,
+  `RETRIES_` int(11) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `DUEDATE_` timestamp(3) NULL DEFAULT NULL,
+  `REPEAT_` varchar(255) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_SUSPENDED_JOB_EXCEPTION_STACK_ID` (`EXCEPTION_STACK_ID_`),
+  KEY `ACT_IDX_SUSPENDED_JOB_CUSTOM_VALUES_ID` (`CUSTOM_VALUES_ID_`),
+  KEY `ACT_IDX_SUSPENDED_JOB_CORRELATION_ID` (`CORRELATION_ID_`),
+  KEY `ACT_IDX_SJOB_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_SJOB_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_SJOB_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_SUSPENDED_JOB_EXECUTION` (`EXECUTION_ID_`),
+  KEY `ACT_FK_SUSPENDED_JOB_PROCESS_INSTANCE` (`PROCESS_INSTANCE_ID_`),
+  KEY `ACT_FK_SUSPENDED_JOB_PROC_DEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_SUSPENDED_JOB_CUSTOM_VALUES` FOREIGN KEY (`CUSTOM_VALUES_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_SUSPENDED_JOB_EXCEPTION` FOREIGN KEY (`EXCEPTION_STACK_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_SUSPENDED_JOB_EXECUTION` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_SUSPENDED_JOB_PROCESS_INSTANCE` FOREIGN KEY (`PROCESS_INSTANCE_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_SUSPENDED_JOB_PROC_DEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_suspended_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_suspended_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_suspended_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_suspended_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_task`
+--
+
+DROP TABLE IF EXISTS `act_ru_task`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_task` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `TASK_DEF_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `PROPAGATED_STAGE_INST_ID_` varchar(255) DEFAULT NULL,
+  `STATE_` varchar(255) DEFAULT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `PARENT_TASK_ID_` varchar(64) DEFAULT NULL,
+  `DESCRIPTION_` varchar(4000) DEFAULT NULL,
+  `TASK_DEF_KEY_` varchar(255) DEFAULT NULL,
+  `OWNER_` varchar(255) DEFAULT NULL,
+  `ASSIGNEE_` varchar(255) DEFAULT NULL,
+  `DELEGATION_` varchar(64) DEFAULT NULL,
+  `PRIORITY_` int(11) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `IN_PROGRESS_TIME_` datetime(3) DEFAULT NULL,
+  `IN_PROGRESS_STARTED_BY_` varchar(255) DEFAULT NULL,
+  `CLAIM_TIME_` datetime(3) DEFAULT NULL,
+  `CLAIMED_BY_` varchar(255) DEFAULT NULL,
+  `SUSPENDED_TIME_` datetime(3) DEFAULT NULL,
+  `SUSPENDED_BY_` varchar(255) DEFAULT NULL,
+  `IN_PROGRESS_DUE_DATE_` datetime(3) DEFAULT NULL,
+  `DUE_DATE_` datetime(3) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `SUSPENSION_STATE_` int(11) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  `FORM_KEY_` varchar(255) DEFAULT NULL,
+  `IS_COUNT_ENABLED_` tinyint(4) DEFAULT NULL,
+  `VAR_COUNT_` int(11) DEFAULT NULL,
+  `ID_LINK_COUNT_` int(11) DEFAULT NULL,
+  `SUB_TASK_COUNT_` int(11) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_TASK_CREATE` (`CREATE_TIME_`),
+  KEY `ACT_IDX_TASK_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_TASK_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_TASK_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_TASK_EXE` (`EXECUTION_ID_`),
+  KEY `ACT_FK_TASK_PROCINST` (`PROC_INST_ID_`),
+  KEY `ACT_FK_TASK_PROCDEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_TASK_EXE` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_TASK_PROCDEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`),
+  CONSTRAINT `ACT_FK_TASK_PROCINST` FOREIGN KEY (`PROC_INST_ID_`) REFERENCES `act_ru_execution` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_task`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_task` WRITE;
+/*!40000 ALTER TABLE `act_ru_task` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_task` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_timer_job`
+--
+
+DROP TABLE IF EXISTS `act_ru_timer_job`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_timer_job` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `LOCK_EXP_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `LOCK_OWNER_` varchar(255) DEFAULT NULL,
+  `EXCLUSIVE_` tinyint(1) DEFAULT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROCESS_INSTANCE_ID_` varchar(64) DEFAULT NULL,
+  `PROC_DEF_ID_` varchar(64) DEFAULT NULL,
+  `ELEMENT_ID_` varchar(255) DEFAULT NULL,
+  `ELEMENT_NAME_` varchar(255) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `SCOPE_DEFINITION_ID_` varchar(255) DEFAULT NULL,
+  `CORRELATION_ID_` varchar(255) DEFAULT NULL,
+  `RETRIES_` int(11) DEFAULT NULL,
+  `EXCEPTION_STACK_ID_` varchar(64) DEFAULT NULL,
+  `EXCEPTION_MSG_` varchar(4000) DEFAULT NULL,
+  `DUEDATE_` timestamp(3) NULL DEFAULT NULL,
+  `REPEAT_` varchar(255) DEFAULT NULL,
+  `HANDLER_TYPE_` varchar(255) DEFAULT NULL,
+  `HANDLER_CFG_` varchar(4000) DEFAULT NULL,
+  `CUSTOM_VALUES_ID_` varchar(64) DEFAULT NULL,
+  `CREATE_TIME_` timestamp(3) NULL DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_TIMER_JOB_EXCEPTION_STACK_ID` (`EXCEPTION_STACK_ID_`),
+  KEY `ACT_IDX_TIMER_JOB_CUSTOM_VALUES_ID` (`CUSTOM_VALUES_ID_`),
+  KEY `ACT_IDX_TIMER_JOB_CORRELATION_ID` (`CORRELATION_ID_`),
+  KEY `ACT_IDX_TIMER_JOB_DUEDATE` (`DUEDATE_`),
+  KEY `ACT_IDX_TJOB_SCOPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_TJOB_SUB_SCOPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_TJOB_SCOPE_DEF` (`SCOPE_DEFINITION_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_TIMER_JOB_EXECUTION` (`EXECUTION_ID_`),
+  KEY `ACT_FK_TIMER_JOB_PROCESS_INSTANCE` (`PROCESS_INSTANCE_ID_`),
+  KEY `ACT_FK_TIMER_JOB_PROC_DEF` (`PROC_DEF_ID_`),
+  CONSTRAINT `ACT_FK_TIMER_JOB_CUSTOM_VALUES` FOREIGN KEY (`CUSTOM_VALUES_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_TIMER_JOB_EXCEPTION` FOREIGN KEY (`EXCEPTION_STACK_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_TIMER_JOB_EXECUTION` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_TIMER_JOB_PROCESS_INSTANCE` FOREIGN KEY (`PROCESS_INSTANCE_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_TIMER_JOB_PROC_DEF` FOREIGN KEY (`PROC_DEF_ID_`) REFERENCES `act_re_procdef` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_timer_job`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_timer_job` WRITE;
+/*!40000 ALTER TABLE `act_ru_timer_job` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_timer_job` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `act_ru_variable`
+--
+
+DROP TABLE IF EXISTS `act_ru_variable`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `act_ru_variable` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `TYPE_` varchar(255) NOT NULL,
+  `NAME_` varchar(255) NOT NULL,
+  `EXECUTION_ID_` varchar(64) DEFAULT NULL,
+  `PROC_INST_ID_` varchar(64) DEFAULT NULL,
+  `TASK_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(255) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(255) DEFAULT NULL,
+  `BYTEARRAY_ID_` varchar(64) DEFAULT NULL,
+  `DOUBLE_` double DEFAULT NULL,
+  `LONG_` bigint(20) DEFAULT NULL,
+  `TEXT_` varchar(4000) DEFAULT NULL,
+  `TEXT2_` varchar(4000) DEFAULT NULL,
+  `META_INFO_` varchar(4000) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `ACT_IDX_RU_VAR_SCOPE_ID_TYPE` (`SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_IDX_RU_VAR_SUB_ID_TYPE` (`SUB_SCOPE_ID_`,`SCOPE_TYPE_`),
+  KEY `ACT_FK_VAR_BYTEARRAY` (`BYTEARRAY_ID_`),
+  KEY `ACT_IDX_VARIABLE_TASK_ID` (`TASK_ID_`),
+  KEY `ACT_FK_VAR_EXE` (`EXECUTION_ID_`),
+  KEY `ACT_FK_VAR_PROCINST` (`PROC_INST_ID_`),
+  CONSTRAINT `ACT_FK_VAR_BYTEARRAY` FOREIGN KEY (`BYTEARRAY_ID_`) REFERENCES `act_ge_bytearray` (`ID_`),
+  CONSTRAINT `ACT_FK_VAR_EXE` FOREIGN KEY (`EXECUTION_ID_`) REFERENCES `act_ru_execution` (`ID_`),
+  CONSTRAINT `ACT_FK_VAR_PROCINST` FOREIGN KEY (`PROC_INST_ID_`) REFERENCES `act_ru_execution` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `act_ru_variable`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `act_ru_variable` WRITE;
+/*!40000 ALTER TABLE `act_ru_variable` DISABLE KEYS */;
+/*!40000 ALTER TABLE `act_ru_variable` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `event_publication`
+--
+
+DROP TABLE IF EXISTS `event_publication`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `event_publication` (
+  `id` uuid NOT NULL,
+  `completion_attempts` int(11) NOT NULL,
+  `completion_date` datetime(6) DEFAULT NULL,
+  `event_type` varchar(255) DEFAULT NULL,
+  `last_resubmission_date` datetime(6) DEFAULT NULL,
+  `listener_id` varchar(255) DEFAULT NULL,
+  `publication_date` datetime(6) DEFAULT NULL,
+  `serialized_event` varchar(255) DEFAULT NULL,
+  `status` enum('COMPLETED','FAILED','PROCESSING','PUBLISHED','RESUBMITTED') DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `event_publication`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `event_publication` WRITE;
+/*!40000 ALTER TABLE `event_publication` DISABLE KEYS */;
+/*!40000 ALTER TABLE `event_publication` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_channel_definition`
+--
+
+DROP TABLE IF EXISTS `flw_channel_definition`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_channel_definition` (
+  `ID_` varchar(255) NOT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `VERSION_` int(11) DEFAULT NULL,
+  `KEY_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `TYPE_` varchar(255) DEFAULT NULL,
+  `IMPLEMENTATION_` varchar(255) DEFAULT NULL,
+  `DEPLOYMENT_ID_` varchar(255) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT NULL,
+  `RESOURCE_NAME_` varchar(255) DEFAULT NULL,
+  `DESCRIPTION_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `ACT_IDX_CHANNEL_DEF_UNIQ` (`KEY_`,`VERSION_`,`TENANT_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_channel_definition`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_channel_definition` WRITE;
+/*!40000 ALTER TABLE `flw_channel_definition` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_channel_definition` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_event_definition`
+--
+
+DROP TABLE IF EXISTS `flw_event_definition`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_event_definition` (
+  `ID_` varchar(255) NOT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `VERSION_` int(11) DEFAULT NULL,
+  `KEY_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `DEPLOYMENT_ID_` varchar(255) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT NULL,
+  `RESOURCE_NAME_` varchar(255) DEFAULT NULL,
+  `DESCRIPTION_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  UNIQUE KEY `ACT_IDX_EVENT_DEF_UNIQ` (`KEY_`,`VERSION_`,`TENANT_ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_event_definition`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_event_definition` WRITE;
+/*!40000 ALTER TABLE `flw_event_definition` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_event_definition` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_event_deployment`
+--
+
+DROP TABLE IF EXISTS `flw_event_deployment`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_event_deployment` (
+  `ID_` varchar(255) NOT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `CATEGORY_` varchar(255) DEFAULT NULL,
+  `DEPLOY_TIME_` datetime(3) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT NULL,
+  `PARENT_DEPLOYMENT_ID_` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_event_deployment`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_event_deployment` WRITE;
+/*!40000 ALTER TABLE `flw_event_deployment` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_event_deployment` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_event_resource`
+--
+
+DROP TABLE IF EXISTS `flw_event_resource`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_event_resource` (
+  `ID_` varchar(255) NOT NULL,
+  `NAME_` varchar(255) DEFAULT NULL,
+  `DEPLOYMENT_ID_` varchar(255) DEFAULT NULL,
+  `RESOURCE_BYTES_` longblob DEFAULT NULL,
+  PRIMARY KEY (`ID_`),
+  KEY `FLW_IDX_EVENT_RSRC_DPL` (`DEPLOYMENT_ID_`),
+  CONSTRAINT `FLW_FK_EVENT_RSRC_DPL` FOREIGN KEY (`DEPLOYMENT_ID_`) REFERENCES `flw_event_deployment` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_event_resource`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_event_resource` WRITE;
+/*!40000 ALTER TABLE `flw_event_resource` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_event_resource` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_ru_batch`
+--
+
+DROP TABLE IF EXISTS `flw_ru_batch`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_ru_batch` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `TYPE_` varchar(64) NOT NULL,
+  `SEARCH_KEY_` varchar(255) DEFAULT NULL,
+  `SEARCH_KEY2_` varchar(255) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) NOT NULL,
+  `COMPLETE_TIME_` datetime(3) DEFAULT NULL,
+  `STATUS_` varchar(255) DEFAULT NULL,
+  `BATCH_DOC_ID_` varchar(64) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_ru_batch`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_ru_batch` WRITE;
+/*!40000 ALTER TABLE `flw_ru_batch` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_ru_batch` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flw_ru_batch_part`
+--
+
+DROP TABLE IF EXISTS `flw_ru_batch_part`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flw_ru_batch_part` (
+  `ID_` varchar(64) NOT NULL,
+  `REV_` int(11) DEFAULT NULL,
+  `BATCH_ID_` varchar(64) DEFAULT NULL,
+  `TYPE_` varchar(64) NOT NULL,
+  `SCOPE_ID_` varchar(64) DEFAULT NULL,
+  `SUB_SCOPE_ID_` varchar(64) DEFAULT NULL,
+  `SCOPE_TYPE_` varchar(64) DEFAULT NULL,
+  `SEARCH_KEY_` varchar(255) DEFAULT NULL,
+  `SEARCH_KEY2_` varchar(255) DEFAULT NULL,
+  `CREATE_TIME_` datetime(3) NOT NULL,
+  `COMPLETE_TIME_` datetime(3) DEFAULT NULL,
+  `STATUS_` varchar(255) DEFAULT NULL,
+  `RESULT_DOC_ID_` varchar(64) DEFAULT NULL,
+  `TENANT_ID_` varchar(255) DEFAULT '',
+  PRIMARY KEY (`ID_`),
+  KEY `FLW_IDX_BATCH_PART` (`BATCH_ID_`),
+  CONSTRAINT `FLW_FK_BATCH_PART_PARENT` FOREIGN KEY (`BATCH_ID_`) REFERENCES `flw_ru_batch` (`ID_`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flw_ru_batch_part`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flw_ru_batch_part` WRITE;
+/*!40000 ALTER TABLE `flw_ru_batch_part` DISABLE KEYS */;
+/*!40000 ALTER TABLE `flw_ru_batch_part` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `flyway_schema_history`
+--
+
+DROP TABLE IF EXISTS `flyway_schema_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `flyway_schema_history` (
+  `installed_rank` int(11) NOT NULL,
+  `version` varchar(50) DEFAULT NULL,
+  `description` varchar(200) NOT NULL,
+  `type` varchar(20) NOT NULL,
+  `script` varchar(1000) NOT NULL,
+  `checksum` int(11) DEFAULT NULL,
+  `installed_by` varchar(100) NOT NULL,
+  `installed_on` timestamp NOT NULL DEFAULT current_timestamp(),
+  `execution_time` int(11) NOT NULL,
+  `success` tinyint(1) NOT NULL,
+  PRIMARY KEY (`installed_rank`),
+  KEY `flyway_schema_history_s_idx` (`success`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `flyway_schema_history`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `flyway_schema_history` WRITE;
+/*!40000 ALTER TABLE `flyway_schema_history` DISABLE KEYS */;
+INSERT INTO `flyway_schema_history` VALUES
+(1,'1','<< Flyway Baseline >>','BASELINE','<< Flyway Baseline >>',NULL,'root','2026-09-11 10:30:10',0,1),
+(2,'2','init','SQL','V2__init.sql',84590707,'root','2026-09-11 10:30:10',25,1),
+(3,'1','workflow','SQL','V1__workflow.sql',-1390981594,'root','2026-10-09 00:05:46',255,1),
+(4,'39','builtin data sources','SQL','V39__builtin_data_sources.sql',-473665810,'root','2026-10-09 00:05:46',7,1),
+(5,'40','create engine notify','SQL','V40__create_engine_notify.sql',-61291012,'root','2026-10-09 00:05:46',2,1),
+(6,'41','add task comment signature','SQL','V41__add_task_comment_signature.sql',-1263894200,'root','2026-10-09 00:05:46',2,1),
+(7,'49','menu trio and posts recovery','SQL','V49__menu_trio_and_posts_recovery.sql',1233929668,'root','2026-10-09 00:05:46',34,1),
+(8,'50','member group dedicated tables','SQL','V50__member_group_dedicated_tables.sql',143610301,'root','2026-10-09 00:05:46',7,1),
+(9,'51','sys attachment','SQL','V51__sys_attachment.sql',-1828141019,'root','2026-10-09 00:05:46',2,1),
+(10,'52','sys attachment image meta','SQL','V52__sys_attachment_image_meta.sql',66136558,'root','2026-10-09 00:05:46',1,1),
+(11,'53','add logic flow menu','SQL','V53__add_logic_flow_menu.sql',-1564541405,'root','2026-10-09 00:05:46',1,1),
+(12,'3','grant admin menus','SQL','V3__grant_admin_menus.sql',810571147,'root','2026-10-11 22:17:35',6,1),
+(13,'4','create wf node config','SQL','V4__create_wf_node_config.sql',479091283,'root','2026-10-11 22:17:35',3,1),
+(14,'5','create wf category','SQL','V5__create_wf_category.sql',1723544693,'root','2026-10-11 22:17:35',3,1),
+(15,'6','create wf process draft','SQL','V6__create_wf_process_draft.sql',664068881,'root','2026-10-11 22:17:35',1,1),
+(16,'7','add process management menus','SQL','V7__add_process_management_menus.sql',-2053080919,'root','2026-10-11 22:17:35',2,1),
+(17,'8','add last deployed at','SQL','V8__add_last_deployed_at.sql',1003492481,'root','2026-10-11 22:17:35',7,1),
+(18,'9','fix version and deployed at','SQL','V9__fix_version_and_deployed_at.sql',717164960,'root','2026-10-11 22:17:35',0,1),
+(19,'11','add category menu','SQL','V11__add_category_menu.sql',840182847,'root','2026-10-11 22:17:35',1,1),
+(20,'12','create form tables','SQL','V12__create_form_tables.sql',-1358903684,'root','2026-10-11 22:17:35',4,1),
+(21,'13','create wf task comment','SQL','V13__create_wf_task_comment.sql',-112966394,'root','2026-10-11 22:17:35',1,1),
+(22,'14','create wf task transfer','SQL','V14__create_wf_task_transfer.sql',726975210,'root','2026-10-11 22:17:35',0,1),
+(23,'15','add process category permissions','SQL','V15__add_process_category_permissions.sql',894892465,'root','2026-10-11 22:17:35',1,1),
+(24,'16','create wf task remind','SQL','V16__create_wf_task_remind.sql',1528080298,'root','2026-10-11 22:17:35',0,1),
+(25,'17','clear form def data','SQL','V17__clear_form_def_data.sql',-1322388170,'root','2026-10-11 22:17:35',1,1),
+(26,'18','add deployed config hash','SQL','V18__add_deployed_config_hash.sql',430291177,'root','2026-10-11 22:17:35',2,1),
+(27,'19','form def add type and column config','SQL','V19__form_def_add_type_and_column_config.sql',230383109,'root','2026-10-11 22:17:35',3,1),
+(28,'20','create wf page def','SQL','V20__create_wf_page_def.sql',333882923,'root','2026-10-11 22:17:35',4,1),
+(29,'21','merge form view menus','SQL','V21__merge_form_view_menus.sql',-522814584,'root','2026-10-11 22:17:35',2,1),
+(30,'22','add form id to data source','SQL','V22__add_form_id_to_data_source.sql',-1008722349,'root','2026-10-11 22:17:35',24,1),
+(31,'23','add page data source id','SQL','V23__add_page_data_source_id.sql',-492092031,'root','2026-10-11 22:17:35',4,1),
+(32,'24','create notification tables','SQL','V24__create_notification_tables.sql',1442754333,'root','2026-10-11 22:17:35',1,1),
+(33,'25','optimize retry index','SQL','V25__optimize_retry_index.sql',1850376939,'root','2026-10-11 22:17:35',1,1),
+(34,'26','add notification menus','SQL','V26__add_notification_menus.sql',2047030466,'root','2026-10-11 22:17:35',1,1),
+(35,'27','unify notification tenant type','SQL','V27__unify_notification_tenant_type.sql',1390673949,'root','2026-10-11 22:17:35',5,1),
+(36,'28','add message content type','SQL','V28__add_message_content_type.sql',-2141586872,'root','2026-10-11 22:17:35',1,1),
+(37,'29','add notification event definitions','SQL','V29__add_notification_event_definitions.sql',-103859050,'root','2026-10-11 22:17:35',4,1),
+(38,'30','add form def process key','SQL','V30__add_form_def_process_key.sql',2118263784,'root','2026-10-11 22:17:36',25,1),
+(39,'31','add source key unique','SQL','V31__add_source_key_unique.sql',260739803,'root','2026-10-11 22:17:36',1,1),
+(40,'32','seed workflow notification','SQL','V32__seed_workflow_notification.sql',2110666689,'root','2026-10-11 22:17:36',4,1),
+(41,'47','posts member group draft box','SQL','V47__posts_member_group_draft_box.sql',1622141536,'root','2026-10-11 22:17:36',3,1),
+(42,'48','node config uk version','SQL','V48__node_config_uk_version.sql',969157759,'root','2026-10-11 22:17:36',2,1),
+(43,'54','serial number','SQL','V54__serial_number.sql',1470816950,'root','2026-10-11 22:17:36',1,1),
+(44,'55','ai config menu','SQL','V55__ai_config_menu.sql',278095847,'root','2026-10-13 04:35:50',6,1),
+(45,'56','add module menu','SQL','V56__add_module_menu.sql',-1114703309,'root','2026-10-14 18:11:56',10,1),
+(46,'57','sys material','SQL','V57__sys_material.sql',725402937,'root','2026-10-20 04:07:09',9,1),
+(47,'58','menu dev center','SQL','V58__menu_dev_center.sql',1132222105,'root','2026-10-20 04:07:09',8,1),
+(48,'59','menu dev center order','SQL','V59__menu_dev_center_order.sql',1460111572,'root','2026-10-20 04:07:09',4,1),
+(49,'60','data scope','SQL','V60__data_scope.sql',504330733,'root','2026-10-21 03:07:19',6,1),
+(50,'61','row permission','SQL','V61__row_permission.sql',-56855114,'root','2026-10-21 03:07:19',4,1),
+(51,'62','row scope exemption','SQL','V62__row_scope_exemption.sql',-1170162866,'root','2026-10-21 03:07:19',2,1),
+(52,'63','row permission menu','SQL','V63__row_permission_menu.sql',-595049202,'root','2026-10-21 03:07:19',1,1),
+(53,'64','miniprogram client identity','SQL','V64__miniprogram_client_identity.sql',359359719,'root','2026-10-21 03:07:19',1,1);
+/*!40000 ALTER TABLE `flyway_schema_history` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_channel_config`
+--
+
+DROP TABLE IF EXISTS `msg_channel_config`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_channel_config` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') NOT NULL,
+  `config_key` varchar(64) NOT NULL,
+  `config_value` text DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `is_encrypted` bit(1) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKn88wqw1d54i7fcsdtd7wfi4l4` (`channel`,`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_channel_config`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_channel_config` WRITE;
+/*!40000 ALTER TABLE `msg_channel_config` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_channel_config` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_delivery_retry`
+--
+
+DROP TABLE IF EXISTS `msg_delivery_retry`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_delivery_retry` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') NOT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `last_error` text DEFAULT NULL,
+  `max_retry` int(11) NOT NULL,
+  `message_id` bigint(20) NOT NULL,
+  `next_retry_at` datetime(6) DEFAULT NULL,
+  `recipient_id` bigint(20) NOT NULL,
+  `retry_count` int(11) NOT NULL,
+  `status` enum('DELETED','FAILED','PENDING','READ','SENT') NOT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  `updated_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_recipient` (`recipient_id`),
+  KEY `idx_next_retry` (`next_retry_at`),
+  KEY `idx_retry_status_next` (`status`,`next_retry_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_delivery_retry`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_delivery_retry` WRITE;
+/*!40000 ALTER TABLE `msg_delivery_retry` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_delivery_retry` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_event_definition`
+--
+
+DROP TABLE IF EXISTS `msg_event_definition`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_event_definition` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `business_domain` varchar(64) DEFAULT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `created_by` varchar(64) NOT NULL,
+  `description` varchar(500) DEFAULT NULL,
+  `enabled` bit(1) NOT NULL,
+  `event_code` varchar(64) NOT NULL,
+  `event_name` varchar(128) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKolg4hnibtg7ilx604d443v28s` (`tenant_id`,`event_code`),
+  KEY `idx_event_tenant_enabled` (`tenant_id`,`enabled`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_event_definition`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_event_definition` WRITE;
+/*!40000 ALTER TABLE `msg_event_definition` DISABLE KEYS */;
+INSERT INTO `msg_event_definition` VALUES
+(1,'WORKFLOW','2026-10-11 22:17:36.000000','system','Áî®Êà∑‰ªªÂä°ÂàÜÈÖçÁªôÂäûÁêÜ‰∫∫Êó∂Êé®ÈÄÅÂæÖÂäûÈÄöÁü•',0x01,'WF_TASK_ASSIGNED','Â∑•‰ΩúÊµÅ‰ªªÂä°ÂæÖÂäû','default','2026-10-11 22:17:36.000000',NULL),
+(2,'WORKFLOW','2026-10-11 22:17:36.000000','system','ÊµÅÁ®ãÂÆû‰æãÂÖ®ÈÉ®ÂÆ°ÊâπÂÆåÊàêÊó∂ÈÄöÁü•ÂèëËµ∑‰∫∫',0x01,'WF_PROCESS_FINISHED','Â∑•‰ΩúÊµÅÂäûÁªìÈÄöÁü•','default','2026-10-11 22:17:36.000000',NULL),
+(3,'WORKFLOW','2026-10-11 22:17:36.000000','system','ÂèëËµ∑‰∫∫ÂØπÂæÖÂäû‰ªªÂä°ÂèëËµ∑ÂÇ¨ÂäûÊó∂ÈÄöÁü•ÂäûÁêÜ‰∫∫',0x01,'WF_TASK_REMINDED','Â∑•‰ΩúÊµÅÂÇ¨ÂäûÈÄöÁü•','default','2026-10-11 22:17:36.000000',NULL);
+/*!40000 ALTER TABLE `msg_event_definition` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_message`
+--
+
+DROP TABLE IF EXISTS `msg_message`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_message` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `category` enum('APPROVAL','NOTIFICATION','SYSTEM','TASK','WORKFLOW') DEFAULT NULL,
+  `content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`content`)),
+  `content_type` enum('MARKDOWN','TEXT') DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `event_code` varchar(64) DEFAULT NULL,
+  `link_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`link_json`)),
+  `message_type` enum('PRIVATE','PUBLIC','SYSTEM') DEFAULT NULL,
+  `priority` enum('HIGH','LOW','NORMAL','URGENT') DEFAULT NULL,
+  `sender_id` bigint(20) NOT NULL,
+  `sender_type` varchar(32) NOT NULL,
+  `status` enum('DELETED','FAILED','PENDING','READ','SENT') DEFAULT NULL,
+  `template_code` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant` (`tenant_id`),
+  KEY `idx_template` (`template_code`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_message`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_message` WRITE;
+/*!40000 ALTER TABLE `msg_message` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_message` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_recipient`
+--
+
+DROP TABLE IF EXISTS `msg_recipient`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_recipient` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') NOT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `message_id` bigint(20) NOT NULL,
+  `nickname` varchar(64) DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `sent_at` datetime(6) DEFAULT NULL,
+  `status` enum('DELIVERED','FAILED','PENDING','READ','SENT') NOT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  `user_id` bigint(20) NOT NULL,
+  `username` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_message` (`message_id`),
+  KEY `idx_user` (`user_id`),
+  KEY `idx_channel` (`channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_recipient`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_recipient` WRITE;
+/*!40000 ALTER TABLE `msg_recipient` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_recipient` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_subscription_rule`
+--
+
+DROP TABLE IF EXISTS `msg_subscription_rule`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_subscription_rule` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `action` enum('ALLOW','DENY','FORCE') NOT NULL,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') NOT NULL,
+  `condition_expr` text DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(64) DEFAULT NULL,
+  `enable` bit(1) NOT NULL,
+  `event_code` varchar(64) NOT NULL,
+  `priority` enum('HIGH','LOW','NORMAL','URGENT') DEFAULT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  PRIMARY KEY (`id`),
+  KEY `idx_event_channel` (`event_code`,`channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_subscription_rule`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_subscription_rule` WRITE;
+/*!40000 ALTER TABLE `msg_subscription_rule` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_subscription_rule` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_template`
+--
+
+DROP TABLE IF EXISTS `msg_template`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_template` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `category` enum('APPROVAL','NOTIFICATION','SYSTEM','TASK','WORKFLOW') DEFAULT NULL,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') DEFAULT NULL,
+  `content` text DEFAULT NULL,
+  `content_type` enum('MARKDOWN','TEXT') DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `enabled` bit(1) NOT NULL,
+  `event_code` varchar(64) DEFAULT NULL,
+  `is_system` bit(1) NOT NULL,
+  `name` varchar(128) NOT NULL,
+  `priority` enum('HIGH','LOW','NORMAL','URGENT') DEFAULT NULL,
+  `template_code` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  `title` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tenant_template` (`tenant_id`,`template_code`),
+  KEY `idx_channel` (`channel`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_template`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_template` WRITE;
+/*!40000 ALTER TABLE `msg_template` DISABLE KEYS */;
+INSERT INTO `msg_template` VALUES
+(1,'WORKFLOW','IN_APP','ÊµÅÁ®ã„Äå${processName}„ÄçÂ∑≤ÊµÅËΩ¨Ëá≥ËäÇÁÇπ„Äå${taskName}„ÄçÔºåÂèëËµ∑‰∫∫Ôºö${initiatorName}ÔºåËØ∑ÂèäÊó∂Â§ÑÁêÜ„ÄÇ','TEXT','2026-10-11 22:17:36.000000',0x01,NULL,0x01,'Â∑•‰ΩúÊµÅ-‰ªªÂä°ÂæÖÂäûÈÄöÁü•','NORMAL','TPL_WF_TASK_ASSIGNED','default','ÊÇ®ÊúâÊñ∞ÁöÑÂæÖÂäû‰ªªÂä°Ôºö${taskName}'),
+(2,'WORKFLOW','IN_APP','ÊÇ®ÂèëËµ∑ÁöÑÊµÅÁ®ã„Äå${processName}„ÄçÔºàÂçïÂè∑Ôºö${businessKey}ÔºâÂ∑≤ÂÖ®ÈÉ®ÂÆ°ÊâπÂÆåÊàê„ÄÇ','TEXT','2026-10-11 22:17:36.000000',0x01,NULL,0x01,'Â∑•‰ΩúÊµÅ-ÂäûÁªìÈÄöÁü•','NORMAL','TPL_WF_PROCESS_FINISHED','default','ÊÇ®ÁöÑÊµÅÁ®ã„Äå${processName}„ÄçÂ∑≤ÂäûÁªì'),
+(3,'WORKFLOW','IN_APP','${senderName} ÂÇ¨‰øÉÊÇ®Â∞ΩÂø´Â§ÑÁêÜÊµÅÁ®ã„Äå${processName}„Äç‰∏≠ÁöÑ‰ªªÂä°„Äå${taskName}„Äç„ÄÇ','TEXT','2026-10-11 22:17:36.000000',0x01,NULL,0x01,'Â∑•‰ΩúÊµÅ-ÂÇ¨ÂäûÈÄöÁü•','NORMAL','TPL_WF_TASK_REMINDED','default','ÂÇ¨ÂäûÊèêÈÜíÔºö${taskName}');
+/*!40000 ALTER TABLE `msg_template` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `msg_user_subscription`
+--
+
+DROP TABLE IF EXISTS `msg_user_subscription`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `msg_user_subscription` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `channel` enum('APP','IN_APP','SMS','WECHAT_MINIPROGRAM','WECHAT_WORK') NOT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `subscribed` bit(1) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL COMMENT 'ÁßüÊà∑ID',
+  `updated_at` datetime(6) DEFAULT NULL,
+  `user_id` bigint(20) NOT NULL,
+  `username` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKsb3us05nvffs56bh1xr5uxjvu` (`tenant_id`,`user_id`,`channel`),
+  KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `msg_user_subscription`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `msg_user_subscription` WRITE;
+/*!40000 ALTER TABLE `msg_user_subscription` DISABLE KEYS */;
+/*!40000 ALTER TABLE `msg_user_subscription` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_ai_config`
+--
+
+DROP TABLE IF EXISTS `sys_ai_config`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_ai_config` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `api_key` varchar(512) DEFAULT NULL,
+  `base_url` varchar(512) NOT NULL,
+  `connect_timeout_ms` int(11) NOT NULL,
+  `enabled` bit(1) NOT NULL,
+  `max_tokens` int(11) DEFAULT NULL,
+  `model` varchar(128) NOT NULL,
+  `read_timeout_ms` int(11) NOT NULL,
+  `temperature` double DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_ai_config`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_ai_config` WRITE;
+/*!40000 ALTER TABLE `sys_ai_config` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sys_ai_config` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_attachment`
+--
+
+DROP TABLE IF EXISTS `sys_attachment`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_attachment` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `file_name` varchar(500) NOT NULL COMMENT 'ÂéüÂßãÊñá‰ª∂ÂêçÔºàÂ±ïÁ§∫Áî®Ôºâ',
+  `stored_name` varchar(128) NOT NULL COMMENT 'Â≠òÂÇ®Êñá‰ª∂ÂêçÔºàuuid.extÔºåÊúçÂä°Á´ØÁîüÊàêÔºâ',
+  `content_type` varchar(255) DEFAULT NULL COMMENT 'MIME Á±ªÂûã',
+  `file_size` bigint(20) NOT NULL DEFAULT 0 COMMENT 'Êñá‰ª∂Â≠óËäÇÊï∞',
+  `storage_path` varchar(500) NOT NULL COMMENT 'Áõ∏ÂØπ storage-path ÁöÑÂ≠êË∑ØÂæÑÔºàyyyy/MM/uuid.extÔºâ',
+  `biz_type` varchar(50) DEFAULT NULL COMMENT '‰∏öÂä°ÂΩíÁ±ªÔºàÈ¢ÑÁïôÔºöform/page/...Ôºâ',
+  `biz_ref` varchar(64) DEFAULT NULL COMMENT '‰∏öÂä°ÂºïÁî®Ê†áËØÜÔºàÈ¢ÑÁïôÔºâ',
+  `is_deleted` int(11) NOT NULL DEFAULT 0,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `img_width` int(11) DEFAULT NULL COMMENT 'ÂõæÁâáÂÆΩÂ∫¶ pxÔºà‰ªÖ upload-image ‰∏î‰ΩçÂõæËß£Á†ÅÊàêÂäüÊó∂ÊúâÂÄºÔºâ',
+  `img_height` int(11) DEFAULT NULL COMMENT 'ÂõæÁâáÈ´òÂ∫¶ pxÔºàÂêå‰∏äÔºâ',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_attachment_stored_name` (`stored_name`),
+  KEY `idx_sys_attachment_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Á≥ªÁªüÁªÑ‰ª∂¬∑ÈôÑ‰ª∂ÂÖÉÊï∞ÊçÆÔºàTask 146Ôºâ';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_attachment`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_attachment` WRITE;
+/*!40000 ALTER TABLE `sys_attachment` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sys_attachment` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_dict_data`
+--
+
+DROP TABLE IF EXISTS `sys_dict_data`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_dict_data` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `dict_code` varchar(50) NOT NULL,
+  `label` varchar(100) NOT NULL,
+  `sort_order` int(11) DEFAULT NULL,
+  `status` int(11) NOT NULL,
+  `value` varchar(100) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9008 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_dict_data`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_dict_data` WRITE;
+/*!40000 ALTER TABLE `sys_dict_data` DISABLE KEYS */;
+INSERT INTO `sys_dict_data` VALUES
+(9001,'2026-10-11 14:09:18.247661',NULL,0,'2026-10-11 14:09:18.247677',NULL,'customer_level','ÈáçË¶ÅÂÆ¢Êà∑',1,1,'A'),
+(9002,'2026-10-11 14:09:18.268103',NULL,0,'2026-10-11 14:09:18.268114',NULL,'customer_level','ÊôÆÈÄöÂÆ¢Êà∑',2,1,'B'),
+(9003,'2026-10-11 14:09:18.310523',NULL,0,'2026-10-11 14:09:18.310536',NULL,'customer_level','ÊΩúÂú®ÂÆ¢Êà∑',3,1,'C'),
+(9004,'2026-10-11 14:15:15.206038',NULL,0,'2026-10-11 14:15:15.206051',NULL,'service_type','ÂÆâË£ÖË∞ÉËØï',0,1,'install'),
+(9005,'2026-10-11 14:15:15.218800',NULL,0,'2026-10-11 14:15:15.218826',NULL,'service_type','ÂÆöÊúüÂ∑°Ê£Ä',1,1,'patrol'),
+(9006,'2026-10-11 14:15:15.237576',NULL,0,'2026-10-11 14:15:15.237587',NULL,'service_type','ÊïÖÈöúÁª¥‰øÆ',2,1,'repair'),
+(9007,'2026-10-11 14:15:15.247042',NULL,0,'2026-10-11 14:15:15.247053',NULL,'service_type','ÂüπËÆ≠ÊîØÊåÅ',3,1,'training');
+/*!40000 ALTER TABLE `sys_dict_data` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_dict_type`
+--
+
+DROP TABLE IF EXISTS `sys_dict_type`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_dict_type` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `dict_code` varchar(50) NOT NULL,
+  `dict_name` varchar(100) NOT NULL,
+  `remark` varchar(255) DEFAULT NULL,
+  `status` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKn09exsucyqm2v79fwvep1wtn9` (`dict_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=9003 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_dict_type`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_dict_type` WRITE;
+/*!40000 ALTER TABLE `sys_dict_type` DISABLE KEYS */;
+INSERT INTO `sys_dict_type` VALUES
+(9001,'2026-10-11 14:09:18.187864',NULL,0,'2026-10-11 14:09:18.187879',NULL,'customer_level','ÂÆ¢Êà∑Á≠âÁ∫ß','ÁªÑ‰ª∂ÊºîÁ§∫-ÂÆ¢Êà∑Á≠âÁ∫ßÂ≠óÂÖ∏',1),
+(9002,'2026-10-11 14:15:15.185083',NULL,0,'2026-10-11 14:15:15.185097',NULL,'service_type','ÊúçÂä°Á±ªÂûã',NULL,1);
+/*!40000 ALTER TABLE `sys_dict_type` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_material`
+--
+
+DROP TABLE IF EXISTS `sys_material`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_material` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `file_size` bigint(20) NOT NULL,
+  `manifest_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`manifest_json`)),
+  `material_key` varchar(100) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `sdk_version` varchar(20) NOT NULL,
+  `status` int(11) NOT NULL,
+  `storage_path` varchar(500) NOT NULL,
+  `stored_name` varchar(128) NOT NULL,
+  `type` varchar(20) NOT NULL,
+  `version` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_material_key` (`material_key`),
+  KEY `idx_sys_material_type` (`type`),
+  KEY `idx_sys_material_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_material`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_material` WRITE;
+/*!40000 ALTER TABLE `sys_material` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sys_material` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_member_group`
+--
+
+DROP TABLE IF EXISTS `sys_member_group`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_member_group` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `group_name` varchar(64) NOT NULL COMMENT 'ÊàêÂëòÁªÑÂêçÁß∞',
+  `description` varchar(255) DEFAULT NULL COMMENT 'ËØ¥Êòé',
+  `status` int(11) NOT NULL DEFAULT 1 COMMENT '1 ÂêØÁî® / 0 ÂÅúÁî®',
+  `is_deleted` int(11) NOT NULL DEFAULT 0,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_member_group_name` (`group_name`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ÊàêÂëòÁªÑ‰∏ªÊï∞ÊçÆ';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_member_group`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_member_group` WRITE;
+/*!40000 ALTER TABLE `sys_member_group` DISABLE KEYS */;
+INSERT INTO `sys_member_group` VALUES
+(1,'È°πÁõÆÁÆ°ÁêÜÁªÑ','È°πÁõÆÁ´ãÈ°π„ÄÅËØÑÂÆ°„ÄÅÈ™åÊî∂Áõ∏ÂÖ≥ÊµÅÁ®ãÁöÑÂÆ°ÊâπÂçèÂêåÁªÑ',1,0,'system','2026-10-09 00:05:46.268000',NULL,'2026-10-09 00:05:46.268000'),
+(2,'ËøêÁª¥ÂÄºÁè≠ÁªÑ','Á≥ªÁªüÂÄºÁè≠‰∏éÂëäË≠¶Â§ÑÁêÜÈÄöÁü•ÁªÑ',1,0,'system','2026-10-09 00:05:46.269000',NULL,'2026-10-09 00:05:46.269000'),
+(3,'ÂÆ¢Êà∑','Â∞èÁ®ãÂ∫èÂÆ¢Êà∑Á´ØÁî®Êà∑Êù•Ê∫êÊ†áËÆ∞ÔºàP0.4Ôºâ',1,0,'system','2026-10-21 03:07:19.148000',NULL,'2026-10-21 03:07:19.148000');
+/*!40000 ALTER TABLE `sys_member_group` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_member_group_member`
+--
+
+DROP TABLE IF EXISTS `sys_member_group_member`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_member_group_member` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `group_id` bigint(20) NOT NULL COMMENT 'ÊàêÂëòÁªÑ id',
+  `user_id` bigint(20) NOT NULL COMMENT 'Áî®Êà∑ id',
+  `is_deleted` int(11) NOT NULL DEFAULT 0,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_member_group_user` (`group_id`,`user_id`),
+  KEY `idx_member_group_user` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ÊàêÂëòÁªÑÊàêÂëòÂÖ≥Á≥ªÔºàÊâãÂä®Ê∑ªÂä†ÔºåËßÑÂàôÊú∫Âà∂Â∑≤ÁßªÈô§Ôºâ';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_member_group_member`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_member_group_member` WRITE;
+/*!40000 ALTER TABLE `sys_member_group_member` DISABLE KEYS */;
+INSERT INTO `sys_member_group_member` VALUES
+(1,1,1,0,'system','2026-10-09 00:05:46.269000','2026-10-09 00:05:46.269000',NULL),
+(2,1,2,0,'system','2026-10-09 00:05:46.269000','2026-10-09 00:05:46.269000',NULL);
+/*!40000 ALTER TABLE `sys_member_group_member` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_menu`
+--
+
+DROP TABLE IF EXISTS `sys_menu`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_menu` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `component` varchar(255) DEFAULT NULL,
+  `icon` varchar(50) DEFAULT NULL,
+  `menu_name` varchar(100) NOT NULL,
+  `menu_type` int(11) NOT NULL,
+  `parent_id` bigint(20) DEFAULT NULL,
+  `path` varchar(200) DEFAULT NULL,
+  `permission` varchar(100) DEFAULT NULL,
+  `sort_order` int(11) DEFAULT NULL,
+  `status` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9320 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_menu`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_menu` WRITE;
+/*!40000 ALTER TABLE `sys_menu` DISABLE KEYS */;
+INSERT INTO `sys_menu` VALUES
+(1,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.383000',NULL,NULL,'Setting','Á≥ªÁªüÁÆ°ÁêÜ',0,NULL,'/system',NULL,3,1),
+(2,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/user/index','User','Áî®Êà∑ÁÆ°ÁêÜ',1,1,'/system/user','system:user:list',1,1),
+(3,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/role/index','UserFilled','ËßíËâ≤ÁÆ°ÁêÜ',1,1,'/system/role','system:role:list',2,1),
+(4,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.398000',NULL,'system/menu/index','Menu','ËèúÂçïÁÆ°ÁêÜ',1,180,'/system/menu','system:menu:list',1,1),
+(5,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/org/index','Organization','ÁªÑÁªáÊú∫ÊûÑ',1,1,'/system/org','system:org:list',3,1),
+(6,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/dict/index','List','Â≠óÂÖ∏ÁÆ°ÁêÜ',1,1,'/system/dict','system:dict:list',4,1),
+(7,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'dashboard/index','HomeFilled','È¶ñÈ°µ',1,NULL,'/dashboard',NULL,0,1),
+(8,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Áî®Êà∑Êü•ËØ¢',2,2,NULL,'system:user:query',1,1),
+(9,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Áî®Êà∑Êñ∞Â¢û',2,2,NULL,'system:user:create',2,1),
+(10,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Áî®Êà∑‰øÆÊîπ',2,2,NULL,'system:user:update',3,1),
+(11,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Áî®Êà∑Âà†Èô§',2,2,NULL,'system:user:delete',4,1),
+(12,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËßíËâ≤Êü•ËØ¢',2,3,NULL,'system:role:query',1,1),
+(13,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËßíËâ≤Êñ∞Â¢û',2,3,NULL,'system:role:create',2,1),
+(14,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËßíËâ≤‰øÆÊîπ',2,3,NULL,'system:role:update',3,1),
+(15,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËßíËâ≤Âà†Èô§',2,3,NULL,'system:role:delete',4,1),
+(16,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËèúÂçïÊü•ËØ¢',2,4,NULL,'system:menu:query',1,1),
+(17,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËèúÂçïÊñ∞Â¢û',2,4,NULL,'system:menu:create',2,1),
+(18,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËèúÂçï‰øÆÊîπ',2,4,NULL,'system:menu:update',3,1),
+(19,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËèúÂçïÂà†Èô§',2,4,NULL,'system:menu:delete',4,1),
+(20,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Êú∫ÊûÑÊü•ËØ¢',2,5,NULL,'system:org:query',1,1),
+(21,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Êú∫ÊûÑÊñ∞Â¢û',2,5,NULL,'system:org:create',2,1),
+(22,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Êú∫ÊûÑ‰øÆÊîπ',2,5,NULL,'system:org:update',3,1),
+(23,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Êú∫ÊûÑÂà†Èô§',2,5,NULL,'system:org:delete',4,1),
+(24,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Â≠óÂÖ∏Êü•ËØ¢',2,6,NULL,'system:dict:query',1,1),
+(25,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Â≠óÂÖ∏Êñ∞Â¢û',2,6,NULL,'system:dict:create',2,1),
+(26,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Â≠óÂÖ∏‰øÆÊîπ',2,6,NULL,'system:dict:update',3,1),
+(27,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Â≠óÂÖ∏Âà†Èô§',2,6,NULL,'system:dict:delete',4,1),
+(100,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.383000',NULL,NULL,'Operation','ÊµÅÁ®ãÁÆ°ÁêÜ',0,NULL,'/process',NULL,4,1),
+(101,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'process/ProcessListPage','Document','ÊµÅÁ®ãÂÆö‰πâ',1,100,'/process/definition','process:definition:list',1,1),
+(102,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'process/ProcessCenterPage','Files','ÊµÅÁ®ã‰∏≠ÂøÉ',1,100,'/process/center','process:center:list',2,1),
+(103,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-11 22:17:36.024402',NULL,'process/ProcessTodoPage','BellFilled','ÂæÖÂäûÂ§ÑÁêÜ',1,100,'/process/todo','process:todo:list',4,1),
+(104,'2026-10-11 22:17:36.024142',NULL,0,'2026-10-11 22:17:36.024142',NULL,'process/ProcessDraftBoxPage','Collection','ËçâÁ®øÁÆ±',1,100,'/process/drafts','process:draft:list',3,1),
+(110,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÊµÅÁ®ãÂàõÂª∫',2,101,NULL,'process:definition:create',1,1),
+(111,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÊµÅÁ®ãÈÉ®ÁΩ≤',2,101,NULL,'process:definition:deploy',2,1),
+(112,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÊµÅÁ®ãÂà†Èô§',2,101,NULL,'process:definition:delete',3,1),
+(113,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÂàÜÁ±ªÂàõÂª∫',2,104,NULL,'process:category:create',1,1),
+(114,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÂàÜÁ±ªÁºñËæë',2,104,NULL,'process:category:update',2,1),
+(115,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÂàÜÁ±ªÂà†Èô§',2,104,NULL,'process:category:delete',3,1),
+(120,'2026-09-11 10:30:10.000000',NULL,1,'2026-10-11 22:17:35.000000',NULL,NULL,'Tickets','Ë°®ÂçïÁÆ°ÁêÜ',0,NULL,'/form',NULL,3,0),
+(121,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.398000',NULL,'form/FormListPage','Document','Ë°®ÂçïÂàóË°®',1,180,'/form','form:list',2,1),
+(130,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ë°®ÂçïÂàõÂª∫',2,121,NULL,'form:create',1,1),
+(131,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ë°®ÂçïÁºñËæë',2,121,NULL,'form:edit',2,1),
+(132,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ë°®ÂçïÂèëÂ∏É',2,121,NULL,'form:publish',3,1),
+(133,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ë°®ÂçïÂà†Èô§',2,121,NULL,'form:delete',4,1),
+(140,'2026-09-11 10:30:10.000000',NULL,1,'2026-10-11 22:17:35.000000',NULL,NULL,'Grid','Êü•ËØ¢ÁïåÈù¢ÁÆ°ÁêÜ',0,NULL,'/page',NULL,4,0),
+(141,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.398000',NULL,'page/PageListPage','Document','È°µÈù¢ÂàóË°®',1,180,'/page','page:list',3,1),
+(142,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.398000',NULL,'dataSource/DataSourceListPage','Connection','Êï∞ÊçÆÊ∫êÁÆ°ÁêÜ',1,180,'/data-source/list','data-source:list',4,1),
+(150,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'È°µÈù¢ÂàõÂª∫',2,141,NULL,'page:create',1,1),
+(151,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'È°µÈù¢ÁºñËæë',2,141,NULL,'page:edit',2,1),
+(152,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'È°µÈù¢ÂèëÂ∏É',2,141,NULL,'page:publish',3,1),
+(153,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'È°µÈù¢Âà†Èô§',2,141,NULL,'page:delete',4,1),
+(154,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Êï∞ÊçÆÊ∫êÁÆ°ÁêÜ',2,142,NULL,'data-source:manage',1,1),
+(160,'2026-09-11 10:30:10.000000',NULL,1,'2026-10-20 04:07:09.384000',NULL,NULL,'Grid','Ë°®ÂçïËßÜÂõæÁÆ°ÁêÜ',0,NULL,'/form',NULL,3,1),
+(170,'2026-10-09 00:05:46.301000',NULL,1,'2026-10-20 04:07:09.384000',NULL,NULL,'Share','ÈÄªËæëÁºñÊéí',0,NULL,'/logic',NULL,4,1),
+(171,'2026-10-09 00:05:46.302000',NULL,0,'2026-10-20 04:07:09.399000',NULL,'logicflow/LogicFlowListPage','Cpu','ÈÄªËæëÊµÅ',1,180,'/logic-flow','logicflow:list',5,1),
+(172,'2026-10-14 18:11:56.273000',NULL,0,'2026-10-20 04:07:09.399000',NULL,'module/ModuleListPage','Box','Ê®°ÂùóÁÆ°ÁêÜ',1,180,'/module','module:manage',6,1),
+(180,'2026-10-20 04:07:09.378000',NULL,0,'2026-10-20 04:07:09.383000',NULL,NULL,'Tools','ÂºÄÂèëÁÆ°ÁêÜ',0,NULL,'/dev',NULL,1,1),
+(190,'2026-10-20 04:07:09.379000',NULL,0,'2026-10-20 04:07:09.383000',NULL,NULL,'Notebook','Ê†∑‰æãÈ°µÈù¢',0,NULL,'/samples',NULL,2,1),
+(250,'2026-09-11 10:30:10.000000',NULL,0,'2026-10-20 04:07:09.384000',NULL,NULL,'Bell','Ê∂àÊÅØÁÆ°ÁêÜ',0,NULL,'/messages',NULL,5,1),
+(251,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/MessageCenter','Message','Ê∂àÊÅØ‰∏≠ÂøÉ',1,250,'/messages','notification:message:list',1,1),
+(252,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/TemplateList','Document','Ê®°ÊùøÁÆ°ÁêÜ',1,250,'/messages/templates','notification:template:list',2,1),
+(253,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/ChannelConfig','Connection','Ê∏†ÈÅìÈÖçÁΩÆ',1,250,'/messages/channels','notification:channel:list',3,1),
+(254,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/SubscriptionRules','SetUp','ËÆ¢ÈòÖËßÑÂàô',1,250,'/messages/subscriptions','notification:subscription:list',4,1),
+(255,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/DeliveryLog','Tickets','ÂèëÈÄÅËÆ∞ÂΩï',1,250,'/messages/deliveries','notification:delivery:list',5,1),
+(256,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ê®°ÊùøÁÆ°ÁêÜ',2,252,NULL,'notification:template:manage',1,1),
+(257,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'Ê∏†ÈÅìÈÖçÁΩÆ',2,253,NULL,'notification:channel:manage',1,1),
+(258,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ËÆ¢ÈòÖËßÑÂàô',2,254,NULL,'notification:subscription:manage',1,1),
+(259,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÂèëÈÄÅËÆ∞ÂΩïÈáçÂèë',2,255,NULL,'notification:delivery:retry',1,1),
+(260,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/AnnouncementList','Notification','ÂÖ¨ÂëäÁÆ°ÁêÜ',1,250,'/messages/announcements','notification:announcement:list',6,1),
+(261,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'modules/notification/views/admin/EventDefinitionList','Operation','‰∫ã‰ª∂ÁÆ°ÁêÜ',1,250,'/messages/events','notification:event:list',7,1),
+(262,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'ÂÖ¨ÂëäÁÆ°ÁêÜ',2,260,NULL,'notification:announcement:manage',1,1),
+(263,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,NULL,'‰∫ã‰ª∂ÁÆ°ÁêÜ',2,261,NULL,'notification:event:manage',1,1),
+(300,'2026-10-09 00:05:46.249000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/post/PostPage','User','Â≤ó‰ΩçÁÆ°ÁêÜ',1,1,'/system/post','system:post:list',5,1),
+(301,'2026-10-11 22:17:36.024653',NULL,0,'2026-10-11 22:17:36.024653',NULL,NULL,NULL,'Â≤ó‰ΩçÊü•ËØ¢',2,300,NULL,'system:post:query',1,1),
+(302,'2026-10-11 22:17:36.024653',NULL,0,'2026-10-11 22:17:36.024653',NULL,NULL,NULL,'Â≤ó‰ΩçÊñ∞Â¢û',2,300,NULL,'system:post:create',2,1),
+(303,'2026-10-11 22:17:36.024653',NULL,0,'2026-10-11 22:17:36.024653',NULL,NULL,NULL,'Â≤ó‰Ωç‰øÆÊîπ',2,300,NULL,'system:post:update',3,1),
+(304,'2026-09-15 18:42:37.587603',NULL,0,'2026-09-15 18:42:37.587603',NULL,'page/PageRenderer',NULL,'ÊºîÁ§∫È°µÈù¢',1,160,'/page/test_page','page:read:test_page',0,1),
+(305,'2026-10-09 00:05:46.250000',NULL,0,'2026-10-20 04:07:09.381000',NULL,'system/member-group/MemberGroupPage','Connection','ÊàêÂëòÁªÑÁÆ°ÁêÜ',1,1,'/system/member-group','system:member-group:list',6,1),
+(306,'2026-10-03 01:29:54.395845',NULL,0,'2026-10-03 01:29:54.395861',NULL,'page/PageRenderer',NULL,'‰∏ªÈ°µ‰ª™Ë°®Áõò',1,NULL,'/page/dashboard','page:read:dashboard',0,1),
+(312,'2026-10-09 00:05:46.270000',NULL,0,'2026-10-09 00:05:46.270000',NULL,NULL,NULL,'ÊàêÂëòÁªÑÊü•ËØ¢',2,305,NULL,'system:member-group:query',1,1),
+(313,'2026-10-09 00:05:46.270000',NULL,0,'2026-10-09 00:05:46.270000',NULL,NULL,NULL,'ÊàêÂëòÁªÑÊñ∞Â¢û',2,305,NULL,'system:member-group:create',2,1),
+(314,'2026-10-09 00:05:46.270000',NULL,0,'2026-10-09 00:05:46.270000',NULL,NULL,NULL,'ÊàêÂëòÁªÑ‰øÆÊîπ',2,305,NULL,'system:member-group:update',3,1),
+(315,'2026-10-09 00:05:46.271000',NULL,0,'2026-10-09 00:05:46.271000',NULL,NULL,NULL,'ÊàêÂëòÁªÑÂà†Èô§',2,305,NULL,'system:member-group:delete',4,1),
+(316,'2026-10-09 00:05:46.271000',NULL,0,'2026-10-09 00:05:46.271000',NULL,NULL,NULL,'ÊàêÂëòÁª¥Êä§',2,305,NULL,'system:member-group:member',5,1),
+(320,'2026-10-13 04:35:50.662000',NULL,0,'2026-10-20 04:07:09.382000',NULL,'system/ai-config/AiConfigPage','Cpu','Ê®°ÂûãÈÖçÁΩÆ',1,1,'/system/ai-config','system:aiconfig:list',7,1),
+(321,'2026-10-20 04:07:09.328000',NULL,0,'2026-10-20 04:07:09.399000',NULL,'material/MaterialListPage','Files','Áâ©ÊñôÁÆ°ÁêÜ',1,180,'/material','material:manage',7,1),
+(322,'2026-10-21 03:07:19.136000',NULL,0,'2026-10-21 03:07:19.136000',NULL,'system/row-permission/RowPermissionPage','Lock','Êï∞ÊçÆÊùÉÈôê',1,1,'/system/row-permission','system:rowpermission:list',8,1),
+(9319,'2026-10-11 15:19:25.498182',NULL,0,'2026-10-20 04:07:09.381000',NULL,'page/PageRenderer',NULL,'ÁªÑ‰ª∂ÊºîÁ§∫¬∑Êï∞ÊçÆËØ¶ÊÉÖ‰∏éÊ≠•È™§Êù°',1,190,'/page/page_detail_steps_demo','page:read:page_detail_steps_demo',1,1);
+/*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_organization`
+--
+
+DROP TABLE IF EXISTS `sys_organization`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_organization` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `org_code` varchar(50) NOT NULL,
+  `org_name` varchar(100) NOT NULL,
+  `parent_id` bigint(20) DEFAULT NULL,
+  `sort_order` int(11) DEFAULT NULL,
+  `status` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UK1dm1ss9gn66mtn1m0dyb9bsyp` (`org_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_organization`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_organization` WRITE;
+/*!40000 ALTER TABLE `sys_organization` DISABLE KEYS */;
+INSERT INTO `sys_organization` VALUES
+(1,'2026-09-11 14:56:10.024480',NULL,0,'2026-09-11 14:56:10.024480',NULL,'01','ÊÄªÂÖ¨Âè∏',NULL,0,1),
+(2,'2026-09-11 14:56:39.609039',NULL,0,'2026-09-11 14:56:39.609039',NULL,'0101','Ê≠¶Ê±âÂàÜÂÖ¨Âè∏',1,1,1),
+(3,'2026-09-11 14:57:09.187390',NULL,0,'2026-09-11 14:57:09.187390',NULL,'0102','Âåó‰∫¨ÂàÜÂÖ¨Âè∏',1,2,1),
+(4,'2026-09-11 14:57:40.732142',NULL,0,'2026-09-11 15:19:18.297269',NULL,'0103','Êµ∑ÂçóÂàÜÂÖ¨Âè∏',1,3,1);
+/*!40000 ALTER TABLE `sys_organization` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_post`
+--
+
+DROP TABLE IF EXISTS `sys_post`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_post` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `post_code` varchar(64) NOT NULL COMMENT 'Â≤ó‰ΩçÁºñÁ†ÅÔºàÂîØ‰∏ÄÔºâ',
+  `post_name` varchar(64) NOT NULL,
+  `description` varchar(255) DEFAULT NULL COMMENT 'ÊèèËø∞',
+  `sort_order` int(11) DEFAULT NULL COMMENT 'ÊéíÂ∫è',
+  `status` int(11) NOT NULL DEFAULT 1 COMMENT '1 ÂêØÁî® / 0 ÂÅúÁî®',
+  `is_deleted` int(11) NOT NULL DEFAULT 0,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_post_code` (`post_code`),
+  UNIQUE KEY `uk_sys_post_code` (`post_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Â≤ó‰Ωç‰∏ªÊï∞ÊçÆ';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_post`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_post` WRITE;
+/*!40000 ALTER TABLE `sys_post` DISABLE KEYS */;
+INSERT INTO `sys_post` VALUES
+(1,'GM','ÊÄªÁªèÁêÜ','ÂÖ¨Âè∏ÊÄªÁªèÁêÜÂ≤ó‰Ωç',1,1,0,NULL,'2026-10-09 00:05:46.246000',NULL,'2026-10-09 00:05:46.246000'),
+(2,'HR_MGR','‰∫∫‰∫ãÁªèÁêÜ','‰∫∫‰∫ãÈÉ®ÁªèÁêÜÂ≤ó‰Ωç',2,1,0,NULL,'2026-10-09 00:05:46.248000',NULL,'2026-10-09 00:05:46.248000');
+/*!40000 ALTER TABLE `sys_post` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_role`
+--
+
+DROP TABLE IF EXISTS `sys_role`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_role` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `role_code` varchar(50) NOT NULL,
+  `role_name` varchar(100) NOT NULL,
+  `status` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKjqdita2l45v2gglry7bp8kl1f` (`role_code`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_role`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_role` WRITE;
+/*!40000 ALTER TABLE `sys_role` DISABLE KEYS */;
+INSERT INTO `sys_role` VALUES
+(1,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'Á≥ªÁªüË∂ÖÁ∫ßÁÆ°ÁêÜÂëò','ROLE_ADMIN','Ë∂ÖÁ∫ßÁÆ°ÁêÜÂëò',1),
+(2,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,'Á≥ªÁªüÊôÆÈÄöÁî®Êà∑','ROLE_USER','ÊôÆÈÄöÁî®Êà∑',1),
+(3,'2026-10-21 03:07:19.148000',NULL,0,'2026-10-21 03:07:19.148000',NULL,'Â∞èÁ®ãÂ∫èÂÆ¢Êà∑Á´ØÁî®Êà∑ÔºõÊï∞ÊçÆÂèØËßÅËåÉÂõ¥Áî®Êï∞ÊçÆËåÉÂõ¥ÊåâÊàêÂëòÁªÑ/Êú¨‰∫∫Êî∂Á¥ß','ROLE_CUSTOMER','ÂÆ¢Êà∑',1);
+/*!40000 ALTER TABLE `sys_role` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_role_menu`
+--
+
+DROP TABLE IF EXISTS `sys_role_menu`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_role_menu` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `menu_id` bigint(20) NOT NULL,
+  `role_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=9118 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_role_menu`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_role_menu` WRITE;
+/*!40000 ALTER TABLE `sys_role_menu` DISABLE KEYS */;
+INSERT INTO `sys_role_menu` VALUES
+(1,1,1),
+(2,2,1),
+(3,3,1),
+(4,4,1),
+(5,5,1),
+(6,6,1),
+(7,7,1),
+(8,8,1),
+(9,9,1),
+(10,10,1),
+(11,11,1),
+(12,12,1),
+(13,13,1),
+(14,14,1),
+(15,15,1),
+(16,16,1),
+(17,17,1),
+(18,18,1),
+(19,19,1),
+(20,20,1),
+(21,21,1),
+(22,22,1),
+(23,23,1),
+(24,24,1),
+(25,25,1),
+(26,26,1),
+(27,27,1),
+(32,100,1),
+(33,101,1),
+(34,102,1),
+(35,103,1),
+(36,110,1),
+(37,111,1),
+(38,112,1),
+(39,120,1),
+(40,121,1),
+(41,130,1),
+(42,131,1),
+(43,132,1),
+(44,133,1),
+(46,113,1),
+(47,114,1),
+(48,115,1),
+(49,140,1),
+(50,141,1),
+(51,142,1),
+(52,150,1),
+(53,151,1),
+(54,152,1),
+(55,153,1),
+(56,154,1),
+(65,250,1),
+(66,251,1),
+(67,252,1),
+(68,253,1),
+(69,254,1),
+(70,255,1),
+(71,256,1),
+(72,257,1),
+(73,258,1),
+(74,259,1),
+(80,260,1),
+(81,261,1),
+(82,262,1),
+(83,263,1),
+(87,304,1),
+(89,300,1),
+(90,305,1),
+(91,312,1),
+(92,313,1),
+(93,314,1),
+(94,315,1),
+(95,316,1),
+(99,171,1),
+(100,306,1),
+(101,104,1),
+(102,301,1),
+(103,302,1),
+(104,303,1),
+(9110,9319,1),
+(9111,320,1),
+(9112,172,1),
+(9113,321,1),
+(9114,180,1),
+(9115,190,1),
+(9117,322,1);
+/*!40000 ALTER TABLE `sys_role_menu` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_user`
+--
+
+DROP TABLE IF EXISTS `sys_user`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_user` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `avatar` varchar(255) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `nickname` varchar(50) DEFAULT NULL,
+  `org_id` bigint(20) DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `status` int(11) NOT NULL,
+  `username` varchar(50) NOT NULL,
+  `post_id` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UK51bvuyvihefoh4kp5syh2jpi4` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_user`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_user` WRITE;
+/*!40000 ALTER TABLE `sys_user` DISABLE KEYS */;
+INSERT INTO `sys_user` VALUES
+(1,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,'admin@workflow.com','ÁÆ°ÁêÜÂëò',NULL,'$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2',NULL,1,'admin',NULL),
+(2,'2026-09-11 10:30:10.000000',NULL,0,'2026-09-11 10:30:10.000000',NULL,NULL,'test@workflow.com','ÊµãËØïÁî®Êà∑',NULL,'$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2',NULL,1,'test',NULL);
+/*!40000 ALTER TABLE `sys_user` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_user_openid`
+--
+
+DROP TABLE IF EXISTS `sys_user_openid`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_user_openid` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) DEFAULT NULL,
+  `created_by` varchar(50) DEFAULT NULL,
+  `is_deleted` int(11) NOT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  `updated_by` varchar(50) DEFAULT NULL,
+  `app_id` varchar(64) NOT NULL,
+  `openid` varchar(64) NOT NULL,
+  `unionid` varchar(64) DEFAULT NULL,
+  `user_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_openid_app_openid` (`app_id`,`openid`),
+  UNIQUE KEY `uk_user_openid_app_user` (`app_id`,`user_id`),
+  KEY `idx_user_openid_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_user_openid`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_user_openid` WRITE;
+/*!40000 ALTER TABLE `sys_user_openid` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sys_user_openid` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `sys_user_role`
+--
+
+DROP TABLE IF EXISTS `sys_user_role`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_user_role` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `role_id` bigint(20) NOT NULL,
+  `user_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `FKhh52n8vd4ny9ff4x9fb8v65qx` (`role_id`),
+  KEY `FKb40xxfch70f5qnyfw8yme1n1s` (`user_id`),
+  CONSTRAINT `FKb40xxfch70f5qnyfw8yme1n1s` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`),
+  CONSTRAINT `FKhh52n8vd4ny9ff4x9fb8v65qx` FOREIGN KEY (`role_id`) REFERENCES `sys_role` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_user_role`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_user_role` WRITE;
+/*!40000 ALTER TABLE `sys_user_role` DISABLE KEYS */;
+INSERT INTO `sys_user_role` VALUES
+(1,1,1),
+(2,2,2);
+/*!40000 ALTER TABLE `sys_user_role` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_ai_muf4tjek39`
+--
+
+DROP TABLE IF EXISTS `wf_biz_ai_muf4tjek39`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_ai_muf4tjek39` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `department` varchar(255) DEFAULT NULL,
+  `leave_type` varchar(255) DEFAULT NULL,
+  `start_date` datetime DEFAULT NULL,
+  `end_date` datetime DEFAULT NULL,
+  `reason` text DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_ai_muf4tjek39`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_ai_muf4tjek39` WRITE;
+/*!40000 ALTER TABLE `wf_biz_ai_muf4tjek39` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wf_biz_ai_muf4tjek39` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_ai_muf52ksu88`
+--
+
+DROP TABLE IF EXISTS `wf_biz_ai_muf52ksu88`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_ai_muf52ksu88` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `item_name` varchar(255) NOT NULL,
+  `quantity` int(11) NOT NULL,
+  `unit_price` int(11) NOT NULL,
+  `registration_date` date NOT NULL,
+  `remarks` text DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_ai_muf52ksu88`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_ai_muf52ksu88` WRITE;
+/*!40000 ALTER TABLE `wf_biz_ai_muf52ksu88` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wf_biz_ai_muf52ksu88` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_ai_muf58a5n38`
+--
+
+DROP TABLE IF EXISTS `wf_biz_ai_muf58a5n38`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_ai_muf58a5n38` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `applicant_name` varchar(255) NOT NULL,
+  `department` varchar(255) NOT NULL,
+  `reimbursement_type` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`reimbursement_type`)),
+  `details` text DEFAULT NULL,
+  `amount` int(11) NOT NULL,
+  `attachment` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `reimbursement_type_text` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_ai_muf58a5n38`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_ai_muf58a5n38` WRITE;
+/*!40000 ALTER TABLE `wf_biz_ai_muf58a5n38` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wf_biz_ai_muf58a5n38` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_bill_test`
+--
+
+DROP TABLE IF EXISTS `wf_biz_bill_test`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_bill_test` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `person_id` varchar(255) DEFAULT NULL,
+  `person_name` varchar(255) DEFAULT NULL,
+  `department` varchar(255) NOT NULL,
+  `position` varchar(255) NOT NULL,
+  `leave_start_date` date NOT NULL,
+  `leave_end_date` date NOT NULL,
+  `leave_type` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`leave_type`)),
+  `leave_type_text` varchar(255) DEFAULT NULL,
+  `leave_days` int(11) NOT NULL,
+  `leave_reason` text NOT NULL,
+  `contact_phone` varchar(255) NOT NULL,
+  `is_approved` varchar(255) NOT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_bill_test`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_bill_test` WRITE;
+/*!40000 ALTER TABLE `wf_biz_bill_test` DISABLE KEYS */;
+INSERT INTO `wf_biz_bill_test` VALUES
+('78459b7180f6a44e562616c0f741a907','default','1','admin','1','1','2026-09-25','2026-09-25','\"personal\"','‰∫ãÂÅá',1,'1','1','yes',1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_bill_test` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_cust_rel_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_cust_rel_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_cust_rel_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `Fyczmv3ks22dabc` varchar(255) DEFAULT NULL,
+  `Ffxemv3ksch9aec` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`Ffxemv3ksch9aec`)),
+  `Ffxemv3ksch9aec_text` varchar(255) DEFAULT NULL,
+  `Fzgimv3kskiaahc` varchar(255) DEFAULT NULL,
+  `Fqgomv3ksnqrakc` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_cust_rel_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_cust_rel_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_cust_rel_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_cust_rel_demo` VALUES
+('4813d6c853cb4e1ba392841dde2853e3','default','Âçé‰∏úÁü≥Âåñ','\"Â∑≤ÂÅúÁî®\"','Â∑≤ÂÅúÁî®','Âº†‰ºü','0512-66881234',3,NULL,NULL,'2026-10-11 08:59:33'),
+('c720b7cad0684725b5a6aeb445b66931','default','ÈïøÂÆâÁâ©ÊµÅ','\"Â∑≤ÂÅúÁî®\"','Â∑≤ÂÅúÁî®','ÊùéÂ®ú','029-87654321',1,NULL,NULL,NULL),
+('d482f21fe9944974ab64ef7391dd29e5','default','ÈÑÇÂ∞îÂ§öÊñØÁüø‰∏ö','\"Á≠πÂª∫‰∏≠\"','Á≠πÂª∫‰∏≠','ÁéãÂº∫','0477-1234567',1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_cust_rel_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_leave_apply_biz`
+--
+
+DROP TABLE IF EXISTS `wf_biz_leave_apply_biz`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_leave_apply_biz` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `leave_type` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`leave_type`)),
+  `leave_type_text` varchar(255) DEFAULT NULL,
+  `reason` varchar(255) DEFAULT NULL,
+  `user_id` varchar(255) DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_leave_apply_biz`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_leave_apply_biz` WRITE;
+/*!40000 ALTER TABLE `wf_biz_leave_apply_biz` DISABLE KEYS */;
+INSERT INTO `wf_biz_leave_apply_biz` VALUES
+('988c251ce5874da3b851b6a247bfbb7b','default','1','ÈÄâÈ°π01','ËØ∑ÂÅáÂéüÂõ†','7567d2a6c0f843b990c0d59b609453f2','Âº†‰∏â',5,NULL,NULL,'2026-09-11 19:46:54');
+/*!40000 ALTER TABLE `wf_biz_leave_apply_biz` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_leave_ledger_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_leave_ledger_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_leave_ledger_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `employeeName` varchar(64) DEFAULT NULL,
+  `department` varchar(255) DEFAULT NULL,
+  `annualDays` int(11) DEFAULT NULL,
+  `usedDays` int(11) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_leave_ledger_demo_employeeName` (`tenant_id`,`employeeName`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_leave_ledger_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_leave_ledger_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_leave_ledger_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_leave_ledger_demo` VALUES
+('06cb8f1deb4e4bf6a04f17aa2507724a','default','Áéã‰∫î','Á†îÂèëÈÉ®',10,6,1,NULL,NULL,NULL),
+('1606e9f9a0264cdfa86e14216819d3e6','default','ÊùéÂõõ','Â∏ÇÂú∫ÈÉ®',10,3,1,NULL,NULL,NULL),
+('87d5373bceb34cac8f736b364bc55cca','default','Âº†‰∏â','ÊµãËØïÈÉ®',10,1,1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_leave_ledger_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_material_pickup_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_material_pickup_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_material_pickup_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `productCode` varchar(64) DEFAULT NULL,
+  `productName` varchar(255) DEFAULT NULL,
+  `qty` int(11) DEFAULT NULL,
+  `pickupBy` varchar(64) DEFAULT NULL,
+  `remark` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_material_pickup_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_material_pickup_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_material_pickup_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_material_pickup_demo` VALUES
+('a714dfd5dd1c43a6912bf787164617e0','default','P001','Ê∑±Ê≤üÁêÉËΩ¥Êâø 6204',5,'ÊùéÂõõ','Ë£ÖÈÖçÁ∫øË°•Êñô-ÊµèËßàÂô®ÊºîÁ§∫ÔºàÂú∫ÊôØ2Ôºâ',1,NULL,NULL,NULL),
+('ce941a897dd8413e8eb1a686eb4f2c9e','default','P001','Ê∑±Ê≤üÁêÉËΩ¥Êâø 6204',10,'Âº†‰∏â',NULL,1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_material_pickup_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_material_stock_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_material_stock_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_material_stock_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `productCode` varchar(64) DEFAULT NULL,
+  `productName` varchar(255) DEFAULT NULL,
+  `stockQty` int(11) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_material_stock_demo_productCode` (`tenant_id`,`productCode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_material_stock_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_material_stock_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_material_stock_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_material_stock_demo` VALUES
+('22eb5c24ff164b5fb70995632ac218d2','default','P003','Ê∏©Â∫¶‰º†ÊÑüÂô® DS18B20',80,2,NULL,NULL,'2026-10-12 03:35:51'),
+('b144f3ddd89d41d2948267a3e97b704a','default','P002','Áõ¥ÊµÅÂáèÈÄüÁîµÊú∫ 24V',50,1,NULL,NULL,NULL),
+('dfcb4ecfb51d45a584632288f4f614cf','default','P001','Ê∑±Ê≤üÁêÉËΩ¥Êâø 6204',185,11,NULL,NULL,'2026-10-11 16:21:56');
+/*!40000 ALTER TABLE `wf_biz_material_stock_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_member_group`
+--
+
+DROP TABLE IF EXISTS `wf_biz_member_group`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_member_group` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `group_name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `members` text DEFAULT NULL,
+  `members_text` text DEFAULT NULL,
+  `post_rules` text DEFAULT NULL,
+  `post_rules_text` text DEFAULT NULL,
+  `org_rules` text DEFAULT NULL,
+  `org_rules_text` text DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `updated_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci COMMENT='ÊàêÂëòÁªÑÔºà‰∏öÂä°Ë°®Âçï member_group Êï∞ÊçÆÔºâ';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_member_group`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_member_group` WRITE;
+/*!40000 ALTER TABLE `wf_biz_member_group` DISABLE KEYS */;
+/*!40000 ALTER TABLE `wf_biz_member_group` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_onsite_service_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_onsite_service_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_onsite_service_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `orderNo` varchar(64) DEFAULT NULL,
+  `topic` varchar(255) DEFAULT NULL,
+  `serviceType` varchar(255) DEFAULT NULL,
+  `serviceArea` varchar(255) DEFAULT NULL,
+  `siteLocation` varchar(255) DEFAULT NULL,
+  `siteNote` varchar(255) DEFAULT NULL,
+  `customerId` text DEFAULT NULL,
+  `customerId_text` text DEFAULT NULL,
+  `internalNote` varchar(255) DEFAULT NULL,
+  `revisit` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`revisit`)),
+  `revisit_text` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_onsite_service_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_onsite_service_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_onsite_service_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_onsite_service_demo` VALUES
+('317b9f6748734aad89650515dfa70f66','default','SVD202610110002',NULL,'repair','ÊµôÊ±üÁúÅ/Êù≠Â∑ûÂ∏Ç/Ë•øÊπñÂå∫','{\"name\":\"ÂÆ¢Êà∑ÂéÇÂå∫Â§ßÈó®\",\"lat\":34.853256,\"lng\":101.601563}',NULL,'[\"4813d6c853cb4e1ba392841dde2853e3\"]','[\"Âçé‰∏úÁü≥Âåñ\"]','ÂÆ¢Êà∑ËÆæÂ§áÊ∏ÖÂçïÈúÄÂú®Á≠æÁ∫¶Âêé 3 ‰∏™Â∑•‰ΩúÊó•ÂÜÖÊèê‰æõ','[\"confirmed\"]','Â∑≤Á°ÆËÆ§ÂõûËÆøËÆ°Âàí',2,NULL,NULL,'2026-10-11 14:45:03'),
+('60709ea83bfe4afb94827800062222a9','default','SVD202610110001','‰∫ßÁ∫ø‰º†ÊÑüÂô®ÂÆâË£ÖË∞ÉËØï','install','Ê±üËãèÁúÅ/ËãèÂ∑ûÂ∏Ç/ÂßëËãèÂå∫',NULL,NULL,NULL,'',NULL,NULL,NULL,1,NULL,NULL,NULL),
+('d26e9e53d7bb45f181b5e768f4a718b3','default','SVD202610110003','‰∫ßÁ∫ø‰º†ÊÑüÂô®ÂÆâË£ÖË∞ÉËØï','install','Ê±üËãèÁúÅ/ËãèÂ∑ûÂ∏Ç/ÂßëËãèÂå∫','{\"name\":\"ÂÆ¢Êà∑ÂéÇÂå∫Â§ßÈó®\",\"lat\":34.853256,\"lng\":101.601563}','Áé∞Âú∫ÂãòÊü•ÂÆåÊàêÔºå‰º†ÊÑüÂô®ÁÇπ‰ΩçÂ∑≤Á°ÆËÆ§','[\"4813d6c853cb4e1ba392841dde2853e3\"]','[\"Âçé‰∏úÁü≥Âåñ\"]','ÂÆ¢Êà∑ËÆæÂ§áÊ∏ÖÂçïÈúÄÂú®Á≠æÁ∫¶Âêé 3 ‰∏™Â∑•‰ΩúÊó•ÂÜÖÊèê‰æõ','[\"confirmed\"]','Â∑≤Á°ÆËÆ§ÂõûËÆøËÆ°Âàí',1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_onsite_service_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_person`
+--
+
+DROP TABLE IF EXISTS `wf_biz_person`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_person` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `code` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `dept` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`dept`)),
+  `dept_text` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_person_code` (`tenant_id`,`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_person`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_person` WRITE;
+/*!40000 ALTER TABLE `wf_biz_person` DISABLE KEYS */;
+INSERT INTO `wf_biz_person` VALUES
+('7567d2a6c0f843b990c0d59b609453f2','default','001','Âº†‰∏â','[\"2\"]','/ÊÄªÂÖ¨Âè∏/Ê≠¶Ê±âÂàÜÂÖ¨Âè∏',2,NULL,NULL,'2026-09-11 15:20:06');
+/*!40000 ALTER TABLE `wf_biz_person` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_biz_pickup_log_demo`
+--
+
+DROP TABLE IF EXISTS `wf_biz_pickup_log_demo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_biz_pickup_log_demo` (
+  `id` varchar(64) NOT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  `productCode` varchar(64) DEFAULT NULL,
+  `productName` varchar(255) DEFAULT NULL,
+  `qty` int(11) DEFAULT NULL,
+  `pickupBy` varchar(64) DEFAULT NULL,
+  `sourceNote` varchar(255) DEFAULT NULL,
+  `version` int(11) NOT NULL DEFAULT 1,
+  `created_by` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_biz_pickup_log_demo`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_biz_pickup_log_demo` WRITE;
+/*!40000 ALTER TABLE `wf_biz_pickup_log_demo` DISABLE KEYS */;
+INSERT INTO `wf_biz_pickup_log_demo` VALUES
+('404484a8fc7441a6beecaa9e70f425a4','default','P003',NULL,2,NULL,'Êù•Ê∫êÈ¢ÜÁî®Âçï ',1,NULL,NULL,NULL),
+('455988fd0e714ab29eda178f3ef834ab','default','P001','Ê∑±Ê≤üÁêÉËΩ¥Êâø 6204',5,'ÊùéÂõõ','Êù•Ê∫êÈ¢ÜÁî®Âçï a714dfd5dd1c43a6912bf787164617e0',1,NULL,NULL,NULL),
+('9710184373c148a083f518de244922ac','default','P001','Ê∑±Ê≤üÁêÉËΩ¥Êâø 6204',10,'Âº†‰∏â','Êù•Ê∫êÈ¢ÜÁî®Âçï ce941a897dd8413e8eb1a686eb4f2c9e',1,NULL,NULL,NULL);
+/*!40000 ALTER TABLE `wf_biz_pickup_log_demo` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
+-- Table structure for table `wf_category`
+--
+
+DROP TABLE IF EXISTS `wf_category`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wf_category` (
+  `id` varchar(64) NOT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `name` varchar(255) NOT NULL,
+  `parent_id` varchar(64) DEFAULT NULL,
+  `sort_order` int(11) DEFAULT NULL,
+  `tenant_id` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_tenant` (`tenant_id`),
+  KEY `idx_parent` (`parent_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `wf_category`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `wf_category` WRITE;
+/*!40000 ALTER TABLE `wf_category` DISABLE KEYS */;
+INSERT INTO `wf_category` VALUES
+('0c0d3ea69e8645778e9da2c9d6c1a735','2026-09-11 10:38:22.330141','Êä•ÈîÄÊµÅÁ®ã',NULL,2,'default'),
+('64f4802b34e352e3da0d7aeb9fa71de2','2026-09-24 08:44:04.000000','ËØ∑ÂÅáÊµÅÁ®ã',NULL,1,'default'),
+('9fc5266c8e07a5ac9adf80494049bbe2','2026-09-24 08:44:17.000000','Êä•ÈîÄÊµÅÁ®ã',NULL,2,'default'),
+('abbde8e4a6f74009a8a595bb7c38973c','2026-09-11 10:37:54.924715','ËÄÉÂã§Áõ∏ÂÖ≥',NULL,1,'default'),
+('e7f4b9b29f9a47c388875bc6c007dd11','2026-09-11 10:37:39.432598','Â∏∏Áî®ÊµÅÁ®ã',NULL,0,'default');
+/*!40000 ALTER TABLE `wf_category` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
+
+-- Dump completed on 2026-10-21 20:05:39

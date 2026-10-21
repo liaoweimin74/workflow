@@ -9608,3 +9608,17 @@ Work Log:
 Stage Summary:
 - 事件 #115 单轮闭环，零 mvn 第 99 次；内存 3.15GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r198
+Agent: ops-cron
+Task: 2026-10-22 04:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」→ 事件 #116（标准重供给）：vite 1225/mariadb 1251/node 1279/bun 1108，无 java
+- 【数据保护】本轮 dump 异常缩小（162KB vs 完整 274KB），核验确认缺 19 张核心业务表（wf_form_def/wf_page_def/wf_data_source 等，84 表 vs 103 表）→ 残缺快照改名 invalid- 前缀隔离，防止 recover 按最新时间戳误导残缺数据
+- recover 改用 20261021-181000.sql（274KB 完整版）导入；重拼 jar md5 e369839b ✓；timeout 170 被杀（幸存型）
+- ss 复验：3000=vite 1225、3306=mariadb 1251、8080=java 1567 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+
+Stage Summary:
+- 事件 #116 单轮闭环 + 首次人工拦截残缺 dump 污染，零 mvn 第 100 次；内存 3.19GB，oom 0
+- 收口 dump 已推送（见 git log）

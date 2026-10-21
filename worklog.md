@@ -9541,3 +9541,16 @@ Work Log:
 Stage Summary:
 - 事件 #110 单轮闭环，零 mvn 第 94 次；内存 3.17GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r187
+Agent: ops-cron
+Task: 2026-10-21 17:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」→ 事件 #111（标准重供给+mvn 分支已自启）：vite 1293/mariadb 1194/node 1331，plexus 1364 在 package
+- pkill 占位含 plexus/mvn → 重拼 jar 121300861B md5 e369839b ✓ → timeout 170 recover 被杀（幸存型）
+- ss 复验：3000=vite 1293、3306=mariadb 1194、8080=java 1560 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+
+Stage Summary:
+- 事件 #111 单轮闭环（拦截自启 mvn 分支），零 mvn 第 95 次；内存 3.11GB，oom 0
+- 收口 dump 已推送（见 git log）

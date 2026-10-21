@@ -25,7 +25,7 @@
           </el-form-item>
           <!-- lc:node=n2.f4 type=LookupPicker field=customer -->
           <el-form-item label="选择客户">
-            <LookupPicker v-model="form.customer" :global-data-source-id="dataSources['ds_mvck4gv91']" display-field="name" :search-columns="searchColumns" id-field="customer_id" :return-fields="returnFields" :columns="columns2" />
+            <LookupPicker v-model="form.customer" :global-data-source-id="dataSources['ds_mvck4gv91']" display-field="name" :search-columns="searchColumns" id-field="customer_id" :return-fields="returnFields" :columns="columns2" @select="onCustomerSelect" @clear="onCustomerClear" />
           </el-form-item>
           <!-- lc:node=n2.f5 type=input field=contact_name -->
           <el-form-item label="联系人">
@@ -81,6 +81,7 @@ import PageListCards from '@lc/runtime/page-list-cards'
 import LookupPicker from '@lc/runtime/LookupPicker'
 import DataPicker from '@lc/runtime/dataPicker'
 import FormulaField from '@lc/runtime/FormulaField'
+import { readCellValue } from '@lc/runtime/lookupFetch'
 import { getData, createData, updateData, deleteData } from './api/cardlist-test'
 
 // ==================== 数据源（schema.dataSources[]）====================
@@ -229,6 +230,21 @@ async function confirmSave() {
   }
   closeContainer()
   // lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状）
+}
+
+// ==================== 字段写回（选择器带回的显式化）====================
+// 组件宿主里走 formCreateInject.api.setValue，产物没有 form-create 实例，改接 select/clear 显式赋值；
+// returnFields 方向：key=被查表的源字段、value=表单目标字段（LookupPicker.vue:295-299）
+/** lc:node=n2.f4 field=customer 带回 → customer_id / contact_name / contact_phone */
+function onCustomerSelect(row: Record<string, unknown>) {
+  form['customer_id'] = row.id ?? null
+  form['contact_name'] = readCellValue(row, 'contact') ?? null
+  form['contact_phone'] = readCellValue(row, 'phone') ?? null
+}
+function onCustomerClear() {
+  form['customer_id'] = null
+  form['contact_name'] = null
+  form['contact_phone'] = null
 }
 
 // ==================== lc:behavior ← schema.actions ====================

@@ -134,6 +134,20 @@ function prefixTable(base: string, table: Record<string, PropEmit>): Record<stri
   return Object.fromEntries(Object.entries(table).map(([k, v]) => [`${base}.${k}`, v]))
 }
 
+/** 字段写回（contract.writes）：组件 select/clear 的产物侧显式化，handler 名在 assembleVue 分配 */
+interface Writeback {
+  nodeId: string
+  rulePath: string
+  type: string
+  field: string
+  /** props.<writes.idKey>：选中记录 id 写入的表单字段 */
+  idTarget?: string
+  /** props.<writes.mapKey>：key=被查表的源字段，value=表单目标字段 */
+  map?: Record<string, string>
+  select?: string
+  clear?: string
+}
+
 /** 出码上下文：跨节点共享的常量表、告警收集与容器展示方式 */
 interface Ctx {
   unsupported: Unsupported[]
@@ -148,6 +162,8 @@ interface Ctx {
   firstDsId: string
   /** 页面 key：现网由渲染器注入给数据组件的 props.pageKey，产物侧要自己传 */
   pageKey: string
+  /** 带回声明（LookupPicker 等 contract.writes）：节点 id → 写回目标 */
+  writes: Map<string, Writeback>
 }
 
 interface NodePlan {
@@ -293,6 +309,7 @@ export function generatePage(
     dsUse: new Map(),
     firstDsId: String(schema.dataSources?.[0]?.id ?? ''),
     pageKey: meta.pageKey,
+    writes: new Map(),
   }
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
@@ -468,6 +485,24 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   // 语义债登记：契约能把键出码，组件跑起来还差一段接线，按节点记账
   for (const req of contract.requires || []) {
     ctx.unsupported.push({ path: `${rulePath}.props.${req.key}`, type: node.type, key: req.key, message: req.note })
+  }
+  // 带回声明（LookupPicker 的 idField/returnFields）：此处只记账，容器归属与 handler
+  // 命名在 assembleVue 定 —— 字段控件可能不在容器里，那种没有 form 可写，不能假接线。
+  if (contract.writes) {
+    const idRaw = contract.writes.idKey ? node.props?.[contract.writes.idKey] : undefined
+    const mapRaw = contract.writes.mapKey ? node.props?.[contract.writes.mapKey] : undefined
+    if (idRaw || (isPlainObject(mapRaw) && Object.keys(mapRaw).length)) {
+      ctx.writes.set(id, {
+        nodeId: id,
+        rulePath,
+        type: node.type,
+        field: String(node.field ?? ''),
+        idTarget: typeof idRaw === 'string' && idRaw ? idRaw : undefined,
+        map: isPlainObject(mapRaw)
+          ? (Object.fromEntries(Object.entries(mapRaw).filter(([, v]) => typeof v === 'string')) as Record<string, string>)
+          : undefined,
+      })
+    }
   }
 
   const self = Object.fromEntries(
@@ -831,6 +866,46 @@ function assembleVue(args: {
     container.children.forEach(walk)
   }
 
+  // 带回接线（contract.writes）：只有容器子树内的字段控件才接 @select/@clear ——
+  // 页面级字段没有 form 可写，硬接线就是把债改成假绿灯。
+  const inContainer = new Set<string>()
+  if (container) {
+    const collect = (p: NodePlan) => {
+      inContainer.add(p.node.id)
+      p.children.forEach(collect)
+    }
+    container.children.forEach(collect)
+  }
+  const writebacks: Writeback[] = []
+  const usedNames = new Set<string>()
+  const uniqueName = (base: string) => {
+    let name = base
+    let i = 2
+    while (usedNames.has(name)) name = `${base}${i++}`
+    usedNames.add(name)
+    return name
+  }
+  for (const w of ctx.writes.values()) {
+    if (!inContainer.has(w.nodeId)) {
+      ctx.unsupported.push({
+        path: w.rulePath,
+        type: w.type,
+        key: 'writes',
+        message: `${w.type} 配了带回（idField/returnFields）但不在容器子树里，产物没有 form 可写，不接线`,
+      })
+      continue
+    }
+    w.select = uniqueName(`on${pascal(w.field)}Select`)
+    w.clear = uniqueName(`on${pascal(w.field)}Clear`)
+    writebacks.push(w)
+  }
+  // 写回目标并进 form 声明：容器只回填声明过的字段（对齐 DsBindingEngine.ts:79-82），
+  // idField 目标没有可见 input 时（卡片语料页的 customer_id）不声明就是编辑态回填不回、保存丢 id。
+  // 业务数据整包落 data_json（FormData.dataJson），多声明一个键无列冲突。
+  for (const t of writebacks.flatMap((w) => [w.idTarget, ...Object.values(w.map ?? {})])) {
+    if (typeof t === 'string' && t && !fields.includes(t)) fields.push(t)
+  }
+
   const L: string[] = []
   L.push('<!-- 由 lc-codegen 从页面 schema 出码，勿手改登记表以外的部分；人工接管写在 handler 里 -->')
   L.push('<template>')
@@ -888,6 +963,10 @@ function assembleVue(args: {
   // runtime 标签一律要 import：过去只导列表组件，容器里的字段控件（dataPicker /
   // LookupPicker / FormulaField）出成了裸标签，产物看着对、实际跑不起来
   for (const tag of runtimeTagsOf(plans)) L.push(`import ${pascal(tag)} from '@lc/runtime/${tag}'`)
+  // 带回的行值读取复用组件同一套 BizDataVO 兼容取值：裸 row[key] 会把内层业务字段读成 undefined
+  if (writebacks.some((w) => Object.keys(w.map ?? {}).length)) {
+    L.push("import { readCellValue } from '@lc/runtime/lookupFetch'")
+  }
   L.push(`import { getData, createData, updateData, deleteData } from './api/${meta.pageKey.replace(/_/g, '-')}'`)
   L.push('')
   L.push('// ==================== 数据源（schema.dataSources[]）====================')
@@ -951,6 +1030,26 @@ function assembleVue(args: {
     L.push(`  ${refreshCall(refName)}`)
     L.push('}')
     L.push('')
+    if (writebacks.length) {
+      L.push('// ==================== 字段写回（选择器带回的显式化）====================')
+      L.push('// 组件宿主里走 formCreateInject.api.setValue，产物没有 form-create 实例，改接 select/clear 显式赋值；')
+      L.push('// returnFields 方向：key=被查表的源字段、value=表单目标字段（LookupPicker.vue:295-299）')
+      const q = (s: string) => s.replace(/'/g, "\\'")
+      for (const w of writebacks) {
+        const targets = [w.idTarget, ...Object.values(w.map ?? {})].filter((t): t is string => !!t)
+        L.push(`/** lc:node=${w.nodeId} field=${w.field} 带回 → ${targets.join(' / ')} */`)
+        L.push(`function ${w.select}(row: Record<string, unknown>) {`)
+        if (w.idTarget) L.push(`  form['${q(w.idTarget)}'] = row.id ?? null`)
+        for (const [src, target] of Object.entries(w.map ?? {})) {
+          L.push(`  form['${q(target)}'] = readCellValue(row, '${q(src)}') ?? null`)
+        }
+        L.push('}')
+        L.push(`function ${w.clear}() {`)
+        for (const t of targets) L.push(`  form['${q(t)}'] = null`)
+        L.push('}')
+        L.push('')
+      }
+    }
   }
   const explicit = args.behaviors.filter((x) => x.origin.startsWith('actions['))
   // handler 只出产物真绑得到的：组件没那个 emit（卡片的 selection-change）还留空函数，
@@ -1077,11 +1176,15 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
     const f = c.node.field
     const label = c.attrs['el-form-item']?.label ?? f
     const control = c.propSnippets.length ? ` ${c.propSnippets.join(' ')}` : ''
+    // 带回接线：事件不在契约 props 面（产物有、schema 无），进 wireOnly 让回导剥离不报多造
+    const wb = ctx.writes.get(c.node.id)
+    const wbEvents = wb?.select ? ` @select="${wb.select}" @clear="${wb.clear}"` : ''
+    if (wb?.select) c.node.wireOnly.push('on.select', 'on.clear')
     items.push(
       [
         `          <!-- ${c.node.anchor} -->`,
         `          <el-form-item label="${label}">`,
-        `            <${c.tag} v-model="form.${f}"${control} />`,
+        `            <${c.tag} v-model="form.${f}"${control}${wbEvents} />`,
         '          </el-form-item>',
       ].join('\n'),
     )

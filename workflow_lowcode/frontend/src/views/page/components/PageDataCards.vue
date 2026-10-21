@@ -96,6 +96,13 @@ const props = withDefaults(defineProps<{
   pageSizes?: number[]
   pagination?: boolean
   viewActions?: { buttons?: Array<ViewActionButton> }
+  /**
+   * 详情配置（ViewDesigner 风格：{ width, height, type, formMode }）。
+   * 必须显式声明：组件内多处读 props.viewDetail，只靠 [key: string] 索引签名兜不住
+   * ——Vue 只把声明过的键放进 props，未声明的会进 attrs，于是 props.viewDetail 恒为
+   * undefined，详情弹窗宽度永远回退 800px、formMode 永远 popup。
+   */
+  viewDetail?: { width?: string; height?: string; type?: string; formMode?: string }
   groupBy?: string
   /** 分组是否可折叠 */
   collapsibleGroups?: boolean

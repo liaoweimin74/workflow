@@ -9650,3 +9650,16 @@ Work Log:
 Stage Summary:
 - 事件 #118 单轮闭环（含 tools 目录修复+MariaDB 全新重建），零 mvn 第 102 次
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r201
+Agent: ops-cron
+Task: 2026-10-22 07:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」→ 事件 #119（标准重供给）：vite 1241/mariadb 1218/node 1280/bun 1148，无 java；本轮 dump 268K 完整
+- 清理+重拼（含 mkdir /home/z/tools 预防性保障）+recover 一条龙，timeout 170 被杀（幸存型）；md5 e369839b ✓
+- ss 复验：3000=vite 1241、3306=mariadb 1218、8080=java 1443 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+
+Stage Summary:
+- 事件 #119 单轮闭环，零 mvn 第 103 次；内存 3.04GB，oom 0
+- 收口 dump 已推送（见 git log）

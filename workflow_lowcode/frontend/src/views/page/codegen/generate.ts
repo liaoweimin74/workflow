@@ -203,6 +203,10 @@ interface NodePlan {
   degradeReason?: string
   /** 本节点所有有落点的 schema 相对路径（applyLeaves 记录）：降级时整份转成丢弃登记 */
   leafPaths?: string[]
+  /** dash-filter 广播的源：筛选器且 autoBroadcast 未关（契约 dashFilter='source'） */
+  filterSource?: boolean
+  /** dash-filter 广播的目标：挂载后上报实例、暴露 setFilter（契约 dashFilter='target'） */
+  filterTarget?: boolean
 }
 
 /** 嵌套容器的一段产物：值形态、行别名与（tableForm 的）列登记 */
@@ -561,6 +565,10 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx, env: Env = 
     children: [],
   }
 
+  // dash-filter 广播能力（运行期渲染器持有实例表，产物自己持一份）：
+  // 关掉 autoBroadcast 的筛选器不接 filter-change，否则开关形同虚设
+  if (contract.dashFilter === 'source' && node.props?.autoBroadcast !== false) plan.filterSource = true
+  if (contract.dashFilter === 'target') plan.filterTarget = true
   // 产物侧固定接线：值写进模板，键名进归属登记（schema 里没有这个键，回导不许报多造）
   for (const [k, v] of Object.entries(contract.constAttrs || {})) {
     plan.propSnippets.push(propSnippet(ctx, k, v, `const:${k}`))
@@ -1119,6 +1127,19 @@ function assembleVue(args: {
   const listPlans = plans.filter((p) => listOf(p.node.type))
   const container = plans.find((p) => p.node.type === 'formContainer')
   const refName = listPlans[0]?.node.host.ref
+  // dash-filter 广播接线（契约 dashFilter）：页面里既要有开启广播的筛选器，又要有接住
+  // setFilter 的组件。缺一样就不出实例表与广播函数 —— 没人读的变量过不了 vue-tsc（TS6133），
+  // 而且会让产物看着"有联动"实则空转。
+  const allPlans: NodePlan[] = []
+  const walkAll = (list: NodePlan[]) => {
+    for (const p of list) {
+      allPlans.push(p)
+      walkAll(p.children)
+      for (const c of p.nested?.columns || []) walkAll(c.children)
+    }
+  }
+  walkAll(plans)
+  const wireDashFilter = allPlans.some((p) => p.filterSource) && allPlans.some((p) => p.filterTarget)
   // form 里的字段带初值形态：普通字段 '' ，嵌套容器按值形态给 [] / {}（行数组 / 子表单对象）。
   // 容器的子字段不进 form —— 它们的值挂在行对象或容器对象上，摊平进 form 就是第二套真相。
   const fields: Array<{ name: string; init: string }> = []
@@ -1211,7 +1232,7 @@ function assembleVue(args: {
   const pendingWidgets: NodePlan[] = []
   const flushWidgets = () => {
     if (!pendingWidgets.length) return
-    L.push(...renderWidgetRow(pendingWidgets, '      '))
+    L.push(...renderWidgetRow(pendingWidgets, '      ', wireDashFilter))
     pendingWidgets.length = 0
   }
   for (const p of plans) {
@@ -1248,7 +1269,7 @@ function assembleVue(args: {
   }
   flushWidgets()
   L.push('    </el-form>')
-  if (container) L.push(renderContainer(container, ctx))
+  if (container) L.push(renderContainer(container, ctx, wireDashFilter))
   L.push('  </div>')
   L.push('</template>')
   L.push('')
@@ -1418,6 +1439,23 @@ function assembleVue(args: {
     L.push('  // 无关联动作')
     L.push('}')
   }
+  if (wireDashFilter) {
+    L.push('// ==================== dash-filter 广播（运行期 dashInstances 语义）====================')
+    L.push('// 渲染器把 emit(ready) 的组件实例收进 dashInstances，筛选器变更时按字段条件全量 setFilter')
+    L.push('// （PageRendererPage.vue:263-278、505-549）。产物没有渲染器，这张表由产物自己持。')
+    L.push('const dashInstances = new Set<any>()')
+    L.push('function onDashReady(instance: any) {')
+    L.push('  if (instance) dashInstances.add(instance)')
+    L.push('}')
+    L.push('function onFilterChange(payload: { field: string; op: string; value: unknown }) {')
+    L.push('  if (!payload?.field) return')
+    L.push('  const cond = { [payload.field]: payload.value === null ? null : { op: payload.op, value: payload.value } }')
+    L.push('  for (const instance of dashInstances) {')
+    L.push("    if (instance && typeof instance.setFilter === 'function') instance.setFilter(cond)")
+    L.push('  }')
+    L.push('}')
+    L.push('')
+  }
   L.push('</script>')
   L.push('')
   L.push('<style scoped>')
@@ -1475,18 +1513,29 @@ function assembleVue(args: {
  * 撑满档靠 dash-fill-height.css 沿 el-col.fc-form-col > el-form-item > __content 传高，
  * 少任意一层，props.height='100%' 就退化成内容高。
  */
-function renderWidgetRow(widgets: NodePlan[], indent: string): string[] {
+function renderWidgetRow(widgets: NodePlan[], indent: string, wireDashFilter: boolean): string[] {
   const L: string[] = [`${indent}<el-row>`]
   for (const p of widgets) {
     const span = p.attrs['el-col']?.span ?? 24
     const props = p.propSnippets.length ? ` ${p.propSnippets.join(' ')}` : ''
+    // dash-filter 联动：筛选器监听 filter-change，数据组件上报 ready（实例收进 dashInstances）。
+    // 事件是产物接线（schema 里没有这个键），进 wireOnly 让回导剥离，不然回读多造出 props.filterChange
+    const events: string[] = []
+    if (wireDashFilter && p.filterSource) {
+      events.push('@filter-change="onFilterChange"')
+      p.node.wireOnly.push('on.filterChange')
+    }
+    if (wireDashFilter && p.filterTarget) {
+      events.push('@ready="onDashReady"')
+      p.node.wireOnly.push('on.ready')
+    }
     L.push(`${indent}  <el-col class="fc-form-col" :span="${lit(span)}">`)
     L.push(`${indent}    <!-- ${p.node.anchor} -->`)
     // 标题载体按类型表态：dash 族的节点 title 被渲染器置空（空壳 form-item 只为撑满档传高），
     // page-* 展示组件的 title 照旧由 form-create 当 label 渲染，两者都靠 self.title 登记决定
     const label = p.attrs['el-form-item']?.label
     L.push(`${indent}    <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
-    L.push(`${indent}      <${p.tag}${props} />`)
+    L.push(`${indent}      <${p.tag}${props}${events.length ? ` ${events.join(' ')}` : ''} />`)
     L.push(`${indent}    </el-form-item>`)
     L.push(`${indent}  </el-col>`)
   }
@@ -1494,7 +1543,7 @@ function renderWidgetRow(widgets: NodePlan[], indent: string): string[] {
   return L
 }
 
-function renderContainer(plan: NodePlan, ctx: Ctx): string {
+function renderContainer(plan: NodePlan, ctx: Ctx, wireDashFilter: boolean): string {
   const attrs = plan.attrs[plan.tag] || {}
   const sizeAttr = containerSizeAttrOf(ctx)
   // title 先写：容器锚点里读不到它，人 review 时第一眼要看的就是标题
@@ -1512,7 +1561,7 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
   const nestedWidgets: NodePlan[] = []
   const flushNested = () => {
     if (!nestedWidgets.length) return
-    items.push(...renderWidgetRow(nestedWidgets, '          '))
+    items.push(...renderWidgetRow(nestedWidgets, '          ', wireDashFilter))
     nestedWidgets.length = 0
   }
   for (const c of plan.children) {

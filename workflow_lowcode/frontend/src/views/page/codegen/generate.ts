@@ -77,7 +77,8 @@ export interface Behavior {
   source?: string
   steps: Array<Record<string, unknown>>
   resolvedTarget?: string
-  implementedBy: { file: string; function: string; case?: string }
+  /** 只有产物真生成了对应分支才指认；没有按钮承载时缺省，避免“登记了”被读成“执行了” */
+  implementedBy?: { file: string; function: string; case?: string }
   warnings: Warning[]
 }
 
@@ -1005,6 +1006,7 @@ function planBehaviors(
 ): { behaviors: Behavior[]; switchCases: string[] } {
   const behaviors: Behavior[] = []
   const switchCases: string[] = []
+  const wiredCases = new Set<string>()
   const listPlans = plans.filter((p) => listOf(p.node.type))
   const list = listPlans[0]
   const container = plans.find((p) => p.node.type === 'formContainer')
@@ -1070,6 +1072,7 @@ function planBehaviors(
           switchCases.push(
             `    case 'delete':\n      if (row?.id != null) void deleteData(String(row.id)).then(() => ${refreshThen(refreshTarget)})\n      return`,
           )
+          wiredCases.add(btn.key)
         } else {
           ctx.unsupported.push({
             path: `${lp.node.rulePath}.props.viewActions.buttons(${btn.key})`,
@@ -1083,6 +1086,7 @@ function planBehaviors(
       switchCases.push(
         `    case '${btn.key}':\n      void openContainer(String(row?.id ?? ''), ${map.readonly}, '${map.mode}')\n      return`,
       )
+      wiredCases.add(btn.key)
       if (!seenTriggers.has(map.trigger)) {
         behaviors.push({
           id: `b${behaviors.length + 1}`,
@@ -1102,6 +1106,26 @@ function planBehaviors(
         })
       }
     }
+  }
+
+  // 总线动作的“实现声明”必须和产物对齐：没有按钮承载（或承载按钮配了链被跳过）时，
+  // 产物 switch 里根本没有对应 case，implementedBy 若仍指认，回读方会误以为动作已接线。
+  for (const b of behaviors) {
+    if (!b.origin.startsWith('actions[')) continue
+    if (b.implementedBy && wiredCases.has(b.implementedBy.case ?? '')) continue
+    b.implementedBy = undefined
+    if (!HANDLED_TRIGGERS.includes(b.trigger)) continue
+    b.warnings.push({
+      kind: 'not-wired',
+      path: `actions(${b.trigger})`,
+      message: '该触发器没有可承载的按钮分支（无按钮或按钮配了动作链），产物未生成执行代码，需人工接管',
+    })
+    ctx.unsupported.push({
+      path: b.origin,
+      type: 'bus',
+      key: b.trigger,
+      message: '页面没有承载该触发器的按钮分支，总线动作在产物里不执行',
+    })
   }
 
   return { behaviors, switchCases }

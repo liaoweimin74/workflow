@@ -334,6 +334,9 @@ export interface LookupPickerProps {
   /** 页面内数据源绑定 ID（新模式：通过 FORM_DS_BINDINGS_KEY 解析 refId，优先级高于 fetch） */
   dataSourceId?: string
 
+  /** 直接指定全局数据源 ID，供独立页面使用；不依赖表单绑定上下文（同款见 DataPicker.vue:212、RelationCard.vue:147） */
+  globalDataSourceId?: string
+
   /** 搜索列（参与关键字搜索的列 key），新模式下用于 keywordColumn */
   searchColumns?: string[]
 

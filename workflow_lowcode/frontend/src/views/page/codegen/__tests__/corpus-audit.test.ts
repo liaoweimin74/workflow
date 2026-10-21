@@ -5,7 +5,11 @@
  *     有多少落在已登记节点上（真 bug —— 编译器在真实数据上不忠实）
  *  3. unsupported 分类：广度债（类型/键未登记）与语义债（触发器、动作链）各占多少
  *
- * 报表走 stdout，不落文件；断言只钉"不许崩"和"已登记子树必须零空洞"两条不变式。
+ * 覆盖率的分母口径（spike 7D）：按「出码器真走得到的节点」算，不是按「类型登记了没有」算。
+ * 采集器走全四处 rule 载体（含 node.children 与 props.columns[].rule），和运行时取字段用的
+ * formRuleWalk.ts:walkRules 同一口径；每个节点带 blocked 归因，登记了但递归进不去的不许算成绩。
+ *
+ * 报表走 stdout，不落文件；断言钉三条不变式：不许崩、已登记子树必须零空洞、分母口径不许漂。
  */
 import { describe, expect, it } from 'vitest'
 
@@ -28,23 +32,42 @@ interface NodeRef {
   path: string
   /** 该节点 props 的顶层键（rule 载体键除外）—— 补契约的工作量就是这个数 */
   propsKeys: string[]
+  /**
+   * 出码器走不到这里的原因（null = 真能出码）。光看「类型有没有契约」会算进三类假覆盖：
+   *  unregistered:<类型> —— 这个节点自己或它某个祖先压根没登记，生成器在那里就降级成 unsupported；
+   *  carrier:<类型> —— 该类型把 props.rule 登记成 prop 透传（数据容器的 childRules），
+   *    子树是给组件内嵌 form-create 解释的数据，不是模板；
+   *  children:<类型> —— 子节点挂在 node.children（fcTable 画布态），生成器一条都不递归；
+   *  columns:<类型> —— 嵌在 props.columns[].rule 里，目前没有类型把它登记成 children 载体。
+   * 只保留最外层那个阻断点：补完它才看得见下一层。
+   */
+  blocked: string | null
 }
 
 /**
- * 组件节点遍历：只走 schema 里真实存在的三处 rule 载体
- * （容器 props.rule、卡片/详情列内嵌 props.columns[].rule），
- * 与 templateSchema.walkRules 同一口径 —— 少一处就少统计一类节点。
+ * 组件节点遍历：走 schema 里真实存在的四处 rule 载体
+ * （容器 props.rule、卡片/详情列内嵌 props.columns[].rule、画布态/布局容器的 node.children），
+ * 与运行时取字段用的 formRuleWalk.ts:walkRules 同一口径 —— 少一处就少统计一类节点。
  */
-function collectNodes(rule: any[], prefix = 'rule', out: NodeRef[] = []): NodeRef[] {
+function collectNodes(rule: any[], prefix = 'rule', out: NodeRef[] = [], blocked: string | null = null): NodeRef[] {
   ;(rule || []).forEach((node, i) => {
     if (!node || typeof node !== 'object') return
     const path = `${prefix}[${i}]`
     const propsKeys = Object.keys(node.props || {}).filter((k) => k !== 'rule')
-    if (typeof node.type === 'string') out.push({ type: node.type, path, propsKeys })
-    const children = node.props?.rule
-    if (Array.isArray(children)) collectNodes(children, `${path}.props.rule`, out)
+    const contract = TYPE_CONTRACTS[node.type]
+    // 先有阻断就沿用：最高那个阻断点才是该先修的那个（下面再套几层都不改变结论）
+    const own = blocked ?? (contract ? null : `unregistered:${node.type}`)
+    if (typeof node.type === 'string') out.push({ type: node.type, path, propsKeys, blocked: own })
+    if (Array.isArray(node.props?.rule)) {
+      // 只有登记成 children 的 props.rule 才会被 planNode 递归（generate.ts 的子规则开关）
+      const carrier = own ?? (contract?.props?.rule?.emit === 'children' ? null : `carrier:${node.type}`)
+      collectNodes(node.props.rule, `${path}.props.rule`, out, carrier)
+    }
+    if (Array.isArray(node.children)) collectNodes(node.children, `${path}.children`, out, own ?? `children:${node.type}`)
     ;(node.props?.columns || []).forEach((col: any, ci: number) => {
-      if (Array.isArray(col?.rule)) collectNodes(col.rule, `${path}.props.columns[${ci}].rule`, out)
+      if (Array.isArray(col?.rule)) {
+        collectNodes(col.rule, `${path}.props.columns[${ci}].rule`, out, own ?? `columns:${node.type}`)
+      }
     })
   })
   return out
@@ -80,6 +103,8 @@ interface Row {
   key: string
   nodes: NodeRef[]
   registeredNodes: number
+  /** 有契约**且**出码器走得到的节点（blocked 为空）：覆盖率只按这个数算 */
+  emittableNodes: number
   unregisteredTypes: string[]
   unsupported: { type: string; key: string; message: string }[]
   holes: number
@@ -151,6 +176,7 @@ function audit(): Row[] {
       key,
       nodes,
       registeredNodes: nodes.filter((n) => TYPE_CONTRACTS[n.type]).length,
+      emittableNodes: nodes.filter((n) => !n.blocked).length,
       unregisteredTypes: unregTypes,
       unsupported,
       holes,
@@ -180,25 +206,81 @@ describe('语料体检：现网真实页面批量出码回读', () => {
     }
   })
 
+  it('分母诚实：覆盖率只算「有契约且出码器真走得到」，走不到的按最外层阻断点归因', () => {
+    const rs = audit()
+    const total = rs.reduce((s, r) => s + r.nodes.length, 0)
+    const registered = rs.reduce((s, r) => s + r.registeredNodes, 0)
+    const emittable = rs.reduce((s, r) => s + r.emittableNodes, 0)
+    // 旧口径把 registered 当分子，报出 82.8%；真走得到的只有 56.1%，差值就是那批
+    // 「类型登记了、生成器却进不去」的假覆盖。数字掉下来是仪器修好了，不是产物变差。
+    expect(total).toBe(98)
+    expect(registered).toBe(82)
+    expect(emittable).toBe(55)
+
+    const of = (key: string) => rs.find((r) => r.key === key)!
+    // fcTable：子节点挂 node.children，生成器不 walk。这 5 个全是已登记类型，旧口径白送 5 分。
+    const dash = of('dashboard')
+    expect(dash.nodes.map((n) => n.type)).toEqual(['fcTable', 'dash-todo', 'dash-kpi', 'dash-kpi', 'dash-chart', 'dash-chart'])
+    expect(dash.emittableNodes).toBe(0)
+    // 归因只报最外层那个阻断点：fcTable 未登记是先要补的，补完才会露出 children 这一层
+    expect([...new Set(dash.nodes.filter((n) => n.path.includes('.children')).map((n) => n.blocked))]).toEqual([
+      'unregistered:fcTable',
+    ])
+    // 数据容器：props.rule 登记成 prop 透传（childRules），子树是数据不是模板，递归进去就是双份真相
+    const dc = of('tmp_data_container_verify')
+    expect(dc.emittableNodes).toBe(3)
+    expect(dc.nodes.map((n) => [n.path, n.blocked])).toEqual([
+      ['rule[0]', null],
+      ['rule[1]', null],
+      ['rule[1].props.rule[0]', 'carrier:page-data-container'],
+      ['rule[1].props.rule[1]', 'carrier:page-data-container'],
+      ['rule[2]', null],
+      ['rule[2].props.rule[0]', 'carrier:page-data-container'],
+    ])
+    // 阻断点归因不许越层：div 自己也未登记，但它先被 childRules 挡住 —— 越层归因会把
+    // 「补 div 契约」算成收益，实际补了也出不了码。
+    expect(dc.nodes[2].blocked).toBe('carrier:page-data-container')
+    expect(TYPE_CONTRACTS[dc.nodes[2].type]).toBeUndefined()
+  })
+
   it('出报表', () => {
     const rs = audit()
     const totalNodes = rs.reduce((s, r) => s + r.nodes.length, 0)
     const regNodes = rs.reduce((s, r) => s + r.registeredNodes, 0)
+    const emitNodes = rs.reduce((s, r) => s + r.emittableNodes, 0)
 
     console.log('\n================ 页面轴 ================')
     for (const r of rs) {
       console.log(
-        `${r.key.padEnd(26)} 节点${String(r.nodes.length).padStart(3)} 已登记${String(r.registeredNodes).padStart(3)}  ` +
+        `${r.key.padEnd(26)} 节点${String(r.nodes.length).padStart(3)} 有契约${String(r.registeredNodes).padStart(3)} 可出码${String(r.emittableNodes).padStart(3)}  ` +
           `unsup${String(r.unsupported.length).padStart(3)}  空洞 总${String(r.holes).padStart(3)}` +
           `（A广度${r.bucketA} B页面${r.bucketB} C保真${r.bucketC}）  重命名失败${r.failedRenames}`,
       )
       console.log(`  未登记类型: ${r.unregisteredTypes.join(', ') || '-'}`)
     }
     const sum = (k: 'bucketA' | 'bucketB' | 'bucketC') => rs.reduce((s, r) => s + r[k], 0)
+    // 覆盖率只认「blocked 为空」的节点。「有契约」那一栏留着，两者的差值就是假覆盖 ——
+    // 类型登记了、出码器却进不去，补契约消不掉它，得改生成器或改组件的数据载体形态。
     console.log(
-      `\n节点覆盖率 ${regNodes}/${totalNodes} = ${((regNodes / totalNodes) * 100).toFixed(1)}%  ` +
+      `\n节点覆盖率（可出码口径）${emitNodes}/${totalNodes} = ${((emitNodes / totalNodes) * 100).toFixed(1)}%  ` +
+        `（其中仅登记未接通${regNodes - emitNodes}）  ` +
         `空洞 A广度${sum('bucketA')} / B页面${sum('bucketB')} / C保真${sum('bucketC')}`,
     )
+    console.log('\n================ 已登记却走不到的节点（按阻断原因归并） ================')
+    const blockers = new Map<string, string[]>()
+    for (const r of rs) {
+      for (const n of r.nodes) {
+        if (!n.blocked || !TYPE_CONTRACTS[n.type]) continue
+        const list = blockers.get(n.blocked) || []
+        list.push(`${r.key} ${n.path}`)
+        blockers.set(n.blocked, list)
+      }
+    }
+    for (const [reason, list] of [...blockers.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      console.log(`${String(list.length).padStart(3)}  ${reason}`)
+      for (const x of list) console.log(`        ${x}`)
+    }
+    if (!blockers.size) console.log('（空）')
 
     console.log('\n================ C 桶：已登记组件子树上的不忠实出码 ================')
     const cList = rs.flatMap((r) => r.cHoles.map((h) => `${r.key} ${h.kind} ${h.path}  落在[${h.owner}]`))

@@ -193,6 +193,7 @@ const containerVisible = ref(false)
 const containerReadonly = ref(false)
 const containerMode = ref<'create' | 'edit' | 'view'>('create')
 const containerRecordId = ref('')
+const containerVersion = ref<number | undefined>(undefined)
 const formRef = ref()
 const form = reactive<Record<string, unknown>>({ order_no: '', order_date: '', customer_id: '', customer: '', contact_name: '', contact_phone: '', warehouse: '', warehouse_text: '', order_amount: '', discount_rate: '', due_amount: '', remark: '' })
 
@@ -201,11 +202,18 @@ async function openContainer(recordId: string, readonly: boolean, mode: 'create'
   containerMode.value = mode
   containerReadonly.value = readonly
   containerRecordId.value = recordId
-  form.order_no = ''
+  containerVersion.value = undefined
+  Object.keys(form).forEach((k) => { form[k] = '' })
   containerVisible.value = true
   if (recordId) {
     const res = await getData(recordId)
-    Object.assign(form, res.data ?? {})
+    // BizDataVO = { id, version, data: {业务字段} }：字段在 vo.data 里，摊错层就是一张空表单
+    const vo = (res.data ?? {}) as { version?: number; data?: Record<string, unknown> }
+    const record = vo.data ?? {}
+    // 只回填容器声明过的字段（对齐 DsBindingEngine.ts:79-82）：整条记录灌进 form，保存时
+    // { ...form } 会把根本没在编辑的业务字段一起写回去；id/version 留在字段模型之外
+    Object.keys(form).forEach((k) => { if (k in record) form[k] = record[k] })
+    containerVersion.value = typeof vo.version === 'number' ? vo.version : undefined
   }
 }
 
@@ -217,7 +225,7 @@ async function confirmSave() {
   if (containerMode.value === 'create') {
     await createData({ ...form })
   } else {
-    await updateData(containerRecordId.value, { ...form })
+    await updateData(containerRecordId.value, { ...form }, containerVersion.value)
   }
   closeContainer()
   // lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状）

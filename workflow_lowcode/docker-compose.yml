@@ -1,0 +1,63 @@
+# 部署编排：前端(nginx) + Java 后端 + Redis。MySQL 按约定不进容器，用外部实例。
+#
+# 首次部署：
+#   cp .env.example .env      # 填好数据库地址/密码、JWT_SECRET
+#   docker compose up -d --build
+#   docker compose logs -f backend
+#
+# 变量插值（${WEB_PORT} 等）与 backend 的 env_file 共用同一个 .env。
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: workflow-redis
+    restart: unless-stopped
+    # 只做会话/通知缓存，允许按 LRU 淘汰；AOF 保证重启后不丢缓存键
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    # 故意不发布端口：只允许 compose 内网里的 backend 访问（无密码）
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    image: workflow-lowcode-backend
+    container_name: workflow-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+    volumes:
+      # 附件与远程物料 bundle 落盘处（ATTACHMENT_STORAGE_PATH / WORKFLOW_MATERIAL_STORAGE_PATH）
+      - workflow-data:/app/data
+    ports:
+      - "${API_PORT:-8080}:8080"
+    extra_hosts:
+      # Linux 宿主机上让容器能访问跑在宿主机的 MySQL；Docker Desktop 自带该映射
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    # 后端/前端的 HEALTHCHECK 在各自 Dockerfile 里声明，此处不再重复
+
+  frontend:
+    build:
+      context: ./frontend
+    image: workflow-lowcode-frontend
+    container_name: workflow-frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - backend
+
+volumes:
+  workflow-data:
+  redis-data:

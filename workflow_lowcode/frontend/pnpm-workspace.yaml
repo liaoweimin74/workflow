@@ -1,0 +1,14 @@
+# pnpm 11 工程设置（本地 dev 与镜像构建共用同一份，避免两套布局）
+
+# 前端源码里有 8 处 import 没在 package.json 声明（src/vendor 的 FcDesigner 拷贝用到
+# js-beautify / marked / signature_pad / codemirror；bpmn 设计器用到 diagram-js / tiny-svg；
+# codegen 用到 @babel/parser）。它们都是 bpmn-js、@form-create/* 的传递依赖，
+# 只在扁平布局下能被解析。pnpm 默认的隔离布局会直接构建失败，故显式 hoisted。
+# 把这些包补成直接依赖是更彻底的修法，但那要逐包定版本，另案处理。
+nodeLinker: hoisted
+
+# pnpm 10+ 默认拦下依赖的构建脚本并以 ERR_PNPM_IGNORED_BUILDS 报错退出（镜像构建因此断掉）。
+# 这里逐个放行：core-js-pure 的脚本只打印捐助提示，vue-demi 的脚本按已装 Vue 版本切换入口。
+allowBuilds:
+  core-js-pure: true
+  vue-demi: true

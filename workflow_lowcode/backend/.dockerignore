@@ -1,0 +1,10 @@
+target/
+data/
+config/
+*.log
+*.class
+.env
+.env.*
+GenHash.java
+Dockerfile
+.dockerignore

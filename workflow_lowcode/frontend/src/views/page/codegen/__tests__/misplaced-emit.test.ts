@@ -12,6 +12,11 @@
 import { describe, expect, it } from 'vitest'
 
 import DataPicker from '@lc/runtime/dataPicker'
+import DashChart from '@lc/runtime/dash-chart'
+import DashFilter from '@lc/runtime/dash-filter'
+import DashKpi from '@lc/runtime/dash-kpi'
+import DashNotice from '@lc/runtime/dash-notice'
+import DashTodo from '@lc/runtime/dash-todo'
 import FormulaField from '@lc/runtime/FormulaField'
 import LookupPicker from '@lc/runtime/LookupPicker'
 import PageListCards from '@lc/runtime/page-list-cards'
@@ -40,6 +45,11 @@ const RUNTIME_COMPONENTS: Record<string, unknown> = {
   dataPicker: DataPicker,
   LookupPicker,
   FormulaField,
+  'dash-filter': DashFilter,
+  'dash-kpi': DashKpi,
+  'dash-chart': DashChart,
+  'dash-notice': DashNotice,
+  'dash-todo': DashTodo,
 }
 
 const camelize = (s: string) => s.replace(/-(\w)/g, (_m, c) => String(c).toUpperCase())
@@ -62,6 +72,8 @@ function emittedAttrs(source: string, tag: string): string[] {
       if (raw.startsWith('@') || raw.startsWith('#') || raw.startsWith('v-')) continue
       const name = raw.startsWith(':') ? raw.slice(1) : raw
       if (['ref', 'key', 'class', 'style'].includes(name)) continue
+      // lc:node 是出码写给回读器看的节点地址，不是配置项
+      if (name.startsWith('lc:')) continue
       out.add(camelize(name))
     }
   }

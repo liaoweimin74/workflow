@@ -91,6 +91,14 @@ interface Binding {
   event?: boolean
 }
 
+/** 元素上的 lc:node 静态属性值（出码写的节点地址）；没有则 undefined */
+function nodeIdOf(el: Ctx): string | undefined {
+  for (const p of el.props || []) {
+    if (p.type === 6 && String(p.name) === 'lc:node') return String(p.value?.content ?? '')
+  }
+  return undefined
+}
+
 interface Template {
   anchors: Record<string, Record<string, string>>
   anchorHits: string[]
@@ -225,6 +233,9 @@ function resolveExpr(expr: string, consts: Record<string, unknown>): unknown {
   if (arr) return arr[1].split(',').map((x) => resolveExpr(x, consts))
   const member = e.match(/^(\w+)\.(\w+)$/)
   if (member && member[1] in consts) return (consts[member[1]] as any)?.[member[2]]
+  // 常量表的下标取用（:ds-ref-id="dataSources['ds_x']"）：非首个数据源的组件按源 id 查 refId
+  const index = e.match(/^(\w+)\[\s*'([^']+)'\s*\]$/)
+  if (index && index[1] in consts) return (consts[index[1]] as any)?.[index[2]]
   return { __unresolved__: e }
 }
 
@@ -243,6 +254,10 @@ export function reverseToSchema(
   const elFor = (node: NodeArtifact): Ctx | undefined => {
     if (!node.host?.tag) return undefined
     const cands = t.els.filter((e) => e.tag === node.host.tag)
+    // 元素上的 lc:node 是出码写的节点地址（展示组件同类型多实例靠它各回各的元素）：
+    // 没带地址的产物（列表组件、容器、字段控件）仍走原来的「按标签取第一个 / v-model 匹配」
+    const addressed = cands.find((e) => nodeIdOf(e) === node.id)
+    if (addressed) return addressed
     if (!node.host.vmodel) return cands[0]
     return cands.find((e) => t.bindings(e).model?.expr === node.host.vmodel)
   }
@@ -259,9 +274,11 @@ export function reverseToSchema(
     return out
   }
 
-  const derived: Record<string, () => unknown> = {
-    dsRefId: () => {
-      const refId = getPath(rebuilt, `${firstDsEvidenceNode(manifest)?.rulePath ?? 'rule[0]'}.props.dsRefId`)
+  const derived: Record<string, (node: NodeArtifact) => unknown> = {
+    // 逐节点回读自己的证据：仪表盘上一排组件各绑一个源，只看第一个节点就会把同源第一张卡的
+    // refId 套给所有卡（回读出来的 dataSourceId 全体相等，差异被 renamedFrom 吞掉看不见）
+    dsRefId: (node) => {
+      const refId = getPath(rebuilt, `${node.rulePath}.props.dsRefId`)
       return manifest.dataSources.find((d) => d.refId === refId)?.id
     },
     containerDisplayMode: () => (t.findEl('el-drawer') ? 'drawer' : t.findEl('el-dialog') ? 'popup' : 'inline'),
@@ -278,7 +295,7 @@ export function reverseToSchema(
   }
 
   function resolveEvidence(to: string, node: NodeArtifact): unknown {
-    if (to.startsWith('derived:')) return derived[to.slice(8)]?.()
+    if (to.startsWith('derived:')) return derived[to.slice(8)]?.(node)
     if (to.startsWith('anchor:')) {
       const [id, key] = to.slice(7).split('@')
       return t.anchors[id]?.[key]
@@ -441,8 +458,4 @@ export function reverseToSchema(
     consts: Object.keys(t.consts),
     wireStripped: [...wireStripped],
   }
-}
-
-function firstDsEvidenceNode(manifest: GeneratedManifest): NodeArtifact | undefined {
-  return manifest.nodes.find((n) => (n.renames || []).some((r) => r.to === 'derived:dsRefId'))
 }

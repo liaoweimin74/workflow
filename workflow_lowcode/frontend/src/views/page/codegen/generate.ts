@@ -424,7 +424,9 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   const mode = contract.displayModeDriven ? ctx.containerMode : undefined
   const tag = mode ? containerTag(mode) : contract.tag
   // 组件没 defineExpose（list.expose=none）就别写 ref：产物里挂个取不到方法的 ref 是假接线。
-  // 展示组件（dash-*）更没有可取用的 expose（实例只经 ready 上报给渲染器登记表），产物不挂 ref。
+  // 展示组件（dash-* / page-*）确实暴露了 refresh/setFilter，但产物侧还没有取用方
+  // （现网靠 ready 上报进 dashInstances/componentRefs 由渲染器寻址，产物没有那张登记表），
+  // 挂 ref 只会多一个没人调的变量；要接就先消对应的 requires 语义债。
   const refable = !!contract.runtime && !contract.widget && contract.list?.expose !== 'none'
   const plan: NodePlan = {
     node: {
@@ -1000,7 +1002,7 @@ function assembleVue(args: {
 
 /**
  * 展示组件段：连续的几个节点并进一段栅格。
- * el-row > el-col.fc-form-col > el-form-item（无 label）> 组件 —— 现网这四层都是 form-create 给的，
+ * el-row > el-col.fc-form-col > el-form-item > 组件 —— 现网这四层都是 form-create 给的，
  * 撑满档靠 dash-fill-height.css 沿 el-col.fc-form-col > el-form-item > __content 传高，
  * 少任意一层，props.height='100%' 就退化成内容高。
  */
@@ -1011,7 +1013,10 @@ function renderWidgetRow(widgets: NodePlan[], indent: string): string[] {
     const props = p.propSnippets.length ? ` ${p.propSnippets.join(' ')}` : ''
     L.push(`${indent}  <el-col class="fc-form-col" :span="${lit(span)}">`)
     L.push(`${indent}    <!-- ${p.node.anchor} -->`)
-    L.push(`${indent}    <el-form-item>`)
+    // 标题载体按类型表态：dash 族的节点 title 被渲染器置空（空壳 form-item 只为撑满档传高），
+    // page-* 展示组件的 title 照旧由 form-create 当 label 渲染，两者都靠 self.title 登记决定
+    const label = p.attrs['el-form-item']?.label
+    L.push(`${indent}    <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
     L.push(`${indent}      <${p.tag}${props} />`)
     L.push(`${indent}    </el-form-item>`)
     L.push(`${indent}  </el-col>`)

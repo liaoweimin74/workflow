@@ -19,7 +19,10 @@ import DashNotice from '@lc/runtime/dash-notice'
 import DashTodo from '@lc/runtime/dash-todo'
 import FormulaField from '@lc/runtime/FormulaField'
 import LookupPicker from '@lc/runtime/LookupPicker'
+import PageChart from '@lc/runtime/page-chart'
+import PageDetail from '@lc/runtime/page-detail'
 import PageListCards from '@lc/runtime/page-list-cards'
+import PageSteps from '@lc/runtime/page-steps'
 import PageTable from '@lc/runtime/page-table'
 
 import { TYPE_CONTRACTS } from '../contract'
@@ -43,6 +46,9 @@ const RUNTIME_COMPONENTS: Record<string, unknown> = {
   'dash-chart': DashChart,
   'dash-notice': DashNotice,
   'dash-todo': DashTodo,
+  'page-chart': PageChart,
+  'page-detail': PageDetail,
+  'page-steps': PageSteps,
   dataPicker: DataPicker,
   LookupPicker,
   FormulaField,
@@ -126,7 +132,7 @@ describe('组件必填输入面', () => {
       .filter(([, c]) => (c as any).needsPageKey)
       .map(([t]) => t)
       .sort()
-    expect(withPageKey).toEqual(['page-list-cards', 'page-table'])
+    expect(withPageKey).toEqual(['page-chart', 'page-detail', 'page-list-cards', 'page-table'])
   })
 
   it('产物不许漏传组件必填 prop', () => {

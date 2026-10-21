@@ -84,6 +84,13 @@ export interface TypeContract {
    */
   requires?: Array<{ key: string; note: string }>
   /**
+   * 产物要传页面 key：现网由 PageRendererPage.vue:552-553 给数据组件统一注入 props.pageKey，
+   * 产物没有这层注入。PageDataTable 把它声明成必填无默认（PageDataTable.vue:185-187），
+   * 还拿它拼 Excel 导入导出 URL（:723），漏传就是运行时缺参 + 导出指向空页面。
+   * 值来自出码入参，schema 里没有这个键，所以走 wireOnly 归属登记。
+   */
+  needsPageKey?: true
+  /**
    * 展示组件（仪表盘组件族）：不是字段控件、也不是列表组件。
    * 顶层按 rule.col.span 出 el-row > el-col.fc-form-col > el-form-item 栅格（现网这层是 form-create 给的，
    * 「撑满(100%)」高度档靠它传高），元素带 lc:node 锚点属性 —— 同类型多实例必须各回各的元素，
@@ -143,6 +150,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
   'page-table': {
     tag: 'page-table',
     runtime: true,
+    needsPageKey: true,
     list: {
       events: [
         { on: 'row-click', handler: 'onRowClick' },
@@ -343,6 +351,7 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
   'page-list-cards': {
     tag: 'page-list-cards',
     runtime: true,
+    needsPageKey: true,
     list: {
       events: [
         { on: 'row-click', handler: 'onRowClick' },

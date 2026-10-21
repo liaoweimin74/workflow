@@ -299,4 +299,17 @@ class SqlTemplateEngineTest {
         assertThat(wrapped.select().sql()).doesNotContain("customer_name = ?");
         assertThat(wrapped.select().params()).containsExactly(TENANT, 10, 0);
     }
+
+    @Test
+    void wrap_rowScope_emptyArray_deniesEverything() {
+        // v3 可见集合白名单：受控未授权时服务端写空数组，外层与计数都必须拼 1 = 0
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of());
+
+        SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
+                TEMPLATE, TENANT, columns(), filters, null, null, null, null, 1, 10);
+
+        assertThat(wrapped.select().sql()).contains("_qs WHERE (1 = 0)");
+        assertThat(wrapped.select().params()).containsExactly(TENANT, 10, 0);
+        assertThat(wrapped.count().sql()).contains("_qs WHERE (1 = 0)");
+    }
 }

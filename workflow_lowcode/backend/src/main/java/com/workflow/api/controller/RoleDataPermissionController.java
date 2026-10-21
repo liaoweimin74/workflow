@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 角色数据权限端点：按角色维护「权限对象 × 读/写」勾选。
+ * 角色数据权限端点：按角色维护「权限对象」勾选（v3：授权 = 赋予可见行）。
  *
  * <p>这是 ROLE 授权的唯一写入口（对齐「分配菜单」）；与行权限对象端点一样仅管理员可用。
  */
@@ -46,7 +46,7 @@ public class RoleDataPermissionController {
     public R<Void> save(@PathVariable Long roleId, @RequestBody RoleDataPermissionSaveRequest request) {
         requireAdmin();
         List<Item> items = request.getItems() == null ? List.of() : request.getItems().stream()
-                .map(item -> item == null ? null : new Item(item.getPermissionId(), item.getActions()))
+                .map(item -> item == null ? null : new Item(item.getPermissionId()))
                 .toList();
         roleDataPermissionService.save(roleId, items);
         return R.ok();
@@ -59,8 +59,7 @@ public class RoleDataPermissionController {
         dto.setRemark(view.remark());
         dto.setConditions(view.conditions());
         dto.setDataSourceIds(view.dataSourceIds());
-        dto.setRead(view.read());
-        dto.setWrite(view.write());
+        dto.setGranted(view.granted());
         return dto;
     }
 

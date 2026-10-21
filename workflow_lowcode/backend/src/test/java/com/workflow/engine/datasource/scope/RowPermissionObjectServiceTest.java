@@ -5,6 +5,7 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
@@ -57,7 +58,7 @@ class RowPermissionObjectServiceTest {
                 grantRepository,
                 new DataScopeSubjectResolver(),
                 new DataScopeVariables(mock(SysOrganizationRepository.class)),
-                om, new TenantProvider());
+                om, new TenantProvider(), mock(DataSourceDefinitionRepository.class));
         service = new RowPermissionObjectService(permissionRepository, sourceRepository, grantRepository,
                 dataScopeService, dataSourceService, new TenantProvider(), om);
         TenantContext.setTenantId(TENANT);
@@ -98,25 +99,25 @@ class RowPermissionObjectServiceTest {
     void save_never_touches_grant_table() {
         RowPermission existing = permission(10L, "销售-部门");
         RowPermissionSource oldLink = link(10L, DS1);
-        RowPermissionGrant roleGrant = grantEntity(10L, DataScopeAction.READ, DataScopeSubject.ROLE, "ROLE_CLERK");
-        RowPermissionGrant writeGrant = grantEntity(10L, DataScopeAction.WRITE, DataScopeSubject.ROLE, "ROLE_CLERK");
+        RowPermissionGrant clerkGrant = grantEntity(10L, DataScopeSubject.ROLE, "ROLE_CLERK");
+        RowPermissionGrant salesGrant = grantEntity(10L, DataScopeSubject.ROLE, "ROLE_SALES");
         when(permissionRepository.findByIdAndTenantId(10L, TENANT)).thenReturn(Optional.of(existing));
         when(permissionRepository.save(any(RowPermission.class))).thenAnswer(inv -> inv.getArgument(0));
         when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of(oldLink));
         when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L))
-                .thenReturn(List.of(roleGrant, writeGrant));
+                .thenReturn(List.of(salesGrant, clerkGrant));
 
         RowPermissionObjectService.Detail saved = service.save(input(10L,
                 List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS2)));
 
         verify(sourceRepository).deleteAll(List.of(oldLink));
         verify(sourceRepository).flush();
-        // 换数据源、换条件都不动授权：角色管理勾的轴必须原样留着
+        // 换数据源、换条件都不动授权：角色管理勾的授权必须原样留着
         verify(grantRepository, never()).save(any());
         verify(grantRepository, never()).delete(any());
         verify(grantRepository, never()).deleteAll(any());
-        assertEquals(List.of("READ|ROLE|ROLE_CLERK", "WRITE|ROLE|ROLE_CLERK"), saved.grants().stream()
-                .map(grant -> grant.action() + "|" + grant.subjectType() + "|" + grant.subjectKey())
+        assertEquals(List.of("ROLE|ROLE_CLERK", "ROLE|ROLE_SALES"), saved.grants().stream()
+                .map(grant -> grant.subjectType() + "|" + grant.subjectKey())
                 .toList());
     }
 
@@ -224,15 +225,29 @@ class RowPermissionObjectServiceTest {
     }
 
     @Test
-    void save_rejects_blank_name_and_empty_conditions() {        BusinessException noName = assertThrows(BusinessException.class,
+    void save_rejects_blank_name() {
+        BusinessException noName = assertThrows(BusinessException.class,
                 () -> service.save(new RowPermissionObjectService.Input(null, "  ", null,
                         List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS1))));
-        assertEquals(400, noName.getCode());
 
-        BusinessException noConditions = assertThrows(BusinessException.class,
-                () -> service.save(input(null, List.of(), List.of(DS1))));
-        assertEquals(400, noConditions.getCode());
-        assertTrue(noConditions.getMessage().contains("至少需要一条条件"), noConditions.getMessage());
+        assertEquals(400, noName.getCode());
+        verify(permissionRepository, never()).save(any());
+    }
+
+    /** v3：空条件对象 = 全部行，是「某角色看全部」的正规配法。 */
+    @Test
+    void save_accepts_empty_conditions_as_all_rows() {
+        when(permissionRepository.save(any(RowPermission.class))).thenAnswer(inv -> {
+            RowPermission permission = inv.getArgument(0);
+            permission.setId(10L);
+            return permission;
+        });
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+        when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+
+        RowPermissionObjectService.Detail saved = service.save(input(null, List.of(), List.of(DS1)));
+
+        assertEquals(List.of(), saved.conditions());
     }
 
     @Test
@@ -263,7 +278,7 @@ class RowPermissionObjectServiceTest {
         when(permissionRepository.findByTenantIdOrderByIdDesc(TENANT)).thenReturn(List.of(permission));
         when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of(link(10L, DS1)));
         when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L))
-                .thenReturn(List.of(grantEntity(10L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                .thenReturn(List.of(grantEntity(10L, DataScopeSubject.ROLE, "clerk")));
 
         List<RowPermissionObjectService.Detail> list = service.list();
 
@@ -325,12 +340,10 @@ class RowPermissionObjectServiceTest {
         return link;
     }
 
-    private RowPermissionGrant grantEntity(Long permissionId, DataScopeAction action,
-                                          DataScopeSubject subjectType, String subjectKey) {
+    private RowPermissionGrant grantEntity(Long permissionId, DataScopeSubject subjectType, String subjectKey) {
         RowPermissionGrant grant = new RowPermissionGrant();
         grant.setTenantId(TENANT);
         grant.setPermissionId(permissionId);
-        grant.setAction(action);
         grant.setSubjectType(subjectType);
         grant.setSubjectKey(subjectKey);
         return grant;

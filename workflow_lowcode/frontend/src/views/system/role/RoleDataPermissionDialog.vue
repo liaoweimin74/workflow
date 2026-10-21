@@ -8,10 +8,11 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <el-alert type="info" :closable="false" show-icon class="mb-3">
-      <template #title>按权限对象勾选读 / 写</template>
+      <template #title>按权限对象勾选授权</template>
       <div class="text-xs leading-5">
         这里是数据权限的唯一授权入口：勾选只影响本角色，其他角色的授权不受影响。
-        读轴约束列表、聚合与单条读取；写轴约束修改、删除。两个轴都不勾选表示该对象不约束此角色。
+        授权 = 赋予该角色看见对象圈定行的权利（看即能操作，不再分读/写）。
+        数据源只要挂过权限对象就受控：本角色未被授权任何对象时，在这些数据源上一行都看不见。
       </div>
     </el-alert>
 
@@ -30,19 +31,11 @@
       <el-table-column label="数据源" width="90" align="center">
         <template #default="{ row }">{{ row.dataSourceIds.length }} 个</template>
       </el-table-column>
-      <el-table-column label="读" width="70" align="center">
+      <el-table-column label="授权" width="80" align="center">
         <template #default="{ row }">
           <el-checkbox
-            v-model="row.read"
-            :data-testid="`role-dp-read-${row.permissionId}`"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column label="写" width="70" align="center">
-        <template #default="{ row }">
-          <el-checkbox
-            v-model="row.write"
-            :data-testid="`role-dp-write-${row.permissionId}`"
+            v-model="row.granted"
+            :data-testid="`role-dp-granted-${row.permissionId}`"
           />
         </template>
       </el-table-column>
@@ -66,7 +59,6 @@ import {
   type RoleDataPermission,
   type RoleDataPermissionSaveItem,
 } from '@/api/role'
-import type { DataScopeAction } from '@/api/dataScope'
 import type { RoleVO } from '@/types/role'
 import { conditionSummary } from '../row-permission/conditionModel'
 
@@ -92,7 +84,7 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     const res = await getRoleDataPermissions(roleId)
-    rows.value = (res.data ?? []).map((row) => ({ ...row, read: !!row.read, write: !!row.write }))
+    rows.value = (res.data ?? []).map((row) => ({ ...row, granted: !!row.granted }))
   } finally {
     loading.value = false
   }
@@ -102,13 +94,8 @@ async function submit(): Promise<void> {
   const roleId = props.role?.id
   if (!roleId) return
   const items: RoleDataPermissionSaveItem[] = rows.value
-    .filter((row) => row.read || row.write)
-    .map((row) => {
-      const actions: DataScopeAction[] = []
-      if (row.read) actions.push('READ')
-      if (row.write) actions.push('WRITE')
-      return { permissionId: row.permissionId, actions }
-    })
+    .filter((row) => row.granted)
+    .map((row) => ({ permissionId: row.permissionId }))
   saving.value = true
   try {
     await saveRoleDataPermissions(roleId, items)
@@ -127,8 +114,7 @@ function getState() {
     rows: rows.value.map((row) => ({
       permissionId: row.permissionId,
       permissionName: row.permissionName,
-      read: row.read,
-      write: row.write,
+      granted: row.granted,
     })),
   }
 }

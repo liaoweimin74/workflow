@@ -289,7 +289,7 @@ describe('RowPermissionEditor', () => {
         { column: 'dept_id', op: 'in', value: ['3', '{orgIdSubtree}'] },
       ],
       dataSourceIds: ['ds-1'],
-      grants: [{ action: 'READ', subjectType: 'ROLE', subjectKey: 'ROLE_CLERK' }],
+      grants: [{ subjectType: 'ROLE', subjectKey: 'ROLE_CLERK' }],
     })
 
     expect((wrapper.find('[data-testid="rp-name"]').element as HTMLInputElement).value).toBe('本人或部门')
@@ -314,7 +314,7 @@ describe('RowPermissionEditor', () => {
     expect(JSON.stringify((rowPermissionApi.save as any).mock.calls[0][0])).not.toContain('grants')
   })
 
-  it('没有任何角色授权时提示本对象不收紧任何人', async () => {
+  it('没有任何角色授权时提示关联源对非管理员不可见', async () => {
     const wrapper = await mountEditor({
       id: 7,
       name: '只关联未授权',
@@ -325,6 +325,25 @@ describe('RowPermissionEditor', () => {
     })
 
     expect(wrapper.text()).toContain('当前没有任何角色授权')
+    expect(wrapper.text()).toContain('非管理员都看不见')
+    expect(wrapper.text()).not.toContain('不会收紧任何人')
     expect(wrapper.text()).not.toContain('添加授权')
+  })
+
+  /** v3：空条件对象合法，代表「全部行」——用于给某角色放开整源 */
+  it('空条件对象可以保存（全部行）', async () => {
+    const wrapper = await mountEditor({
+      id: 9,
+      name: '全部可见',
+      remark: null,
+      conditions: [],
+      dataSourceIds: ['ds-1'],
+      grants: [{ subjectType: 'ROLE', subjectKey: 'ROLE_ADMIN_CLERK' }],
+    })
+
+    await wrapper.find('[data-testid="rp-save"]').trigger('click')
+    await flushPromises()
+
+    expect(rowPermissionApi.save).toHaveBeenCalledWith(expect.objectContaining({ id: 9, conditions: [] }))
   })
 })

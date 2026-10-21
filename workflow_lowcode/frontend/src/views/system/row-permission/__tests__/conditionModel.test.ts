@@ -67,7 +67,8 @@ describe('conditionModel', () => {
   })
 
   it('缺列、列名非法、空 IN、缺端点、空取值分别报错', () => {
-    expect(validateConditionRows([])).toContain('至少需要一条条件')
+    // v3：空条件是合法的「全部行」对象，不再报错
+    expect(validateConditionRows([])).toBeNull()
     expect(validateConditionRows([row({ column: '' })])).toContain('缺少列名')
     expect(validateConditionRows([row({ column: 'bad column' })])).toContain('列名非法')
     expect(validateConditionRows([row({ op: 'in', value: ' , ' })])).toContain('非空列表')

@@ -1,4 +1,4 @@
-// TDD: 覆盖度盘点面板（缺口 / 豁免登记 / 撤销留痕）
+// TDD: 覆盖度盘点面板（v3 按源单状态：已受控 / 未授权 / 缺口 / 豁免登记 / 撤销留痕）
 // npx vitest run src/views/system/row-permission/__tests__/RowScopeCoveragePanel.test.ts
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -22,7 +22,7 @@ vi.mock('element-plus', async () => {
   const actual = await vi.importActual('element-plus')
   return {
     ...actual,
-    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     ElMessageBox: { confirm: vi.fn(), prompt: vi.fn() },
   }
 })
@@ -32,8 +32,7 @@ const mounted: any[] = []
 function exemption(overrides: Record<string, unknown> = {}) {
   return {
     id: 5,
-    dataSourceId: 'ds-1',
-    action: 'READ',
+    dataSourceId: 'ds-3',
     reason: '仅管理员使用，由菜单权限兜底',
     createdBy: 'admin',
     createdAt: '2026-10-20T10:00:00',
@@ -50,41 +49,48 @@ function coverage() {
         dataSourceId: 'ds-1',
         name: '订单数据源',
         type: 'FORM',
-        read: {
-          action: 'READ',
+        coverage: {
           status: 'COVERED',
           permissionNames: ['销售本人数据'],
-          exemption: exemption({ id: 6, action: 'READ', revokedBy: null }),
+          exemption: exemption({ id: 6, dataSourceId: 'ds-1' }),
         },
-        write: {
-          action: 'WRITE',
+      },
+      {
+        dataSourceId: 'ds-2',
+        name: '报价数据源',
+        type: 'SQL',
+        coverage: {
+          status: 'NO_GRANT',
+          permissionNames: ['南方铝业', '东方电子'],
+          exemption: null,
+        },
+      },
+      {
+        dataSourceId: 'ds-3',
+        name: '客户数据源',
+        type: 'SQL',
+        coverage: {
+          status: 'EXEMPT',
+          permissionNames: [],
+          exemption: exemption({ id: 7 }),
+        },
+      },
+      {
+        dataSourceId: 'ds-4',
+        name: '台账数据源',
+        type: 'FORM',
+        coverage: {
           status: 'GAP',
           permissionNames: [],
           exemption: null,
         },
       },
-      {
-        dataSourceId: 'ds-2',
-        name: '客户数据源',
-        type: 'SQL',
-        read: {
-          action: 'READ',
-          status: 'EXEMPT',
-          permissionNames: [],
-          exemption: exemption({ id: 7 }),
-        },
-        write: {
-          action: 'WRITE',
-          status: 'COVERED',
-          permissionNames: ['客户维护'],
-          exemption: null,
-        },
-      },
     ],
-    totalAxes: 4,
-    coveredAxes: 2,
-    exemptAxes: 1,
-    gapAxes: 1,
+    totalSources: 4,
+    coveredSources: 1,
+    noGrantSources: 1,
+    exemptSources: 1,
+    gapSources: 1,
   }
 }
 
@@ -95,7 +101,7 @@ async function mountPanel() {
       exemption({ id: 7 }),
       exemption({
         id: 4,
-        action: 'WRITE',
+        dataSourceId: 'ds-4',
         reason: '历史接受',
         revokedBy: 'admin',
         revokedAt: '2026-10-19T09:00:00',
@@ -103,7 +109,14 @@ async function mountPanel() {
     ],
   })
   const wrapper = mount(RowScopeCoveragePanel, {
-    props: { dataSourceNames: { 'ds-1': '订单数据源', 'ds-2': '客户数据源' } },
+    props: {
+      dataSourceNames: {
+        'ds-1': '订单数据源',
+        'ds-2': '报价数据源',
+        'ds-3': '客户数据源',
+        'ds-4': '台账数据源',
+      },
+    },
     global: { plugins: [ElementPlus] },
   })
   mounted.push(wrapper)
@@ -126,18 +139,27 @@ describe('RowScopeCoveragePanel', () => {
     mounted.splice(0).forEach((wrapper) => wrapper.unmount())
   })
 
-  it('并发展示覆盖 / 缺口 / 豁免与汇总计数', async () => {
+  it('按源展示四种状态与汇总计数', async () => {
     const wrapper = await mountPanel()
 
     expect(rowPermissionApi.coverage).toHaveBeenCalled()
     expect(rowPermissionApi.exemptions).toHaveBeenCalled()
     const text = wrapper.text()
-    expect(text).toContain('已覆盖')
-    expect(text).toContain('缺口')
+    expect(text).toContain('已受控')
+    expect(text).toContain('未授权')
     expect(text).toContain('已豁免')
+    expect(text).toContain('缺口')
+    // 已受控的源仍回显历史豁免记录
     expect(text).toContain('仍挂着生效豁免')
     expect(text).toContain('仅管理员使用，由菜单权限兜底')
     expect(text).toContain('已撤销')
+  })
+
+  it('未授权 = 挂了对象但没人被授到，非管理员不可见', async () => {
+    const wrapper = await mountPanel()
+
+    expect(wrapper.text()).toContain('没有任何角色被授权')
+    expect(wrapper.text()).toContain('非管理员看不见该源')
   })
 
   it('登记豁免：理由随请求提交并刷新报告', async () => {
@@ -151,8 +173,7 @@ describe('RowScopeCoveragePanel', () => {
 
     expect(ElMessageBox.prompt).toHaveBeenCalled()
     expect(rowPermissionApi.exempt).toHaveBeenCalledWith({
-      dataSourceId: 'ds-1',
-      action: 'WRITE',
+      dataSourceId: 'ds-4',
       reason: '该源仅管理员使用',
     })
     expect(rowPermissionApi.coverage).toHaveBeenCalledTimes(2)

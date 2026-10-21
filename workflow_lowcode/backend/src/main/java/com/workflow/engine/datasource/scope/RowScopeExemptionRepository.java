@@ -13,6 +13,6 @@ public interface RowScopeExemptionRepository extends JpaRepository<RowScopeExemp
 
     List<RowScopeExemption> findByTenantIdAndRevokedAtIsNull(String tenantId);
 
-    Optional<RowScopeExemption> findFirstByTenantIdAndDataSourceIdAndActionAndRevokedAtIsNull(
-            String tenantId, String dataSourceId, DataScopeAction action);
+    Optional<RowScopeExemption> findFirstByTenantIdAndDataSourceIdAndRevokedAtIsNull(
+            String tenantId, String dataSourceId);
 }

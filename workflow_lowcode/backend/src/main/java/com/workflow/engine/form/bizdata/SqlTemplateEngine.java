@@ -509,6 +509,8 @@ public final class SqlTemplateEngine {
         }
         if (groupFragments.isEmpty()) {
             rollbackParams(params, mark);
+            // 可见集合白名单（v3）：空数组 = 拒绝一切——受控未授权的角色一条都不能看见
+            sql.append(" AND (1 = 0)");
             return;
         }
         sql.append(" AND (").append(String.join(" OR ", groupFragments)).append(")");

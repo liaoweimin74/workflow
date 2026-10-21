@@ -142,7 +142,7 @@ const unregisterAi = registerPageActions({
     tableColumns: columns.map((c) => ({ field: (c as TableColumn).prop, title: (c as TableColumn).label })).filter((c) => c.field),
     formFields: formConfig.rule.map((r) => ({ field: (r as any).field, title: (r as any).title, required: !!(r as any).validate?.length })),
     buttons: ['search', 'reset', 'open-create', 'open-edit', 'submit', 'assign-menu', 'check-menu', 'submit-menu', 'assign-data-permission'],
-    notes: 'set-query 即时生效并刷新列表；弹窗表单先 open-create/open-edit 再 set-value，最后 submit；分配菜单流程=assign-menu(行序号)→check-menu(菜单名数组)→submit-menu；数据权限流程=assign-data-permission(行序号) 打开勾选弹窗（人工勾选读写轴后保存）',
+    notes: 'set-query 即时生效并刷新列表；弹窗表单先 open-create/open-edit 再 set-value，最后 submit；分配菜单流程=assign-menu(行序号)→check-menu(菜单名数组)→submit-menu；数据权限流程=assign-data-permission(行序号) 打开勾选弹窗（人工勾选授权对象后保存）',
     layer: 'L2',
   }),
   handlers: {

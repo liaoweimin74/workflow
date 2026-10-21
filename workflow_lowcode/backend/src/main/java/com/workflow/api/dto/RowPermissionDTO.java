@@ -1,6 +1,5 @@
 package com.workflow.api.dto;
 
-import com.workflow.engine.datasource.scope.DataScopeAction;
 import com.workflow.engine.datasource.scope.DataScopeSubject;
 
 import java.util.List;
@@ -31,12 +30,9 @@ public class RowPermissionDTO {
 
     public static class GrantDTO {
 
-        private DataScopeAction action;
         private DataScopeSubject subjectType;
         private String subjectKey;
 
-        public DataScopeAction getAction() { return action; }
-        public void setAction(DataScopeAction action) { this.action = action; }
         public DataScopeSubject getSubjectType() { return subjectType; }
         public void setSubjectType(DataScopeSubject subjectType) { this.subjectType = subjectType; }
         public String getSubjectKey() { return subjectKey; }

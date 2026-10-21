@@ -5,10 +5,9 @@ import com.workflow.api.dto.RowScopeExemptionRequest;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.scope.RowScopeCoverageService;
-import com.workflow.engine.datasource.scope.RowScopeCoverageService.AxisCoverage;
+import com.workflow.engine.datasource.scope.RowScopeCoverageService.Coverage;
 import com.workflow.engine.datasource.scope.RowScopeCoverageService.ExemptionView;
 import com.workflow.engine.datasource.scope.RowScopeCoverageService.Report;
-import com.workflow.engine.datasource.scope.RowScopeCoverageService.SourceCoverage;
 import com.workflow.framework.security.domain.LoginUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -54,7 +53,7 @@ public class RowScopeCoverageController {
     @PostMapping("/exemptions")
     public R<RowScopeCoverageVO.RowScopeExemptionVO> exempt(@RequestBody RowScopeExemptionRequest req) {
         requireAdmin();
-        return R.ok(toVO(coverageService.exempt(req.getDataSourceId(), req.getAction(), req.getReason())));
+        return R.ok(toVO(coverageService.exempt(req.getDataSourceId(), req.getReason())));
     }
 
     @PostMapping("/exemptions/{id}/revoke")
@@ -70,23 +69,22 @@ public class RowScopeCoverageController {
             item.setDataSourceId(source.dataSourceId());
             item.setName(source.name());
             item.setType(source.type());
-            item.setRead(toVO(source.read()));
-            item.setWrite(toVO(source.write()));
+            item.setCoverage(toCoverageVO(source.coverage()));
             return item;
         }).toList());
-        vo.setTotalAxes(report.totalAxes());
-        vo.setCoveredAxes(report.coveredAxes());
-        vo.setExemptAxes(report.exemptAxes());
-        vo.setGapAxes(report.gapAxes());
+        vo.setTotalSources(report.totalSources());
+        vo.setCoveredSources(report.coveredSources());
+        vo.setNoGrantSources(report.noGrantSources());
+        vo.setExemptSources(report.exemptSources());
+        vo.setGapSources(report.gapSources());
         return vo;
     }
 
-    private RowScopeCoverageVO.AxisCoverage toVO(AxisCoverage axis) {
-        RowScopeCoverageVO.AxisCoverage item = new RowScopeCoverageVO.AxisCoverage();
-        item.setAction(axis.action());
-        item.setStatus(axis.status());
-        item.setPermissionNames(axis.permissionNames());
-        item.setExemption(axis.exemption() == null ? null : toVO(axis.exemption()));
+    private RowScopeCoverageVO.Coverage toCoverageVO(Coverage coverage) {
+        RowScopeCoverageVO.Coverage item = new RowScopeCoverageVO.Coverage();
+        item.setStatus(coverage.status());
+        item.setPermissionNames(coverage.permissionNames());
+        item.setExemption(coverage.exemption() == null ? null : toVO(coverage.exemption()));
         return item;
     }
 
@@ -94,7 +92,6 @@ public class RowScopeCoverageController {
         RowScopeCoverageVO.RowScopeExemptionVO vo = new RowScopeCoverageVO.RowScopeExemptionVO();
         vo.setId(view.id());
         vo.setDataSourceId(view.dataSourceId());
-        vo.setAction(view.action());
         vo.setReason(view.reason());
         vo.setCreatedBy(view.createdBy());
         vo.setCreatedAt(view.createdAt());

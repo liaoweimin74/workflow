@@ -43,15 +43,24 @@ const OBJECT = {
   conditions: [{ column: 'created_by', op: 'eq', value: '{userId}' }],
   dataSourceIds: ['ds-1'],
   grants: [
-    { action: 'READ', subjectType: 'ROLE', subjectKey: 'ROLE_CLERK' },
-    { action: 'WRITE', subjectType: 'ROLE', subjectKey: 'ROLE_GUEST' },
+    { subjectType: 'ROLE', subjectKey: 'ROLE_CLERK' },
+    { subjectType: 'ROLE', subjectKey: 'ROLE_GUEST' },
   ],
+}
+
+const UNGRANTED_OBJECT = {
+  id: 8,
+  name: '南方铝业',
+  remark: null,
+  conditions: [{ column: 'supplier', op: 'eq', value: '南方铝业' }],
+  dataSourceIds: ['ds-1'],
+  grants: [],
 }
 
 const mounted: any[] = []
 
 async function mountPage() {
-  rowPermissionApi.list.mockResolvedValue({ data: [OBJECT] })
+  rowPermissionApi.list.mockResolvedValue({ data: [OBJECT, UNGRANTED_OBJECT] })
   rowPermissionApi.coverage.mockResolvedValue({
     data: {
       sources: [
@@ -59,14 +68,14 @@ async function mountPage() {
           dataSourceId: 'ds-1',
           name: '订单数据源',
           type: 'FORM',
-          read: { action: 'READ', status: 'COVERED', permissionNames: ['销售本人数据'], exemption: null },
-          write: { action: 'WRITE', status: 'GAP', permissionNames: [], exemption: null },
+          coverage: { status: 'COVERED', permissionNames: ['销售本人数据'], exemption: null },
         },
       ],
-      totalAxes: 2,
-      coveredAxes: 1,
-      exemptAxes: 0,
-      gapAxes: 1,
+      totalSources: 1,
+      coveredSources: 1,
+      noGrantSources: 0,
+      exemptSources: 0,
+      gapSources: 0,
     },
   })
   rowPermissionApi.exemptions.mockResolvedValue({ data: [] })
@@ -112,9 +121,12 @@ describe('RowPermissionPage', () => {
     expect(text).toContain('销售本人数据')
     expect(text).toContain('created_by = {userId}')
     expect(text).toContain('订单数据源')
-    expect(text).toContain('职员 · 读')
-    expect(text).toContain('访客 · 写')
+    expect(text).toContain('职员')
+    expect(text).toContain('访客')
+    expect(text).not.toContain(' · 读')
     expect(text).toContain('已授权角色（只读）')
+    // v3：未授权 = 受控但非管理员看不见，不能再说是「不收紧任何人」
+    expect(text).toContain('未授权给任何角色（已关联的数据源非管理员都看不见）')
   })
 
   it('覆盖度 Tab 懒加载：切换后才请求盘点', async () => {

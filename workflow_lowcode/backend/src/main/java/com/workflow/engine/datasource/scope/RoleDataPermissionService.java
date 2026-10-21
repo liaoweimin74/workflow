@@ -8,8 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,11 +15,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 角色视角的数据权限：一个角色在若干权限对象上的读/写勾选。
+ * 角色视角的数据权限：一个角色被授了哪些权限对象。
+ *
+ * <p>v3 语义：授权 = 赋予可见行。受控数据源（被任意对象关联）上，
+ * 角色没被授到的行既看不见也改不了删不掉；一条都没授 = 该数据源整源不可见。
  *
  * <p>这是授权的唯一写入口（对齐「角色管理 → 分配菜单」）。权限对象页只展示既有授权，
  * 不再新增、修改或删除；保存时全量替换 {@code subjectType=ROLE,
- * subjectKey=roleCode} 的授权行，读写轴按勾选重建。
+ * subjectKey=roleCode} 的授权行。
  */
 @Service
 public class RoleDataPermissionService {
@@ -47,7 +48,7 @@ public class RoleDataPermissionService {
         this.tenantProvider = tenantProvider;
     }
 
-    /** 全部权限对象 × 当前角色的读写勾选；未授予的对象也会返回（勾选状态为 false）。 */
+    /** 全部权限对象 × 当前角色的授权勾选；未授予的对象也会返回（勾选状态为 false）。 */
     public List<View> list(Long roleId) {
         SysRole role = requireRole(roleId);
         String tenantId = tenantProvider.getTenantId();
@@ -60,13 +61,12 @@ public class RoleDataPermissionService {
                 .findByTenantIdAndPermissionIdIn(tenantId, permissionIds).stream()
                 .collect(Collectors.groupingBy(RowPermissionSource::getPermissionId,
                         Collectors.mapping(RowPermissionSource::getDataSourceId, Collectors.toList())));
-        Map<Long, Set<DataScopeAction>> axes = grantedAxes(tenantId, role.getRoleCode(), permissionIds);
+        Set<Long> granted = grantedIds(tenantId, role.getRoleCode(), permissionIds);
         return permissions.stream()
                 .map(permission -> new View(permission.getId(), permission.getName(), permission.getRemark(),
                         dataScopeService.parseStoredConditions(permission.getConditionsJson()),
                         sources.getOrDefault(permission.getId(), List.of()).stream().sorted().toList(),
-                        axes.getOrDefault(permission.getId(), Set.of()).contains(DataScopeAction.READ),
-                        axes.getOrDefault(permission.getId(), Set.of()).contains(DataScopeAction.WRITE)))
+                        granted.contains(permission.getId())))
                 .toList();
     }
 
@@ -81,88 +81,69 @@ public class RoleDataPermissionService {
         List<Item> normalized = normalize(items, tenantId);
         String roleCode = role.getRoleCode();
 
-        Set<String> desired = normalized.stream()
-                .flatMap(item -> item.actions().stream().map(action -> key(item.permissionId(), action)))
+        Set<Long> desired = normalized.stream().map(Item::permissionId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         List<RowPermissionGrant> existing = grantRepository
                 .findByTenantIdAndSubjectTypeAndSubjectKey(tenantId, DataScopeSubject.ROLE, roleCode);
         List<RowPermissionGrant> obsolete = existing.stream()
-                .filter(grant -> !desired.contains(key(grant.getPermissionId(), grant.getAction())))
+                .filter(grant -> !desired.contains(grant.getPermissionId()))
                 .toList();
         if (!obsolete.isEmpty()) {
             grantRepository.deleteAll(obsolete);
-            // 唯一键 (permission_id, subject_type, subject_key, scope_action)：先落删除再插新增
+            // 唯一键 (permission_id, subject_type, subject_key)：先落删除再插新增
             grantRepository.flush();
         }
-        Set<String> kept = existing.stream()
-                .map(grant -> key(grant.getPermissionId(), grant.getAction()))
+        Set<Long> kept = existing.stream()
+                .map(RowPermissionGrant::getPermissionId)
                 .filter(desired::contains)
                 .collect(Collectors.toSet());
-        for (Item item : normalized) {
-            for (DataScopeAction action : item.actions()) {
-                if (kept.contains(key(item.permissionId(), action))) {
-                    continue;
-                }
-                RowPermissionGrant grant = new RowPermissionGrant();
-                grant.setTenantId(tenantId);
-                grant.setPermissionId(item.permissionId());
-                grant.setAction(action);
-                grant.setSubjectType(DataScopeSubject.ROLE);
-                grant.setSubjectKey(roleCode);
-                grantRepository.save(grant);
+        for (Long permissionId : desired) {
+            if (kept.contains(permissionId)) {
+                continue;
             }
+            RowPermissionGrant grant = new RowPermissionGrant();
+            grant.setTenantId(tenantId);
+            grant.setPermissionId(permissionId);
+            grant.setSubjectType(DataScopeSubject.ROLE);
+            grant.setSubjectKey(roleCode);
+            grantRepository.save(grant);
         }
     }
 
-    private Map<Long, Set<DataScopeAction>> grantedAxes(String tenantId, String roleCode, List<Long> permissionIds) {
+    private Set<Long> grantedIds(String tenantId, String roleCode, List<Long> permissionIds) {
         Set<Long> visible = Set.copyOf(permissionIds);
-        Map<Long, Set<DataScopeAction>> axes = new LinkedHashMap<>();
-        for (RowPermissionGrant grant : grantRepository
-                .findByTenantIdAndSubjectTypeAndSubjectKey(tenantId, DataScopeSubject.ROLE, roleCode)) {
-            if (visible.contains(grant.getPermissionId())) {
-                axes.computeIfAbsent(grant.getPermissionId(), id -> EnumSet.noneOf(DataScopeAction.class))
-                        .add(grant.getAction());
-            }
-        }
-        return axes;
+        return grantRepository
+                .findByTenantIdAndSubjectTypeAndSubjectKey(tenantId, DataScopeSubject.ROLE, roleCode).stream()
+                .map(RowPermissionGrant::getPermissionId)
+                .filter(visible::contains)
+                .collect(Collectors.toSet());
     }
 
     private List<Item> normalize(List<Item> items, String tenantId) {
         if (items == null || items.isEmpty()) {
             return List.of();
         }
-        Map<Long, Set<DataScopeAction>> byPermission = new LinkedHashMap<>();
+        Set<Long> byPermission = new LinkedHashSet<>();
         for (Item item : items) {
             if (item == null || item.permissionId() == null) {
                 throw new BusinessException(400, "权限对象 id 不能为空");
             }
-            if (byPermission.containsKey(item.permissionId())) {
+            if (!byPermission.add(item.permissionId())) {
                 throw new BusinessException(400, "同一权限对象不能重复提交: " + item.permissionId());
             }
-            Set<DataScopeAction> actions = EnumSet.noneOf(DataScopeAction.class);
-            if (item.actions() != null) {
-                for (DataScopeAction action : item.actions()) {
-                    if (action == null) {
-                        throw new BusinessException(400, "读写动作不能为空");
-                    }
-                    actions.add(action);
-                }
-            }
-            byPermission.put(item.permissionId(), actions);
         }
         Set<Long> found = permissionRepository
-                .findByTenantIdAndIdIn(tenantId, byPermission.keySet()).stream()
+                .findByTenantIdAndIdIn(tenantId, byPermission).stream()
                 .map(RowPermission::getId)
                 .collect(Collectors.toSet());
-        List<Long> missing = byPermission.keySet().stream()
+        List<Long> missing = byPermission.stream()
                 .filter(id -> !found.contains(id))
                 .toList();
         if (!missing.isEmpty()) {
             throw new BusinessException(404, "权限对象不存在: " + missing);
         }
         List<Item> out = new ArrayList<>(byPermission.size());
-        byPermission.forEach((permissionId, actions) ->
-                out.add(new Item(permissionId, List.copyOf(actions))));
+        byPermission.forEach(permissionId -> out.add(new Item(permissionId)));
         return out;
     }
 
@@ -178,15 +159,11 @@ public class RoleDataPermissionService {
         return role;
     }
 
-    private String key(Long permissionId, DataScopeAction action) {
-        return permissionId + "|" + action.name();
-    }
-
-    public record Item(Long permissionId, List<DataScopeAction> actions) {
+    public record Item(Long permissionId) {
     }
 
     public record View(Long permissionId, String permissionName, String remark,
                        List<Map<String, Object>> conditions, List<String> dataSourceIds,
-                       boolean read, boolean write) {
+                       boolean granted) {
     }
 }

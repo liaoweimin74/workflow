@@ -5,6 +5,8 @@ import com.workflow.api.dto.AggregateRequest;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.FilterAware;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
@@ -20,21 +22,21 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 行权限 v2 语义验证：默认放行、多对象并集、读写分轴、保留键只由服务端写入、模板解析与脏配置快速失败。
+ * 行权限 v3 语义验证：关联即受控、授权即赋予（未授权 = 不可见）、空条件对象 = 全部行、
+ * 多对象并集、保留键只由服务端写入、模板解析与脏配置快速失败。
  *
  * <p>主体命中走真实 {@link DataScopeSubjectResolver}（只解析角色），不是桩。
  * 授权写入入口在角色管理，这里只验证读取链路。
@@ -42,6 +44,7 @@ import static org.mockito.Mockito.when;
 class DataScopeServiceTest {
 
     private static final String DS_ID = "ds-order";
+    private static final String FORM_KEY = "supplier_quote";
     private static final String TENANT = "t1";
 
     private final ObjectMapper om = new ObjectMapper();
@@ -50,6 +53,7 @@ class DataScopeServiceTest {
     private RowPermissionSourceRepository sourceRepository;
     private RowPermissionGrantRepository grantRepository;
     private SysOrganizationRepository organizationRepository;
+    private DataSourceDefinitionRepository dataSourceRepository;
     private DataScopeService service;
 
     @BeforeEach
@@ -58,9 +62,11 @@ class DataScopeServiceTest {
         sourceRepository = mock(RowPermissionSourceRepository.class);
         grantRepository = mock(RowPermissionGrantRepository.class);
         organizationRepository = mock(SysOrganizationRepository.class);
+        dataSourceRepository = mock(DataSourceDefinitionRepository.class);
         service = new DataScopeService(permissionRepository, sourceRepository, grantRepository,
                 new DataScopeSubjectResolver(),
-                new DataScopeVariables(organizationRepository), om, new TenantProvider());
+                new DataScopeVariables(organizationRepository), om, new TenantProvider(),
+                dataSourceRepository);
         TenantContext.setTenantId(TENANT);
     }
 
@@ -70,48 +76,91 @@ class DataScopeServiceTest {
         TenantContext.clear();
     }
 
-    // ==================== 施加：并集与默认放行 ====================
+    // ==================== 受控判定 ====================
 
     @Test
-    void applyRead_leaves_filter_untouched_when_no_grant() {
+    void unlinked_data_source_is_unrestricted() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        stubScope(List.of(), List.of());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"status\":\"paid\"}");
+
+        service.apply(DS_ID, req);
+
+        assertEquals("{\"status\":\"paid\"}", req.getFilter());
+        assertFalse(service.hasScope(DS_ID));
+    }
+
+    /** 关联即受控：数据源挂了权限对象但角色没被授到 = 0 行（保留键写成空数组组）。 */
+    @Test
+    void linked_without_any_grant_denies_everything() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
-        assertEquals("{\"status\":\"paid\"}", req.getFilter());
-        assertFalse(service.hasScope(DS_ID, DataScopeAction.READ));
+        Map<String, Object> filter = filterMap(req.getFilter());
+        assertEquals("paid", filter.get("status"));
+        assertEquals(List.of(), filter.get(FilterAware.ROW_SCOPE_KEY));
+        assertTrue(service.hasScope(DS_ID));
+    }
+
+    /** 授的是别的角色不救当前角色：受控数据源上仍然 0 行。 */
+    @Test
+    void grant_to_another_role_still_denies() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        stubScope(List.of(permission(1L, "p1", selfConditions())),
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "purchase_manager")));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        service.apply(DS_ID, req);
+
+        assertEquals(List.of(), groupsOf(req));
     }
 
     @Test
-    void applyRead_injects_self_grant_as_one_and_group() {
+    void user_without_roles_is_denied_on_linked_source() {
+        loginAs(200L, "u200", null, List.of());
+        stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        service.apply(DS_ID, req);
+
+        assertEquals(List.of(), groupsOf(req));
+        assertTrue(service.hasScope(DS_ID));
+    }
+
+    // ==================== 施加：授权即赋予 ====================
+
+    @Test
+    void apply_injects_granted_object_as_one_and_group() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         Map<String, Object> filter = filterMap(req.getFilter());
         assertEquals("paid", filter.get("status"));
         assertEquals(List.of(List.of(leaf("created_by", "eq", "200"))), filter.get(FilterAware.ROW_SCOPE_KEY));
-        assertTrue(service.hasScope(DS_ID, DataScopeAction.READ));
+        assertTrue(service.hasScope(DS_ID));
     }
 
     @Test
-    void applyRead_unions_every_matched_permission_instead_of_picking_one() {
+    void apply_unions_every_granted_permission_instead_of_picking_one() {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission self = permission(1L, "self", selfConditions());
         RowPermission owner = permission(2L, "owner", conditions(leaf("owner_id", "eq", "{userId}")));
         stubScope(List.of(self, owner), List.of(
-                grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk"),
-                grant(12L, 2L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                grant(11L, 1L, DataScopeSubject.ROLE, "clerk"),
+                grant(12L, 2L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         List<List<Map<String, Object>>> groups = groupsOf(req);
         assertEquals(2, groups.size());
@@ -120,15 +169,15 @@ class DataScopeServiceTest {
     }
 
     @Test
-    void applyRead_ignores_permissions_not_linked_to_this_data_source() {
+    void apply_ignores_permissions_not_linked_to_this_data_source() {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission linked = permission(1L, "linked", selfConditions());
         RowPermission elsewhere = permission(2L, "elsewhere", selfConditions());
         when(sourceRepository.findByTenantIdAndDataSourceId(TENANT, DS_ID))
                 .thenReturn(List.of(link(1L, DS_ID)));
         stubGrants(List.of(
-                grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk"),
-                grant(12L, 2L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                grant(11L, 1L, DataScopeSubject.ROLE, "clerk"),
+                grant(12L, 2L, DataScopeSubject.ROLE, "clerk")));
         when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection()))
                 .thenAnswer(inv -> {
                     Collection<Long> ids = inv.getArgument(1);
@@ -136,109 +185,142 @@ class DataScopeServiceTest {
                 });
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(1, groupsOf(req).size());
     }
 
     @Test
-    void applyRead_is_per_axis_read_grant_does_not_constrain_write() {
-        loginAs(200L, "u200", null, List.of("clerk"));
-        stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+    void apply_admin_is_exempt_even_on_linked_denied_source() {
+        loginAs(1L, "admin", null, List.of("admin"));
+        stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"status\":\"paid\"}");
 
-        service.apply(DS_ID, DataScopeAction.WRITE, req);
+        service.apply(DS_ID, req);
 
         assertEquals("{\"status\":\"paid\"}", req.getFilter());
-        assertFalse(service.hasScope(DS_ID, DataScopeAction.WRITE));
-        assertTrue(service.hasScope(DS_ID, DataScopeAction.READ));
+        assertFalse(service.hasScope(DS_ID));
     }
 
+    /** 空条件对象 = 全部行：授到的角色不受限，即便数据源受控。 */
     @Test
-    void applyAll_intersectsReadAndWriteGroups_asCrossProduct() {
+    void granted_empty_conditions_object_means_unrestricted() {
         loginAs(200L, "u200", null, List.of("clerk"));
-        RowPermission self = permission(1L, "self", selfConditions());
-        RowPermission owner = permission(2L, "owner", conditions(leaf("owner_id", "eq", "{userId}")));
-        RowPermission writeOwn = permission(3L, "write-own", conditions(leaf("order_no", "eq", "SO-1")));
-        stubScope(List.of(self, owner, writeOwn), List.of(
-                grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk"),
-                grant(12L, 2L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk"),
-                grant(13L, 3L, DataScopeAction.WRITE, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(permission(1L, "allow-all", "[]")),
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"status\":\"paid\"}");
 
-        service.applyAll(DS_ID, List.of(DataScopeAction.READ, DataScopeAction.WRITE), req);
-
-        List<List<Map<String, Object>>> groups = groupsOf(req);
-        assertEquals(2, groups.size());
-        assertEquals(List.of(leaf("created_by", "eq", "200"), leaf("order_no", "eq", "SO-1")), groups.get(0));
-        assertEquals(List.of(leaf("owner_id", "eq", "200"), leaf("order_no", "eq", "SO-1")), groups.get(1));
-    }
-
-    @Test
-    void applyAll_keepsWritableRowsAlignedWithReadScope() {
-        loginAs(200L, "u200", null, List.of("clerk"));
-        RowPermission read = permission(1L, "read", conditions(leaf("status", "eq", "open")));
-        stubScope(List.of(read), List.of(
-                grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
-        BizDataQueryRequest req = new BizDataQueryRequest();
-        req.setFilter("{\"id\":\"r1\"}");
-
-        service.applyAll(DS_ID, List.of(DataScopeAction.READ, DataScopeAction.WRITE), req);
+        service.apply(DS_ID, req);
 
         Map<String, Object> filter = filterMap(req.getFilter());
-        assertEquals("r1", filter.get("id"));
-        assertEquals(List.of(List.of(leaf("status", "eq", "open"))), filter.get(FilterAware.ROW_SCOPE_KEY));
-        assertFalse(service.hasScope(DS_ID, DataScopeAction.WRITE));
+        assertFalse(filter.containsKey(FilterAware.ROW_SCOPE_KEY));
+        assertEquals("paid", filter.get("status"));
+        assertFalse(service.hasScope(DS_ID));
+    }
+
+    /** 并集里有一条不受限（空条件对象），整体不受限。 */
+    @Test
+    void union_with_empty_conditions_object_wins_over_narrower_grants() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        stubScope(List.of(
+                        permission(1L, "allow-all", "[]"),
+                        permission(2L, "self", selfConditions())),
+                List.of(
+                        grant(11L, 1L, DataScopeSubject.ROLE, "clerk"),
+                        grant(12L, 2L, DataScopeSubject.ROLE, "clerk")));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"status\":\"paid\"}");
+
+        service.apply(DS_ID, req);
+
+        Map<String, Object> filter = filterMap(req.getFilter());
+        assertFalse(filter.containsKey(FilterAware.ROW_SCOPE_KEY));
+        assertEquals("paid", filter.get("status"));
+        assertFalse(service.hasScope(DS_ID));
     }
 
     @Test
     void apply_is_shared_by_list_and_aggregate_requests() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         AggregateRequest req = new AggregateRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(List.of(leaf("created_by", "eq", "200"))),
                 filterMap(req.getFilter()).get(FilterAware.ROW_SCOPE_KEY));
     }
 
+    // ==================== 业务表单底表通道（formKey 反查数据源） ====================
+
+    /** 同一张物理表两条通道必须同一口径：formKey 入口拿到的就是数据源入口的那份条件组。 */
     @Test
-    void applyRead_admin_is_exempt() {
-        loginAs(1L, "admin", null, List.of("admin"));
+    void form_key_channel_injects_the_same_groups_as_the_data_source_channel() {
+        loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "admin")));
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
+        stubFormSource();
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.applyByFormKey(FORM_KEY, req);
 
-        assertEquals("{\"status\":\"paid\"}", req.getFilter());
-        assertFalse(service.hasScope(DS_ID, DataScopeAction.READ));
+        assertEquals(List.of(List.of(leaf("created_by", "eq", "200"))), groupsOf(req));
+        assertEquals("paid", filterMap(req.getFilter()).get("status"));
     }
 
-    /** 空条件对象 = 显式放行；并集里有一条不受限，整体不受限。 */
+    /** 受控未授权：底表通道同样一行不给（保留键空数组，生成器拼 1 = 0）。 */
     @Test
-    void applyRead_empty_conditions_object_means_unrestricted() {
+    void form_key_channel_linked_without_grant_denies_everything() {
         loginAs(200L, "u200", null, List.of("clerk"));
-        stubScope(List.of(
-                        permission(1L, "allow-all", "[]"),
-                        permission(2L, "self", selfConditions())),
-                List.of(
-                        grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk"),
-                        grant(12L, 2L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
+        stubFormSource();
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        service.applyByFormKey(FORM_KEY, req);
+
+        assertEquals(List.of(), groupsOf(req));
+        assertTrue(service.hasScopeByFormKey(FORM_KEY));
+    }
+
+    /** 该表单没有对应数据源 = 没有任何权限对象能挂到它上面：放行，但伪造的保留键仍要丢弃。 */
+    @Test
+    void form_without_data_source_is_unrestricted_and_strips_forged_key() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        when(dataSourceRepository.findByTenantIdAndFormKey(TENANT, FORM_KEY))
+                .thenReturn(Optional.empty());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"__row_scope\":[[{\"column\":\"owner_id\",\"op\":\"eq\",\"value\":\"999\"}]]}");
+
+        service.applyByFormKey(FORM_KEY, req);
+
+        assertFalse(filterMap(req.getFilter()).containsKey(FilterAware.ROW_SCOPE_KEY));
+        assertFalse(service.hasScopeByFormKey(FORM_KEY));
+    }
+
+    /** 管理员走同一入口：不受限。 */
+    @Test
+    void form_key_channel_skips_admin() {
+        loginAs(1L, "admin", null, List.of("ROLE_ADMIN"));
+        stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
+        stubFormSource();
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.applyByFormKey(FORM_KEY, req);
 
-        Map<String, Object> filter = filterMap(req.getFilter());
-        assertFalse(filter.containsKey(FilterAware.ROW_SCOPE_KEY));
-        assertEquals("paid", filter.get("status"));
-        assertFalse(service.hasScope(DS_ID, DataScopeAction.READ));
+        assertFalse(filterMap(req.getFilter()).containsKey(FilterAware.ROW_SCOPE_KEY));
+        assertFalse(service.hasScopeByFormKey(FORM_KEY));
+    }
+
+    @Test
+    void blank_form_key_is_never_scoped() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        assertFalse(service.hasScopeByFormKey(null));
+        assertFalse(service.hasScopeByFormKey(" "));
     }
 
     // ==================== 保留键通道 ====================
@@ -247,43 +329,56 @@ class DataScopeServiceTest {
     void client_supplied_row_scope_is_discarded_and_replaced_by_server_groups() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"__row_scope\":[[{\"column\":\"owner_id\",\"op\":\"eq\",\"value\":\"999\"}]],"
                 + "\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(List.of(leaf("created_by", "eq", "200"))), groupsOf(req));
     }
 
+    /** 拒绝时的空数组也只由服务端写：客户端塞的同名键先丢弃再换成服务端的判定。 */
     @Test
-    void client_supplied_row_scope_is_discarded_even_without_any_scope() {
+    void client_supplied_row_scope_is_discarded_when_server_denies() {
+        loginAs(200L, "u200", null, List.of("clerk"));
+        stubScope(List.of(permission(1L, "p1", selfConditions())), List.of());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"__row_scope\":[[{\"column\":\"owner_id\",\"op\":\"eq\",\"value\":\"999\"}]]}");
+
+        service.apply(DS_ID, req);
+
+        assertEquals(List.of(), groupsOf(req));
+    }
+
+    @Test
+    void client_supplied_row_scope_is_discarded_even_when_unrestricted() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(), List.of());
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"__row_scope\":[[{\"column\":\"owner_id\",\"op\":\"eq\",\"value\":\"999\"}]],"
                 + "\"status\":\"paid\"}");
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         Map<String, Object> filter = filterMap(req.getFilter());
         assertFalse(filter.containsKey(FilterAware.ROW_SCOPE_KEY));
         assertEquals("paid", filter.get("status"));
     }
 
-    /** 客户端 OR 结构化筛选不再被拒：与保留键互不干扰，由 SQL 生成器 AND 叠加。 */
+    /** 客户端 OR 结构化筛选不与保留键互扰，由 SQL 生成器 AND 叠加。 */
     @Test
     void caller_or_filter_is_kept_alongside_row_scope() {
         loginAs(200L, "u200", null, List.of("clerk"));
         stubScope(List.of(permission(1L, "p1", selfConditions())),
-                List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+                List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter("{\"logic\":\"OR\",\"conditions\":["
                 + "{\"column\":\"a\",\"op\":\"eq\",\"value\":1},"
                 + "{\"column\":\"b\",\"op\":\"eq\",\"value\":2}]}");
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         Map<String, Object> filter = filterMap(req.getFilter());
         assertEquals("OR", filter.get("logic"));
@@ -299,24 +394,25 @@ class DataScopeServiceTest {
         RowPermission p = permission(1L, "multi", conditions(
                 leaf("owner_id", "in", List.of("{userId}", "{username}")),
                 leaf("dept_id", "eq", "{orgId}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(
                 leaf("owner_id", "in", List.of("200", "u200")),
                 leaf("dept_id", "eq", "77")), groupsOf(req).get(0));
     }
 
+    /** 范围在受控数据源上必须成立：脏配置宁可报错，绝不退化成放行或拒绝。 */
     @Test
     void unknown_template_variable_fails_fast_instead_of_allowing_all() {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission p = permission(1L, "bad", conditions(leaf("owner_id", "eq", "{nonexistent}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("未知变量"), e.getMessage());
@@ -326,10 +422,10 @@ class DataScopeServiceTest {
     void template_without_org_for_user_fails_fast() {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission p = permission(1L, "org", conditions(leaf("dept_id", "eq", "{orgId}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("{orgId}"), e.getMessage());
@@ -346,10 +442,10 @@ class DataScopeServiceTest {
                 .thenReturn(List.of(org(80L, 78L)));
         RowPermission p = permission(1L, "dept-tree", conditions(
                 leaf("dept_id", "in", "{orgIdSubtree}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(leaf("dept_id", "in", List.of("77", "78", "79", "80"))), groupsOf(req).get(0));
     }
@@ -361,10 +457,10 @@ class DataScopeServiceTest {
         when(organizationRepository.findByParentIdOrderBySortOrder(77L)).thenReturn(List.of(org(78L, 77L)));
         RowPermission p = permission(1L, "mixed", conditions(
                 leaf("dept_id", "in", List.of("1000", "{orgIdSubtree}"))));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(leaf("dept_id", "in", List.of("1000", "77", "78"))), groupsOf(req).get(0));
     }
@@ -374,10 +470,10 @@ class DataScopeServiceTest {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission p = permission(1L, "dept-tree", conditions(
                 leaf("dept_id", "in", "{orgIdSubtree}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("未归属任何组织"), e.getMessage());
@@ -387,10 +483,10 @@ class DataScopeServiceTest {
     void subtree_variable_with_eq_operator_fails_fast() {
         loginAs(200L, "u200", 77L, List.of("clerk"));
         RowPermission p = permission(1L, "bad", conditions(leaf("dept_id", "eq", "{orgIdSubtree}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("只能配合 in"), e.getMessage());
@@ -401,10 +497,10 @@ class DataScopeServiceTest {
         loginAs(200L, "u200", 77L, List.of("clerk"));
         // fn: 语法随协议收缩一并撤下：残留写法不再有特殊语义，按字面量比较
         RowPermission p = permission(1L, "stale", conditions(leaf("dept_id", "eq", "fn:currentUserOrg()")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
         BizDataQueryRequest req = new BizDataQueryRequest();
 
-        service.applyRead(DS_ID, req);
+        service.apply(DS_ID, req);
 
         assertEquals(List.of(leaf("dept_id", "eq", "fn:currentUserOrg()")), groupsOf(req).get(0));
     }
@@ -414,10 +510,10 @@ class DataScopeServiceTest {
         loginAs(200L, "u200", 77L, List.of("clerk"));
         // 拼接会静默取子树的首个 id 或拼成一条没人要的字符串，条件看起来生效实则不是
         RowPermission p = permission(1L, "mixed", conditions(leaf("dept_id", "like", "x{orgIdSubtree}")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("独占"), e.getMessage());
@@ -427,10 +523,10 @@ class DataScopeServiceTest {
     void illegal_column_in_stored_conditions_is_rejected_before_sql() {
         loginAs(200L, "u200", null, List.of("clerk"));
         RowPermission p = permission(1L, "bad", conditions(leaf("owner_id or 1=1", "eq", "1")));
-        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeAction.READ, DataScopeSubject.ROLE, "clerk")));
+        stubScope(List.of(p), List.of(grant(11L, 1L, DataScopeSubject.ROLE, "clerk")));
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.applyRead(DS_ID, new BizDataQueryRequest()));
+                () -> service.apply(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("列名非法"), e.getMessage());
@@ -438,21 +534,19 @@ class DataScopeServiceTest {
 
     // ==================== 条件校验（对象级权限管理复用） ====================
 
+    /** v3：空条件合法——「全部行」形态靠空条件对象表达并授给主体。 */
+    @Test
+    void validate_conditions_accepts_empty_list_as_all_rows() {
+        assertEquals(List.of(), service.validateConditions(List.of()));
+        assertEquals(List.of(), service.validateConditions(null));
+    }
+
     @Test
     void validate_conditions_accepts_subtree_variable_with_in() {
         List<Map<String, Object>> validated = service.validateConditions(
                 List.of(leaf("dept_id", "in", "{orgIdSubtree}")));
 
         assertEquals(List.of(leaf("dept_id", "in", "{orgIdSubtree}")), validated);
-    }
-
-    @Test
-    void validate_conditions_rejects_empty_array() {
-        BusinessException e = assertThrows(BusinessException.class,
-                () -> service.validateConditions(List.of()));
-
-        assertEquals(400, e.getCode());
-        assertTrue(e.getMessage().contains("至少需要一条条件"), e.getMessage());
     }
 
     @Test
@@ -503,10 +597,6 @@ class DataScopeServiceTest {
         return org;
     }
 
-    private LoginUser currentUser() {
-        return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-    }
-
     private RowPermission permission(Long id, String name, String conditionsJson) {
         RowPermission permission = new RowPermission();
         permission.setId(id);
@@ -524,13 +614,12 @@ class DataScopeServiceTest {
         return source;
     }
 
-    private RowPermissionGrant grant(Long id, Long permissionId, DataScopeAction action,
+    private RowPermissionGrant grant(Long id, Long permissionId,
                                      DataScopeSubject subjectType, String subjectKey) {
         RowPermissionGrant grant = new RowPermissionGrant();
         grant.setId(id);
         grant.setTenantId(TENANT);
         grant.setPermissionId(permissionId);
-        grant.setAction(action);
         grant.setSubjectType(subjectType);
         grant.setSubjectKey(subjectKey);
         return grant;
@@ -547,14 +636,21 @@ class DataScopeServiceTest {
                 });
     }
 
-    private void stubGrants(List<RowPermissionGrant> grants) {
-        when(grantRepository.findByTenantIdAndPermissionIdInAndAction(
-                eq(TENANT), anyCollection(), any(DataScopeAction.class))).thenAnswer(inv -> {
+    /** 底表通道按 formKey 反查数据源：把 FORM_KEY 指向 DS_ID。 */
+    private void stubFormSource() {
+        DataSourceDefinition ds = new DataSourceDefinition();
+        ds.setId(DS_ID);
+        ds.setTenantId(TENANT);
+        ds.setFormKey(FORM_KEY);
+        ds.setType("FORM");
+        when(dataSourceRepository.findByTenantIdAndFormKey(TENANT, FORM_KEY))
+                .thenReturn(Optional.of(ds));
+    }
+
+    private void stubGrants(List<RowPermissionGrant> grants) {        when(grantRepository.findByTenantIdAndPermissionIdIn(eq(TENANT), anyCollection()))
+                .thenAnswer(inv -> {
                     Collection<Long> ids = inv.getArgument(1);
-                    DataScopeAction action = inv.getArgument(2);
-                    return grants.stream()
-                            .filter(g -> ids.contains(g.getPermissionId()) && g.getAction() == action)
-                            .toList();
+                    return grants.stream().filter(g -> ids.contains(g.getPermissionId())).toList();
                 });
     }
 

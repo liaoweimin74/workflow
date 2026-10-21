@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  * 权限对象的管理端 CRUD（对象视角）：一组条件 + 关联数据源。
  *
  * <p>对象只定义「什么条件算本人/本部门的数据，挂到哪些数据源上」，不再负责授予谁：
- * 授权（主体 × 读写轴）唯一写入方是 {@link RoleDataPermissionService}（角色管理 → 数据权限），
+ * 授权（主体 × 对象）的唯一写入方是 {@link RoleDataPermissionService}（角色管理 → 数据权限），
  * 这里的保存即便收到授权字段也不会触碰 {@code wf_row_permission_grant}——
  * 两个入口轮流改同一张表是权限配置最容易出错的地方。
  *
@@ -288,10 +288,9 @@ public class RowPermissionObjectService {
                 .sorted()
                 .toList();
         List<GrantView> grants = grantRepository.findByTenantIdAndPermissionId(tenantId, permission.getId()).stream()
-                .sorted(Comparator.comparing((RowPermissionGrant grant) -> grant.getAction().name())
-                        .thenComparing(grant -> grant.getSubjectType().name())
+                .sorted(Comparator.comparing((RowPermissionGrant grant) -> grant.getSubjectType().name())
                         .thenComparing(RowPermissionGrant::getSubjectKey))
-                .map(grant -> new GrantView(grant.getAction(), grant.getSubjectType(), grant.getSubjectKey()))
+                .map(grant -> new GrantView(grant.getSubjectType(), grant.getSubjectKey()))
                 .toList();
         return new Detail(permission, dataScopeService.parseStoredConditions(permission.getConditionsJson()),
                 dataSourceIds, grants);
@@ -306,7 +305,7 @@ public class RowPermissionObjectService {
     public record ColumnOption(String key, String label) {
     }
 
-    public record GrantView(DataScopeAction action, DataScopeSubject subjectType, String subjectKey) {
+    public record GrantView(DataScopeSubject subjectType, String subjectKey) {
     }
 
     public record Detail(RowPermission permission, List<Map<String, Object>> conditions,

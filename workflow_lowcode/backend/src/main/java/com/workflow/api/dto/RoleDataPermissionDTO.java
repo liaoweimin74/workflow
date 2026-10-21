@@ -3,7 +3,7 @@ package com.workflow.api.dto;
 import java.util.List;
 import java.util.Map;
 
-/** 角色数据权限视图：一个权限对象在该角色上的读/写勾选。 */
+/** 角色数据权限视图：一个权限对象在该角色上是否被授权。 */
 public class RoleDataPermissionDTO {
 
     private Long permissionId;
@@ -11,8 +11,7 @@ public class RoleDataPermissionDTO {
     private String remark;
     private List<Map<String, Object>> conditions;
     private List<String> dataSourceIds;
-    private boolean read;
-    private boolean write;
+    private boolean granted;
 
     public Long getPermissionId() { return permissionId; }
     public void setPermissionId(Long permissionId) { this.permissionId = permissionId; }
@@ -24,8 +23,6 @@ public class RoleDataPermissionDTO {
     public void setConditions(List<Map<String, Object>> conditions) { this.conditions = conditions; }
     public List<String> getDataSourceIds() { return dataSourceIds; }
     public void setDataSourceIds(List<String> dataSourceIds) { this.dataSourceIds = dataSourceIds; }
-    public boolean isRead() { return read; }
-    public void setRead(boolean read) { this.read = read; }
-    public boolean isWrite() { return write; }
-    public void setWrite(boolean write) { this.write = write; }
+    public boolean isGranted() { return granted; }
+    public void setGranted(boolean granted) { this.granted = granted; }
 }

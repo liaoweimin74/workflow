@@ -32,7 +32,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 覆盖度判定（按轴、只算真正有授权的对象）与豁免留痕（理由必填、软撤销）。 */
+/** 覆盖度盘点（v3 按源：COVERED/NO_GRANT/EXEMPT/GAP）与豁免留痕（理由必填、软撤销）。 */
 class RowScopeCoverageServiceTest {
 
     private static final String TENANT = "t1";
@@ -68,54 +68,69 @@ class RowScopeCoverageServiceTest {
     }
 
     @Test
-    void report_marks_axes_by_grants_on_linked_permissions() {
+    void report_marks_source_covered_when_any_linked_permission_is_granted() {
         stubSources(ds("ds-order", "订单", "FORM"));
         when(sourceRepository.findByTenantId(TENANT)).thenReturn(List.of(
                 link("ds-order", 1L), link("ds-order", 2L)));
         when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), any()))
                 .thenReturn(List.of(permission(1L, "自建数据"), permission(2L, "未授权对象")));
-        when(grantRepository.findByTenantId(TENANT)).thenReturn(List.of(
-                grantEntity(1L, DataScopeAction.READ)));
+        when(grantRepository.findByTenantId(TENANT)).thenReturn(List.of(grantEntity(1L)));
         when(exemptionRepository.findByTenantIdAndRevokedAtIsNull(TENANT)).thenReturn(List.of());
 
         RowScopeCoverageService.Report report = service.report();
 
         assertEquals(1, report.sources().size());
-        RowScopeCoverageService.SourceCoverage row = report.sources().get(0);
-        assertEquals(RowScopeCoverageStatus.COVERED, row.read().status());
-        assertEquals(List.of("自建数据"), row.read().permissionNames());
-        assertEquals(RowScopeCoverageStatus.GAP, row.write().status());
-        assertEquals(1, report.coveredAxes());
-        assertEquals(0, report.exemptAxes());
-        assertEquals(1, report.gapAxes());
-        assertEquals(2, report.totalAxes());
+        RowScopeCoverageService.Coverage coverage = report.sources().get(0).coverage();
+        assertEquals(RowScopeCoverageStatus.COVERED, coverage.status());
+        assertEquals(List.of("未授权对象", "自建数据"), coverage.permissionNames());
+        assertNull(coverage.exemption());
+        assertEquals(1, report.totalSources());
+        assertEquals(1, report.coveredSources());
+        assertEquals(0, report.noGrantSources());
+        assertEquals(0, report.gapSources());
     }
 
     @Test
-    void report_exempts_only_axes_without_coverage() {
+    void report_marks_linked_source_without_any_grant_as_no_grant() {
+        stubSources(ds("ds-order", "订单", "FORM"));
+        when(sourceRepository.findByTenantId(TENANT)).thenReturn(List.of(link("ds-order", 2L)));
+        when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), any()))
+                .thenReturn(List.of(permission(2L, "未授权对象")));
+        when(grantRepository.findByTenantId(TENANT)).thenReturn(List.of());
+        when(exemptionRepository.findByTenantIdAndRevokedAtIsNull(TENANT)).thenReturn(List.of());
+
+        RowScopeCoverageService.Report report = service.report();
+
+        assertEquals(RowScopeCoverageStatus.NO_GRANT, report.sources().get(0).coverage().status());
+        assertEquals(1, report.noGrantSources());
+    }
+
+    @Test
+    void report_exempts_only_sources_without_links() {
         stubSources(ds("ds-a", "A", "FORM"), ds("ds-b", "B", "SQL"));
         when(sourceRepository.findByTenantId(TENANT)).thenReturn(List.of(link("ds-b", 1L)));
         when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), any()))
                 .thenReturn(List.of(permission(1L, "已覆盖")));
-        when(grantRepository.findByTenantId(TENANT)).thenReturn(List.of(
-                grantEntity(1L, DataScopeAction.READ)));
-        RowScopeExemption readExempt = exemption("ds-a", DataScopeAction.READ, "历史遗留，暂不收紧");
-        RowScopeExemption mootExempt = exemption("ds-b", DataScopeAction.READ, "后来补了配置");
+        when(grantRepository.findByTenantId(TENANT)).thenReturn(List.of(grantEntity(1L)));
+        RowScopeExemption aExemption = exemption("ds-a", "历史遗留，暂不受控");
+        RowScopeExemption mootExemption = exemption("ds-b", "后来补了配置");
         when(exemptionRepository.findByTenantIdAndRevokedAtIsNull(TENANT))
-                .thenReturn(List.of(readExempt, mootExempt));
+                .thenReturn(List.of(aExemption, mootExemption));
 
         RowScopeCoverageService.Report report = service.report();
 
         RowScopeCoverageService.SourceCoverage a = byId(report, "ds-a");
         RowScopeCoverageService.SourceCoverage b = byId(report, "ds-b");
-        assertEquals(RowScopeCoverageStatus.EXEMPT, a.read().status());
-        assertNotNull(a.read().exemption());
-        assertEquals("历史遗留，暂不收紧", a.read().exemption().reason());
-        assertEquals(RowScopeCoverageStatus.GAP, a.write().status());
-        assertNull(a.write().exemption());
-        // 已有覆盖时状态按覆盖算，豁免记录仍返回（它真实存在，只是不再决定状态）
-        assertEquals(RowScopeCoverageStatus.COVERED, b.read().status());
-        assertNotNull(b.read().exemption());
+        // 未关联 = 全量可见：有豁免才算已确认接受，否则是缺口
+        assertEquals(RowScopeCoverageStatus.EXEMPT, a.coverage().status());
+        assertNotNull(a.coverage().exemption());
+        assertEquals("历史遗留，暂不受控", a.coverage().exemption().reason());
+        // 已受控有授权的源不受豁免记录影响，但记录仍回显（它真实存在）
+        assertEquals(RowScopeCoverageStatus.COVERED, b.coverage().status());
+        assertNotNull(b.coverage().exemption());
+        assertEquals(1, report.exemptSources());
+        assertEquals(1, report.coveredSources());
+        assertEquals(0, report.gapSources());
     }
 
     @Test
@@ -130,26 +145,25 @@ class RowScopeCoverageServiceTest {
 
         assertEquals(List.of("SQL源", "表单源"),
                 report.sources().stream().map(RowScopeCoverageService.SourceCoverage::name).toList());
-        assertEquals(4, report.gapAxes());
+        assertEquals(2, report.totalSources());
+        assertEquals(2, report.gapSources());
     }
 
     @Test
     void exempt_requires_reason_and_rejects_duplicate_active_record() {
-        when(dataSourceService.getById("ds-order")).thenReturn(ds("ds-order", "订单", "FORM"));
         BusinessException noReason = assertThrows(BusinessException.class,
-                () -> service.exempt("ds-order", DataScopeAction.READ, "   "));
+                () -> service.exempt("ds-order", "   "));
         assertEquals(400, noReason.getCode());
         assertTrue(noReason.getMessage().contains("理由不能为空"), noReason.getMessage());
 
         BusinessException tooLong = assertThrows(BusinessException.class,
-                () -> service.exempt("ds-order", DataScopeAction.READ, "x".repeat(501)));
+                () -> service.exempt("ds-order", "x".repeat(501)));
         assertEquals(400, tooLong.getCode());
 
-        when(exemptionRepository.findFirstByTenantIdAndDataSourceIdAndActionAndRevokedAtIsNull(
-                TENANT, "ds-order", DataScopeAction.READ))
-                .thenReturn(Optional.of(exemption("ds-order", DataScopeAction.READ, "旧豁免")));
+        when(exemptionRepository.findFirstByTenantIdAndDataSourceIdAndRevokedAtIsNull(TENANT, "ds-order"))
+                .thenReturn(Optional.of(exemption("ds-order", "旧豁免")));
         BusinessException duplicated = assertThrows(BusinessException.class,
-                () -> service.exempt("ds-order", DataScopeAction.READ, "新理由"));
+                () -> service.exempt("ds-order", "新理由"));
         assertEquals(400, duplicated.getCode());
         assertTrue(duplicated.getMessage().contains("已有生效豁免"), duplicated.getMessage());
         verify(exemptionRepository, never()).save(any());
@@ -157,9 +171,7 @@ class RowScopeCoverageServiceTest {
 
     @Test
     void exempt_records_who_and_why() {
-        when(dataSourceService.getById("ds-order")).thenReturn(ds("ds-order", "订单", "FORM"));
-        when(exemptionRepository.findFirstByTenantIdAndDataSourceIdAndActionAndRevokedAtIsNull(
-                TENANT, "ds-order", DataScopeAction.WRITE))
+        when(exemptionRepository.findFirstByTenantIdAndDataSourceIdAndRevokedAtIsNull(TENANT, "ds-order"))
                 .thenReturn(Optional.empty());
         when(exemptionRepository.save(any(RowScopeExemption.class))).thenAnswer(inv -> {
             RowScopeExemption saved = inv.getArgument(0);
@@ -167,16 +179,16 @@ class RowScopeCoverageServiceTest {
             return saved;
         });
 
-        RowScopeCoverageService.ExemptionView view =
-                service.exempt("ds-order", DataScopeAction.WRITE, " 写入口仅有管理员使用 ");
+        RowScopeCoverageService.ExemptionView view = service.exempt("ds-order", " 写入口仅有管理员使用 ");
 
         assertEquals(7L, view.id());
+        assertEquals("ds-order", view.dataSourceId());
         assertEquals("写入口仅有管理员使用", view.reason());
         assertEquals("admin", view.createdBy());
         ArgumentCaptor<RowScopeExemption> captor = ArgumentCaptor.forClass(RowScopeExemption.class);
         verify(exemptionRepository).save(captor.capture());
         assertEquals(TENANT, captor.getValue().getTenantId());
-        assertEquals(DataScopeAction.WRITE, captor.getValue().getAction());
+        assertEquals("ds-order", captor.getValue().getDataSourceId());
     }
 
     @Test
@@ -185,7 +197,7 @@ class RowScopeCoverageServiceTest {
                 .when(dataSourceService).requireScopeConfigurable("ds-sys");
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.exempt("ds-sys", DataScopeAction.READ, "系统源无需范围"));
+                () -> service.exempt("ds-sys", "系统源无需范围"));
 
         assertEquals(400, e.getCode());
         verify(exemptionRepository, never()).save(any());
@@ -193,7 +205,7 @@ class RowScopeCoverageServiceTest {
 
     @Test
     void revoke_is_soft_and_cannot_happen_twice() {
-        RowScopeExemption active = exemption("ds-order", DataScopeAction.READ, "历史遗留");
+        RowScopeExemption active = exemption("ds-order", "历史遗留");
         active.setId(7L);
         when(exemptionRepository.findByIdAndTenantId(7L, TENANT)).thenReturn(Optional.of(active));
         when(exemptionRepository.save(any(RowScopeExemption.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -250,21 +262,19 @@ class RowScopeCoverageServiceTest {
         return link;
     }
 
-    private RowPermissionGrant grantEntity(Long permissionId, DataScopeAction action) {
+    private RowPermissionGrant grantEntity(Long permissionId) {
         RowPermissionGrant grant = new RowPermissionGrant();
         grant.setTenantId(TENANT);
         grant.setPermissionId(permissionId);
-        grant.setAction(action);
         grant.setSubjectType(DataScopeSubject.ROLE);
         grant.setSubjectKey("clerk");
         return grant;
     }
 
-    private RowScopeExemption exemption(String dataSourceId, DataScopeAction action, String reason) {
+    private RowScopeExemption exemption(String dataSourceId, String reason) {
         RowScopeExemption exemption = new RowScopeExemption();
         exemption.setTenantId(TENANT);
         exemption.setDataSourceId(dataSourceId);
-        exemption.setAction(action);
         exemption.setReason(reason);
         exemption.setCreatedBy("admin");
         return exemption;

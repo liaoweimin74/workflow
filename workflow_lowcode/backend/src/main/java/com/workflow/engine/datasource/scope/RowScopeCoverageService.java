@@ -24,11 +24,9 @@ import java.util.stream.Collectors;
 /**
  * 覆盖度盘点与豁免留痕。
  *
- * <p>「没挂即不受控」意味着漏挂一条数据源就是一个静默缺口，所以需要一个反向查询：
- * 列出全部启用、且可施加范围（FORM/SQL）的数据源，按读写轴分别回答「有没有人会被约束」。
- * 覆盖的判定是「关联对象在该轴至少有一条授权」——只关联对象但没有任何授权，谁也约束不到。
- *
- * <p>豁免不是关闭告警，而是把「接受缺口」这个决定留痕：理由必填，撤销只软撤销。
+ * <p>v3 语义下「未关联 = 不受控（全量可见）」，所以盘点的对象是数据源本身：
+ * 列出全部启用、且可施加范围（FORM/SQL）的数据源，回答「它受不受数据权限控制、控制后有没有人被授到」。
+ * 豁免不是关闭告警，而是把「接受这个数据源不受控」的决定留痕：理由必填，撤销只软撤销。
  */
 @Service
 public class RowScopeCoverageService {
@@ -60,7 +58,7 @@ public class RowScopeCoverageService {
         this.tenantProvider = tenantProvider;
     }
 
-    /** 当前租户启用且可施加范围的数据源 × 读写轴覆盖明细。 */
+    /** 当前租户启用且可施加范围的数据源覆盖明细。 */
     public Report report() {
         String tenantId = tenantProvider.getTenantId();
         List<DataSourceDefinition> sources = dataSourceRepository.findByTenantIdAndStatus(tenantId, STATUS_ENABLED)
@@ -70,7 +68,7 @@ public class RowScopeCoverageService {
                         .thenComparing(DataSourceDefinition::getId))
                 .toList();
         if (sources.isEmpty()) {
-            return new Report(List.of(), 0, 0, 0, 0);
+            return new Report(List.of(), 0, 0, 0, 0, 0);
         }
 
         Map<String, Set<Long>> linkedBySource = sourceRepository.findByTenantId(tenantId).stream()
@@ -83,34 +81,31 @@ public class RowScopeCoverageService {
         Map<Long, RowPermission> permissions = permissionIds.isEmpty() ? Map.of()
                 : permissionRepository.findByTenantIdAndIdIn(tenantId, permissionIds).stream()
                 .collect(Collectors.toMap(RowPermission::getId, Function.identity()));
-        Map<DataScopeAction, Set<Long>> grantedByAction = grantRepository.findByTenantId(tenantId).stream()
-                .collect(Collectors.groupingBy(RowPermissionGrant::getAction,
-                        Collectors.mapping(RowPermissionGrant::getPermissionId, Collectors.toSet())));
-        Map<String, RowScopeExemption> exemptionByAxis = exemptionRepository
+        Set<Long> grantedPermissionIds = grantRepository.findByTenantId(tenantId).stream()
+                .map(RowPermissionGrant::getPermissionId)
+                .collect(Collectors.toSet());
+        Map<String, RowScopeExemption> exemptionBySource = exemptionRepository
                 .findByTenantIdAndRevokedAtIsNull(tenantId).stream()
-                .collect(Collectors.toMap(exemption -> axisKey(exemption.getDataSourceId(), exemption.getAction()),
+                .collect(Collectors.toMap(RowScopeExemption::getDataSourceId,
                         Function.identity(), (left, right) -> left));
 
         List<SourceCoverage> rows = new ArrayList<>(sources.size());
         int covered = 0;
+        int noGrant = 0;
         int exempt = 0;
         int gap = 0;
         for (DataSourceDefinition source : sources) {
-            Set<Long> linked = linkedBySource.getOrDefault(source.getId(), Set.of());
-            AxisCoverage read = axis(source.getId(), DataScopeAction.READ, linked,
-                    grantedByAction, permissions, exemptionByAxis);
-            AxisCoverage write = axis(source.getId(), DataScopeAction.WRITE, linked,
-                    grantedByAction, permissions, exemptionByAxis);
-            for (AxisCoverage axis : List.of(read, write)) {
-                switch (axis.status()) {
-                    case COVERED -> covered++;
-                    case EXEMPT -> exempt++;
-                    case GAP -> gap++;
-                }
+            Coverage coverage = coverage(source.getId(), linkedBySource.getOrDefault(source.getId(), Set.of()),
+                    grantedPermissionIds, permissions, exemptionBySource.get(source.getId()));
+            switch (coverage.status()) {
+                case COVERED -> covered++;
+                case NO_GRANT -> noGrant++;
+                case EXEMPT -> exempt++;
+                case GAP -> gap++;
             }
-            rows.add(new SourceCoverage(source.getId(), source.getName(), source.getType(), read, write));
+            rows.add(new SourceCoverage(source.getId(), source.getName(), source.getType(), coverage));
         }
-        return new Report(rows, covered + exempt + gap, covered, exempt, gap);
+        return new Report(rows, sources.size(), covered, noGrant, exempt, gap);
     }
 
     /** 全部豁免记录（含已撤销），按新到旧；撤销记录保留理由与撤销人。 */
@@ -121,14 +116,11 @@ public class RowScopeCoverageService {
                 .toList();
     }
 
-    /** 登记一条豁免：同一数据源同一轴只能有一条生效记录，撤销后重新豁免会产生新行。 */
+    /** 登记一条豁免：同一数据源只能有一条生效记录，撤销后重新豁免会产生新行。 */
     @Transactional
-    public ExemptionView exempt(String dataSourceId, DataScopeAction action, String reason) {
+    public ExemptionView exempt(String dataSourceId, String reason) {
         if (dataSourceId == null || dataSourceId.isBlank()) {
             throw new BusinessException(400, "数据源 id 不能为空");
-        }
-        if (action == null) {
-            throw new BusinessException(400, "豁免动作不能为空（READ / WRITE）");
         }
         String trimmedReason = reason == null ? "" : reason.trim();
         if (trimmedReason.isEmpty()) {
@@ -140,16 +132,14 @@ public class RowScopeCoverageService {
         // 不存在 → 404；不可施加范围的类型 → 400：这类源本来就不在覆盖度口径里
         dataSourceService.requireScopeConfigurable(dataSourceId);
         String tenantId = tenantProvider.getTenantId();
-        exemptionRepository.findFirstByTenantIdAndDataSourceIdAndActionAndRevokedAtIsNull(
-                        tenantId, dataSourceId, action)
+        exemptionRepository.findFirstByTenantIdAndDataSourceIdAndRevokedAtIsNull(tenantId, dataSourceId)
                 .ifPresent(existing -> {
-                    throw new BusinessException(400, "该数据源此动作已有生效豁免（id " + existing.getId() + "）");
+                    throw new BusinessException(400, "该数据源已有生效豁免（id " + existing.getId() + "）");
                 });
 
         RowScopeExemption exemption = new RowScopeExemption();
         exemption.setTenantId(tenantId);
         exemption.setDataSourceId(dataSourceId);
-        exemption.setAction(action);
         exemption.setReason(trimmedReason);
         exemption.setCreatedBy(currentUsername());
         exemption.setUpdatedBy(currentUsername());
@@ -171,29 +161,27 @@ public class RowScopeCoverageService {
         return toView(exemptionRepository.save(exemption));
     }
 
-    private AxisCoverage axis(String dataSourceId, DataScopeAction action, Set<Long> linked,
-                              Map<DataScopeAction, Set<Long>> grantedByAction,
+    private Coverage coverage(String dataSourceId, Set<Long> linked,
+                              Set<Long> grantedPermissionIds,
                               Map<Long, RowPermission> permissions,
-                              Map<String, RowScopeExemption> exemptionByAxis) {
-        Set<Long> granted = grantedByAction.getOrDefault(action, Set.of());
-        List<Long> coveredIds = linked.stream().filter(granted::contains).sorted().toList();
-        List<String> names = coveredIds.stream()
+                              RowScopeExemption exemption) {
+        if (linked.isEmpty()) {
+            RowScopeCoverageStatus status = exemption != null
+                    ? RowScopeCoverageStatus.EXEMPT : RowScopeCoverageStatus.GAP;
+            return new Coverage(status, List.of(), exemption == null ? null : toView(exemption));
+        }
+        List<String> names = linked.stream()
                 .map(id -> permissions.containsKey(id) ? permissions.get(id).getName() : "#" + id)
+                .sorted()
                 .toList();
-        RowScopeExemption exemption = exemptionByAxis.get(axisKey(dataSourceId, action));
-        RowScopeCoverageStatus status = !names.isEmpty() ? RowScopeCoverageStatus.COVERED
-                : exemption != null ? RowScopeCoverageStatus.EXEMPT
-                : RowScopeCoverageStatus.GAP;
-        return new AxisCoverage(action, status, names,
-                exemption == null ? null : toView(exemption));
-    }
-
-    private String axisKey(String dataSourceId, DataScopeAction action) {
-        return dataSourceId + "|" + action;
+        boolean anyGranted = linked.stream().anyMatch(grantedPermissionIds::contains);
+        RowScopeCoverageStatus status = anyGranted
+                ? RowScopeCoverageStatus.COVERED : RowScopeCoverageStatus.NO_GRANT;
+        return new Coverage(status, names, exemption == null ? null : toView(exemption));
     }
 
     private ExemptionView toView(RowScopeExemption exemption) {
-        return new ExemptionView(exemption.getId(), exemption.getDataSourceId(), exemption.getAction(),
+        return new ExemptionView(exemption.getId(), exemption.getDataSourceId(),
                 exemption.getReason(), exemption.getCreatedBy(), exemption.getCreatedAt(),
                 exemption.getRevokedBy(), exemption.getRevokedAt());
     }
@@ -203,19 +191,19 @@ public class RowScopeCoverageService {
         return auth != null && StringUtils.hasText(auth.getName()) ? auth.getName() : "anonymous";
     }
 
-    public record Report(List<SourceCoverage> sources, int totalAxes, int coveredAxes, int exemptAxes, int gapAxes) {
+    public record Report(List<SourceCoverage> sources, int totalSources, int coveredSources,
+                         int noGrantSources, int exemptSources, int gapSources) {
     }
 
-    public record SourceCoverage(String dataSourceId, String name, String type,
-                                 AxisCoverage read, AxisCoverage write) {
+    public record SourceCoverage(String dataSourceId, String name, String type, Coverage coverage) {
     }
 
-    public record AxisCoverage(DataScopeAction action, RowScopeCoverageStatus status,
-                               List<String> permissionNames, ExemptionView exemption) {
+    public record Coverage(RowScopeCoverageStatus status, List<String> permissionNames,
+                           ExemptionView exemption) {
     }
 
     /** 豁免记录视图；{@code revokedAt != null} 表示已撤销。 */
-    public record ExemptionView(Long id, String dataSourceId, DataScopeAction action, String reason,
+    public record ExemptionView(Long id, String dataSourceId, String reason,
                                 String createdBy, LocalDateTime createdAt,
                                 String revokedBy, LocalDateTime revokedAt) {
     }

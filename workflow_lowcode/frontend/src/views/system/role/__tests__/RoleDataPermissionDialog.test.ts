@@ -1,4 +1,4 @@
-// TDD: 角色数据权限弹窗（权限对象 × 读/写勾选）
+// TDD: 角色数据权限弹窗（权限对象 × 授权勾选，v3 单轴）
 // npx vitest run src/views/system/role/__tests__/RoleDataPermissionDialog.test.ts
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -35,8 +35,7 @@ async function mountDialog() {
         remark: '只看自己的',
         conditions: [{ column: 'created_by', op: 'eq', value: '{userId}' }],
         dataSourceIds: ['ds-1', 'ds-2'],
-        read: true,
-        write: false,
+        granted: true,
       },
       {
         permissionId: 2,
@@ -44,8 +43,7 @@ async function mountDialog() {
         remark: null,
         conditions: [{ column: 'dept_id', op: 'in', value: ['{orgIdSubtree}'] }],
         dataSourceIds: ['ds-1'],
-        read: false,
-        write: true,
+        granted: false,
       },
     ],
   })
@@ -91,33 +89,30 @@ describe('RoleDataPermissionDialog', () => {
     expect(text).toContain('销售本人')
     expect(text).toContain('created_by = {userId}')
     expect(text).toContain('部门共享')
-    expect(checkbox(wrapper, 'role-dp-read-1').props('modelValue')).toBe(true)
-    expect(checkbox(wrapper, 'role-dp-write-1').props('modelValue')).toBe(false)
-    expect(checkbox(wrapper, 'role-dp-read-2').props('modelValue')).toBe(false)
-    expect(checkbox(wrapper, 'role-dp-write-2').props('modelValue')).toBe(true)
+    expect(checkbox(wrapper, 'role-dp-granted-1').props('modelValue')).toBe(true)
+    expect(checkbox(wrapper, 'role-dp-granted-2').props('modelValue')).toBe(false)
   })
 
-  it('保存只提交勾选了读写的对象', async () => {
+  it('保存只提交勾选了授权的对象', async () => {
     const { ElMessage } = await import('element-plus')
     const wrapper = await mountDialog()
 
-    await toggle(wrapper, 'role-dp-read-1', false)
-    await toggle(wrapper, 'role-dp-read-2', true)
+    await toggle(wrapper, 'role-dp-granted-1', false)
+    await toggle(wrapper, 'role-dp-granted-2', true)
     await wrapper.find('[data-testid="role-dp-save"]').trigger('click')
     await flushPromises()
 
     expect(saveRoleDataPermissions).toHaveBeenCalledWith(3, [
-      { permissionId: 2, actions: ['READ', 'WRITE'] },
+      { permissionId: 2 },
     ])
     expect(ElMessage.success).toHaveBeenCalledWith('数据权限已保存')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
   })
 
-  it('两个轴都不勾选时提交空列表（清空该角色）', async () => {
+  it('全部取消勾选时提交空列表（清空该角色）', async () => {
     const wrapper = await mountDialog()
 
-    await toggle(wrapper, 'role-dp-read-1', false)
-    await toggle(wrapper, 'role-dp-write-2', false)
+    await toggle(wrapper, 'role-dp-granted-1', false)
     await wrapper.find('[data-testid="role-dp-save"]').trigger('click')
     await flushPromises()
 

@@ -4,8 +4,10 @@
       <div>
         <h2 class="text-lg font-semibold">数据权限</h2>
         <p class="text-xs text-gray-500 mt-1">
-          权限对象 = 条件 + 关联数据源。多个对象同时命中时取并集（对象间 OR、对象内 AND）；
-          未关联任何对象的数据源不受本页约束。授权（哪个角色、读还是写）只在「角色管理 → 数据权限」里配置。
+          权限对象 = 条件 + 关联数据源。数据源只要挂上权限对象就受数据权限控制（关联即受控）；
+          角色没被授权某个对象，就看不见它圈定的行，受控而未授权的数据源一行都看不见。
+          多个对象同时命中取并集（对象间 OR、对象内 AND），空条件对象 = 全部行。
+          授权（哪个角色能看）只在「角色管理 → 数据权限」里配置。
         </p>
       </div>
       <div class="flex gap-2">
@@ -42,13 +44,15 @@
                   v-for="(grant, index) in row.grants"
                   :key="index"
                   size="small"
-                  :type="grant.action === 'READ' ? 'primary' : 'warning'"
+                  type="primary"
                   data-testid="rp-grant-tag"
                 >
-                  {{ roleName(grant.subjectKey) }} · {{ grant.action === 'READ' ? '读' : '写' }}
+                  {{ roleName(grant.subjectKey) }}
                 </el-tag>
               </div>
-              <span v-else class="text-xs text-gray-400">未授权给任何角色（不收紧任何人）</span>
+              <span v-else class="text-xs text-warning text-orange-500" data-testid="rp-no-grant-hint">
+                未授权给任何角色（已关联的数据源非管理员都看不见）
+              </span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="120" align="right" fixed="right">
@@ -174,7 +178,7 @@ async function afterSaved(): Promise<void> {
 async function removeObject(row: RowPermissionDTO): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `删除「${row.name}」会同时移除它的条件、数据源关联与角色授权；相关角色可能因此不再受限。确定删除？`,
+      `删除「${row.name}」会同时移除它的条件、数据源关联与角色授权；若它关联的数据源没有别的权限对象，该数据源将不受数据权限控制（全员可见）。确定删除？`,
       '删除权限对象',
       { type: 'warning' },
     )

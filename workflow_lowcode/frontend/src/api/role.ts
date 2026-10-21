@@ -1,22 +1,20 @@
 import http from '@/utils/http'
 import type { R } from '@/types/common'
 import type { RoleVO, RoleCreateForm, RoleUpdateForm, RoleQueryParams } from '@/types/role'
-import type { DataScopeAction, DataScopeCondition } from '@/api/dataScope'
+import type { DataScopeCondition } from '@/api/dataScope'
 
-/** 角色在某权限对象上的读/写勾选（角色管理视角） */
+/** 角色在某权限对象上的授权勾选（角色管理视角；v3 单轴：授权即赋予可见行） */
 export interface RoleDataPermission {
   permissionId: number
   permissionName: string
   remark: string | null
   conditions: DataScopeCondition[]
   dataSourceIds: string[]
-  read: boolean
-  write: boolean
+  granted: boolean
 }
 
 export interface RoleDataPermissionSaveItem {
   permissionId: number
-  actions: DataScopeAction[]
 }
 
 export function getRoleList(params: RoleQueryParams) {

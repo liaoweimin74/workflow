@@ -16,9 +16,6 @@ public interface RowPermissionGrantRepository extends JpaRepository<RowPermissio
 
     List<RowPermissionGrant> findByTenantIdAndPermissionIdIn(String tenantId, Collection<Long> permissionIds);
 
-    List<RowPermissionGrant> findByTenantIdAndPermissionIdInAndAction(
-            String tenantId, Collection<Long> permissionIds, DataScopeAction action);
-
     List<RowPermissionGrant> findByTenantIdAndSubjectTypeAndSubjectKey(
             String tenantId, DataScopeSubject subjectType, String subjectKey);
 

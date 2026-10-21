@@ -10,8 +10,9 @@
     <el-alert type="info" :closable="false" show-icon class="mb-3">
       <template #title>一个权限对象 = 条件（组内 AND）+ 关联数据源</template>
       <div class="text-xs leading-5">
-        条件会同时施加到所有关联数据源；同一角色命中多个对象时取并集（对象间 OR，任一对象满足即可访问）。
-        读轴约束列表/聚合/单条，写轴约束修改/删除，新增不校验。
+        条件是「能看到哪些行」的圈定：同一角色命中多个对象时取并集（对象间 OR，任一对象满足即可见），
+        不写条件 = 全部行。数据权限就是查看权限：受控数据源上，角色未被授权就一行都看不见，
+        也谈不上修改、删除（看即能操作）。
       </div>
     </el-alert>
 
@@ -57,7 +58,7 @@
       </div>
       <el-button size="small" data-testid="rp-add-condition" @click="addCondition">添加条件</el-button>
     </div>
-    <el-table :data="form.conditions" size="small" empty-text="至少添加一条条件">
+    <el-table :data="form.conditions" size="small" empty-text="无条件 = 全部行（被授权的角色看得见该源的所有数据）">
       <el-table-column label="列名" width="200">
         <template #default="{ row }">
           <el-select
@@ -123,10 +124,12 @@
 
     <!-- ==================== 授权（只读提示） ==================== -->
     <div class="text-xs text-gray-500 leading-5 mt-3">
-      主体授权（哪些角色被本对象收紧、读还是写）在「角色管理 → 数据权限」中维护；
+      主体授权（哪些角色能通过本对象看见行）在「角色管理 → 数据权限」中维护；
       这里改条件或换数据源都不会动已有授权。
       <span v-if="roleGrantCount" class="text-gray-400">当前已有 {{ roleGrantCount }} 条角色授权。</span>
-      <span v-else class="text-orange-500">当前没有任何角色授权，本对象不会收紧任何人。</span>
+      <span v-else class="text-orange-500" data-testid="rp-no-grant-warning">
+        当前没有任何角色授权：本对象关联的数据源将非管理员都看不见。
+      </span>
     </div>
 
     <template #footer>

@@ -371,6 +371,18 @@ class BizDataQueryBuilderTest {
     }
 
     @Test
+    void buildSelect_rowScope_emptyArray_deniesEverything() {
+        // v3 可见集合白名单：受控未授权时服务端写空数组，必须拼 1 = 0，一行都不能出来
+        Map<String, Object> filters = rowScopeFilter(Map.of("dept", "研发部"), List.of());
+
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", filters, null, null, null, "desc", 0, 10);
+
+        assertThat(sp.sql()).contains(" AND (1 = 0)");
+        assertThat(sp.params()).containsExactly("t1", "研发部", 10, 0);
+    }
+
+    @Test
     void buildSelect_rowScope_coexistsWithClientStructuredOrFilter() {
         // 客户端自己的 OR 结构化筛选与范围条件各占一个独立 AND 段
         Map<String, Object> filters = rowScopeFilter(

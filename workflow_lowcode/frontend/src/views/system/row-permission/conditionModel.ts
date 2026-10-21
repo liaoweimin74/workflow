@@ -85,9 +85,8 @@ function expressionError(raw: string, op: ConditionOp): string | null {
   return null
 }
 
-/** 返回第一条错误文案；全部合法返回 null。 */
+/** 返回第一条错误文案；全部合法返回 null。空条件在 v3 合法：空条件对象 = 全部行。 */
 export function validateConditionRows(rows: ConditionEditorRow[]): string | null {
-  if (rows.length === 0) return '权限对象至少需要一条条件；全部可见请直接不关联权限对象'
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
     const prefix = `第 ${i + 1} 条条件`
@@ -173,6 +172,6 @@ export function conditionText(condition: DataScopeCondition): string {
 }
 
 export function conditionSummary(conditions: DataScopeCondition[] | null | undefined): string {
-  if (!conditions || conditions.length === 0) return '未设条件（放行全部）'
+  if (!conditions || conditions.length === 0) return '未设条件（全部行）'
   return conditions.map(conditionText).join(' AND ')
 }

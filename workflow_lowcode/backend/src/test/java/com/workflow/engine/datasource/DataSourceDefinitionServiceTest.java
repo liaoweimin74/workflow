@@ -10,8 +10,8 @@ import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
-import com.workflow.engine.datasource.scope.DataScopeAction;
 import com.workflow.engine.datasource.scope.DataScopeService;
+import com.workflow.engine.form.bizdata.BizDataHandler;
 import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
@@ -80,7 +80,7 @@ class DataSourceDefinitionServiceTest {
         lenient().when(formAdapter.supports("SYSTEM")).thenReturn(false);
         lenient().when(formAdapter.supports("API")).thenReturn(false);
         service = new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
-                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService);
+                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, List.of());
     }
 
     @AfterEach
@@ -457,27 +457,27 @@ class DataSourceDefinitionServiceTest {
         service.queryData(DS_ID, req);
 
         InOrder order = inOrder(dataScopeService, formAdapter);
-        order.verify(dataScopeService).applyRead(DS_ID, req);
+        order.verify(dataScopeService).apply(DS_ID, req);
         order.verify(formAdapter).query(eq(ds), same(req));
     }
 
     /**
-     * SYSTEM/API 这类取数实现根本不读 filter 的源，即便库里留着范围规则也不能静默放行——
-     * 静默等于让一个「看着已收紧」的配置变成假保障，必须当场 400。
+     * SYSTEM/API 这类取数实现根本不读 filter 的源，即便库里挂着权限对象也不能静默放行——
+     * 静默等于让一个「看着已受控」的配置变成假保障，必须当场 400。
      */
     @Test
     void queryData_scopeOnNonFilterConsumingType_failsLoud() {
         DataSourceDefinition ds = draftDs("SYSTEM", null, "sys-user", null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
 
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.queryData(DS_ID, new BizDataQueryRequest()));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("不消费筛选条件"), e.getMessage());
-        verify(dataScopeService, never()).applyRead(eq(DS_ID), any());
+        verify(dataScopeService, never()).apply(eq(DS_ID), any());
         verify(formAdapter, never()).query(any(), any());
     }
 
@@ -490,17 +490,17 @@ class DataSourceDefinitionServiceTest {
 
         service.aggregateData(DS_ID, req);
 
-        verify(dataScopeService).applyRead(DS_ID, req);
+        verify(dataScopeService).apply(DS_ID, req);
     }
 
-    // ==================== 单条读取与写路径的范围门禁 ====================
+    // ==================== 单条读取与写路径的可见集合门禁 ====================
 
     @Test
     void getData_unscoped_delegatesToAdapterDirectly() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(false);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(false);
         BizDataVO row = new BizDataVO();
         when(formAdapter.get(ds, "r1")).thenReturn(row);
 
@@ -508,11 +508,11 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
-    void getData_outsideReadScope_returns404_not_a_probe_of_existence() {
+    void getData_outsideVisibleSet_returns404_not_a_probe_of_existence() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
 
@@ -523,11 +523,11 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
-    void getData_insideReadScope_returns_the_scoped_row() {
+    void getData_insideVisibleSet_returns_the_scoped_row() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.READ)).thenReturn(true);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
         BizDataVO row = new BizDataVO();
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(row), 1, 0, 20));
@@ -535,12 +535,13 @@ class DataSourceDefinitionServiceTest {
         assertSame(row, service.getData(DS_ID, "r1"));
     }
 
+    /** 看即能操作：写路径与读路径用同一个 apply 判定，不可见即 403。 */
     @Test
-    void updateData_outsideWriteScope_returns403_and_never_reaches_adapter() {
+    void updateData_outsideVisibleSet_returns403_and_never_reaches_adapter() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(true);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
 
@@ -549,19 +550,15 @@ class DataSourceDefinitionServiceTest {
 
         assertEquals(403, e.getCode());
         verify(formAdapter, never()).update(any(), any(), any(), any());
-        // 写归属必须把 READ 与 WRITE 一次性合并后查（分两次施加会被后一次覆盖保留键）
-        verify(dataScopeService).applyAll(eq(DS_ID),
-                eq(List.of(DataScopeAction.READ, DataScopeAction.WRITE)),
-                any(BizDataQueryRequest.class));
-        verify(dataScopeService, never()).applyRead(eq(DS_ID), any());
+        verify(dataScopeService).apply(eq(DS_ID), any(BizDataQueryRequest.class));
     }
 
     @Test
-    void updateData_insideWriteScope_proceeds() {
+    void updateData_insideVisibleSet_proceeds() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(true);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(new BizDataVO()), 1, 0, 20));
 
@@ -571,16 +568,31 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
-    void deleteData_withoutWriteScopeRule_is_not_gated() {
+    void deleteData_unscoped_is_not_gated() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
-        when(dataScopeService.hasScope(DS_ID, DataScopeAction.WRITE)).thenReturn(false);
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(false);
 
         service.deleteData(DS_ID, "r1");
 
         verify(formAdapter).delete(ds, "r1");
         verify(formAdapter, never()).query(any(), any());
+    }
+
+    @Test
+    void deleteData_outsideVisibleSet_returns403() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(true);
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
+
+        BusinessException e = assertThrows(BusinessException.class, () -> service.deleteData(DS_ID, "r1"));
+
+        assertEquals(403, e.getCode());
+        verify(formAdapter, never()).delete(any(), any());
     }
 
     // ==================== WORKFLOW 启用校验 ====================
@@ -1087,5 +1099,66 @@ class DataSourceDefinitionServiceTest {
 
         assertEquals("config", FormQueryConfig.parse(result.getParams(), objectMapper).queryMode());
         assertEquals(1, FormQueryConfig.parse(result.getParams(), objectMapper).joins().size());
+    }
+
+    // ==================== 配置期能力拦截：钩子接管查询 ====================
+
+    /**
+     * 接管了查询又没声明「认数据范围」的钩子：条件注入进去也没人读，
+     * 管理员却会在界面上看到「已受控」——这是假保障，保存时当场拒。
+     */
+    @Test
+    void requireScopeConfigurable_queryTakenOverWithoutRowScopeDeclaration_rejected() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> serviceWithHandlers(
+                new QueryTakeover("biz_leave", false)).requireScopeConfigurable(DS_ID));
+
+        assertTrue(ex.getMessage().contains("biz_leave"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("honorsRowScope"), ex.getMessage());
+    }
+
+    /** 透传了筛选条件的钩子（EmpProfileHandler 就是这种）必须放行，否则拦住的是正确实现。 */
+    @Test
+    void requireScopeConfigurable_queryTakenOverWithDeclaration_passes() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+
+        assertDoesNotThrow(() -> serviceWithHandlers(
+                new QueryTakeover("biz_leave", true)).requireScopeConfigurable(DS_ID));
+    }
+
+    /** 没有钩子（或钩子只管校验不接管查询）时不该多长出一扇门：通用实现本来就认筛选条件。 */
+    @Test
+    void requireScopeConfigurable_formWithoutHandler_passes() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+
+        assertDoesNotThrow(() -> serviceWithHandlers(
+                new QueryTakeover("other_form", false)).requireScopeConfigurable(DS_ID));
+    }
+
+    private DataSourceDefinitionService serviceWithHandlers(BizDataHandler... handlers) {
+        return new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
+                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, List.of(handlers));
+    }
+
+    /** 只声明接管查询的钩子替身：honors 参数模拟「有没有声明自己会把可见集合透传下去」。 */
+    private record QueryTakeover(String formKey, boolean honors) implements BizDataHandler {
+        @Override
+        public String getFormKey() {
+            return formKey;
+        }
+
+        @Override
+        public boolean overridesQuery() {
+            return true;
+        }
+
+        @Override
+        public boolean honorsRowScope() {
+            return honors;
+        }
     }
 }

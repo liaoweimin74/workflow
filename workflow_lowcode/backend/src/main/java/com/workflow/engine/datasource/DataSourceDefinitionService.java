@@ -13,8 +13,8 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
-import com.workflow.engine.datasource.scope.DataScopeAction;
 import com.workflow.engine.datasource.scope.DataScopeService;
+import com.workflow.engine.form.bizdata.BizDataHandler;
 import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.bizdata.JoinSqlGenerator;
 import com.workflow.engine.form.bizdata.JoinTargetCatalog;
@@ -97,6 +97,7 @@ public class DataSourceDefinitionService {
     private final ObjectMapper objectMapper;
     private final List<DataSourceAdapter> adapters;
     private final DataScopeService dataScopeService;
+    private final List<BizDataHandler> bizDataHandlers;
 
     /**
      * @param adapters Spring 自动注入所有 DataSourceAdapter bean（无则空列表）
@@ -107,7 +108,8 @@ public class DataSourceDefinitionService {
                                        TenantProvider tenantProvider,
                                        ObjectMapper objectMapper,
                                        List<DataSourceAdapter> adapters,
-                                       DataScopeService dataScopeService) {
+                                       DataScopeService dataScopeService,
+                                       List<BizDataHandler> bizDataHandlers) {
         this.dsRepository = dsRepository;
         this.formDefRepository = formDefRepository;
         this.pageRepository = pageRepository;
@@ -115,6 +117,7 @@ public class DataSourceDefinitionService {
         this.objectMapper = objectMapper;
         this.adapters = adapters == null ? List.of() : adapters;
         this.dataScopeService = dataScopeService;
+        this.bizDataHandlers = bizDataHandlers == null ? List.of() : bizDataHandlers;
     }
 
     /**
@@ -401,8 +404,8 @@ public class DataSourceDefinitionService {
         if (req == null) {
             req = new BizDataQueryRequest();
         }
-        requireScopeEnforceable(id, DataScopeAction.READ);
-        dataScopeService.applyRead(id, req);
+        requireScopeEnforceable(id);
+        dataScopeService.apply(id, req);
         return queryAdapter(id, req);
     }
 
@@ -414,8 +417,8 @@ public class DataSourceDefinitionService {
         if (req == null) {
             req = new AggregateRequest();
         }
-        requireScopeEnforceable(id, DataScopeAction.READ);
-        dataScopeService.applyRead(id, req);
+        requireScopeEnforceable(id);
+        dataScopeService.apply(id, req);
         return adapterOf(id).aggregate(getById(id), req);
     }
 
@@ -427,15 +430,15 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 数据源单条查询分发（受读范围约束）。
+     * 数据源单条查询分发（受可见集合约束）。
      *
-     * <p>只收列表不收单条等于「翻不到但能按 id 直读」，所以命中范围条件时改用
-     * 带条件的按 id 查询；不在范围内按 404 处理——不区分「不存在」与「无权读」，
+     * <p>只收列表不收单条等于「翻不到但能按 id 直读」，所以受控时改用
+     * 带条件的按 id 查询；不可见按 404 处理——不区分「不存在」与「无权读」，
      * 免得接口变成一个探测行存在性的探针。
      */
     public BizDataVO getData(String id, String rowId) {
-        if (isRowScoped(id, DataScopeAction.READ)) {
-            BizDataVO scoped = findScopedRecord(id, rowId, DataScopeAction.READ);
+        if (isRowScoped(id)) {
+            BizDataVO scoped = findScopedRecord(id, rowId);
             if (scoped == null) {
                 throw new BusinessException(404, "记录不存在或无权访问: " + rowId);
             }
@@ -452,7 +455,7 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 数据源修改分发（受写范围约束：不在范围内的行改不到）。
+     * 数据源修改分发（看即能操作：不可见的行改不到）。
      */
     public void updateData(String id, String rowId, Map<String, Object> data, Integer version) {
         requireRowWritable(id, rowId);
@@ -460,7 +463,7 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 数据源删除分发（受写范围约束）。
+     * 数据源删除分发（看即能操作）。
      */
     public void deleteData(String id, String rowId) {
         requireRowWritable(id, rowId);
@@ -468,23 +471,21 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 写范围校验：命中 WRITE 条件时用「带条件的按 id 查询」确认归属，查不到即 403。
-     *
-     * <p>读范围与写范围同时存在时是叠加（交集）：改一条看不见的行没有意义。
-     * 新增不做行校验——新行还没有归属可比，归功能权限（菜单/按钮）管。
+     * 写校验按可见集合（v3「看即能操作」）：受控数据源上用同一个带条件的按 id 查询确认归属，
+     * 不可见即 403。新增不做行校验——新行还没有归属可比，归功能权限（菜单/按钮）管。
      */
     private void requireRowWritable(String id, String rowId) {
-        if (!isRowScoped(id, DataScopeAction.WRITE)) {
+        if (!isRowScoped(id)) {
             return;
         }
-        if (findScopedRecord(id, rowId, DataScopeAction.WRITE) == null) {
-            throw new BusinessException(403, "无权修改或删除该记录（不在数据范围内）: " + rowId);
+        if (findScopedRecord(id, rowId) == null) {
+            throw new BusinessException(403, "无权修改或删除该记录（不在数据权限范围内）: " + rowId);
         }
     }
 
-    /** 当前用户在该数据源上是否存在生效的范围条件（无登录态/管理员/无规则 = false）。 */
-    private boolean isRowScoped(String id, DataScopeAction action) {
-        return dataScopeService.hasScope(id, action);
+    /** 当前用户在该数据源是否被范围约束（受控未授权 = true；无登录态/管理员/不受控 = false）。 */
+    private boolean isRowScoped(String id) {
+        return dataScopeService.hasScope(id);
     }
 
     /**
@@ -494,12 +495,40 @@ public class DataSourceDefinitionService {
      * WORKFLOW 查询服务只按 map 等值拼条件且不认结构化形态，SYSTEM 内建源根本不读 filter，
      * API 源的筛选参数由第三方接口自定。在这些源上注入范围等于没注入——
      * 与其静默放行让管理员以为已收紧，不如当场拒绝并说明原因。
+     *
+     * <p>FORM 源还有一层：钩子可以把查询整个接管走（{@code overridesQuery()}），
+     * 这时认不认 filter 由钩子实现说了算，光看类型判不出来，所以要求实现方显式声明
+     * （{@code honorsRowScope()}）。见 {@link #requireHandlerHonorsScope}。
      */
     public void requireScopeConfigurable(String id) {
-        String type = getById(id).getType();
+        DataSourceDefinition ds = getById(id);
+        String type = ds.getType();
         if (!isScopeEnforceableType(type)) {
             throw new BusinessException(400, "数据源类型 " + type
                     + " 的取数实现不消费筛选条件，数据范围无法施加；请取消该数据源的范围配置");
+        }
+        if (TYPE_FORM.equals(type)) {
+            requireHandlerHonorsScope(ds.getFormKey());
+        }
+    }
+
+    /**
+     * 接管了该表单查询、却没声明认范围的钩子：条件注入进去也没人读，界面上却显示「已受控」，
+     * 是比类型不符更隐蔽的假保障（管理员自己看不出取数已经绕开了权限）。
+     * 声明由钩子作者给出，配置期读不了源码，只能要求显式表态。
+     */
+    private void requireHandlerHonorsScope(String formKey) {
+        if (formKey == null || formKey.isBlank()) {
+            return;
+        }
+        for (BizDataHandler handler : bizDataHandlers) {
+            if (formKey.equals(handler.getFormKey())
+                    && handler.overridesQuery() && !handler.honorsRowScope()) {
+                throw new BusinessException(400, "表单 " + formKey + " 的查询已由业务钩子 "
+                        + handler.getClass().getSimpleName() + " 接管，但该钩子未声明 honorsRowScope()，"
+                        + "数据范围条件不会被它读取；请让钩子把收到的请求原样交给通用查询"
+                        + "（support.queryGeneric(formKey, req)）并声明 honorsRowScope()=true");
+            }
         }
     }
 
@@ -547,27 +576,24 @@ public class DataSourceDefinitionService {
         return columns;
     }
 
-    private void requireScopeEnforceable(String id, DataScopeAction action) {
-        if (isRowScoped(id, action)) {
+    private void requireScopeEnforceable(String id) {
+        if (isRowScoped(id)) {
             requireScopeConfigurable(id);
         }
     }
 
     /**
-     * 带范围条件按 id 取一行；取不到返回 null。
+     * 带可见集合条件按 id 取一行；不可见或不存在返回 null。
      *
-     * <p>读、写范围一次性合并成一次查询（{@link DataScopeService#applyAll}）：先施加 WRITE 再走
-     * {@code queryData} 会被后者的 {@code applyRead} 覆盖掉保留键，写条件等于没加。
+     * <p>列表/单条/改删共用同一份判定（{@link DataScopeService#apply}）：受控未授权时
+     * 保留键是空数组，生成器拼 {@code 1 = 0}，这里自然得到 null。
      */
-    private BizDataVO findScopedRecord(String id, String rowId, DataScopeAction action) {
+    private BizDataVO findScopedRecord(String id, String rowId) {
         BizDataQueryRequest req = new BizDataQueryRequest();
         req.setFilter(idFilterJson(rowId));
         req.setSize(1);
-        requireScopeEnforceable(id, action);
-        if (action != DataScopeAction.READ) {
-            requireScopeEnforceable(id, DataScopeAction.READ);
-        }
-        dataScopeService.applyAll(id, List.of(DataScopeAction.READ, action), req);
+        requireScopeEnforceable(id);
+        dataScopeService.apply(id, req);
         BizDataPageVO page = queryAdapter(id, req);
         List<BizDataVO> records = page == null ? null : page.getRecords();
         return records == null || records.isEmpty() ? null : records.get(0);

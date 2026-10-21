@@ -5,6 +5,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.FilterAware;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
 import org.springframework.security.core.Authentication;
@@ -12,7 +14,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -24,25 +25,30 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 行权限（RowPermission）：按「角色 × 动作」把权限对象叠加到数据源查询上。
+ * 行权限（RowPermission）v3：「授权 = 赋予可见行」的白名单模型。
  *
  * <p>模型是三层：{@link RowPermission}（一组 AND 条件 + 名称）通过 {@link RowPermissionSource}
- * 关联到若干数据源，再通过 {@link RowPermissionGrant} 授予角色并指定 READ/WRITE 轴。
+ * 关联到若干数据源，再通过 {@link RowPermissionGrant} 授予角色。
  * 授权的唯一写入口是「角色管理 → 数据权限」；这里只负责读取与施加。
- * 施加位置是 {@code DataSourceDefinitionService}——列表/聚合走 {@link #applyRead}，
- * 单条读取与改删走按 id 反查归属；出码/前端一律不参与范围判定，范围只能在服务端成立。
+ * 施加位置有两处，都调本类、条件构造出口只有本类一处：
+ * {@code DataSourceDefinitionService}（数据源通道：列表/聚合/单条/改删）与
+ * {@code BizDataScopeGuard}（业务表单底表通道：{@code /api/v1/biz-data/**} 的同类入口）；
+ * 出码/前端一律不参与范围判定，范围只能在服务端成立。
  *
- * <p>语义约定（改动须同步这里的四条不变量）：
+ * <p>语义约定（改动须同步这里的五条不变量）：
  * <ol>
- *   <li><b>默认放行</b>：某数据源没有任何命中授权 = 现状行为（全租户可见）；「全部可见」靠不授予表达，
- *       不再有 ALL 通配配置。对象条件为空数组同样视为不受限（显式放行）。</li>
- *   <li><b>并集</b>：同一用户经多个角色命中多个权限对象时取 OR；对象内部的条件按 AND。
- *       这不是「取最宽的一条」——两个对象分别放开两批行，用户应当两批都看得到。</li>
- *   <li><b>交集叠加</b>：并集条件与客户端 filter 始终 AND，走独立保留键 {@link FilterAware#ROW_SCOPE_KEY}，
- *       客户端自带的是 map 还是 OR 结构化筛选都不影响；客户端传入的同名保留键先被丢弃。
+ *   <li><b>关联即受控</b>：数据源被任意权限对象关联就进入受控状态；从未关联 = 现状行为（全租户可见），
+ *       「不受数据权限控制」靠不关联表达。</li>
+ *   <li><b>授权即赋予</b>：角色在受控数据源的可见行 = 它被授权对象之并集（对象间 OR，对象内 AND）；
+ *       一条都没命中 = <b>0 行</b>。「未授权」不再是放行而是拒绝——这正是「授权」一词的本义。</li>
+ *   <li><b>空条件对象 = 全部行</b>：把空条件对象授给某角色，该角色在该数据源看全部行；
+ *       并集里只要命中一条不受限，整体不受限。</li>
+ *   <li><b>看即能操作</b>：行可见性同时管读与改删——列表/聚合/单条与修改/删除按同一集合判定，
+ *       看不到的行改不到也删不掉；新增不按行校验（新行还没有归属可比），归功能权限负责。</li>
+ *   <li><b>保留键通道</b>：可见集合与客户端 filter 始终 AND，走独立保留键 {@link FilterAware#ROW_SCOPE_KEY}：
+ *       键缺席 = 不受限，值为空数组 = 拒绝一切（生成器拼 {@code 1 = 0}），非空 = 条件组。
+ *       客户端传入的同名键先被丢弃，该通道只由服务端写入；
  *       列名在注入前做标识符校验，取值只能来自服务端解析的模板变量。</li>
- *   <li><b>读写分轴</b>：READ 管列表/聚合/单条，WRITE 管改删；新增不按行校验
- *       （新行还没有归属可比），归功能权限负责。</li>
  * </ol>
  */
 @Service
@@ -67,6 +73,7 @@ public class DataScopeService {
     private final DataScopeVariables variables;
     private final ObjectMapper objectMapper;
     private final TenantProvider tenantProvider;
+    private final DataSourceDefinitionRepository dataSourceRepository;
 
     public DataScopeService(RowPermissionRepository permissionRepository,
                             RowPermissionSourceRepository sourceRepository,
@@ -74,7 +81,8 @@ public class DataScopeService {
                             DataScopeSubjectResolver subjectResolver,
                             DataScopeVariables variables,
                             ObjectMapper objectMapper,
-                            TenantProvider tenantProvider) {
+                            TenantProvider tenantProvider,
+                            DataSourceDefinitionRepository dataSourceRepository) {
         this.permissionRepository = permissionRepository;
         this.sourceRepository = sourceRepository;
         this.grantRepository = grantRepository;
@@ -82,128 +90,52 @@ public class DataScopeService {
         this.variables = variables;
         this.objectMapper = objectMapper;
         this.tenantProvider = tenantProvider;
+        this.dataSourceRepository = dataSourceRepository;
     }
 
     // ==================== 施加 ====================
 
-    /** 对查询请求施加当前用户的读范围（无授权/管理员 = 原样返回）。 */
-    public void applyRead(String dataSourceId, FilterAware request) {
-        apply(dataSourceId, DataScopeAction.READ, request);
-    }
-
-    /** 把某动作的并集条件叠加到已带条件的请求上（列表/聚合共用）。 */
-    public void apply(String dataSourceId, DataScopeAction action, FilterAware request) {
-        applyAll(dataSourceId, List.of(action), request);
-    }
-
-    /**
-     * 多动作叠加（交集）：按 id 反查归属时，读范围与写范围必须同时满足。
-     * 每个动作各自是「组间 OR、组内 AND」，交集按笛卡尔积展开成新的组。
-     */
-    public void applyAll(String dataSourceId, Collection<DataScopeAction> actions, FilterAware request) {
+    /** 把当前用户在某数据源的可见集合叠加到请求上（不受限 = 原样返回并丢弃伪造保留键）。 */
+    public void apply(String dataSourceId, FilterAware request) {
         if (request == null) {
             return;
         }
-        List<List<Map<String, Object>>> groups = scopeGroups(dataSourceId, actions);
-        if (groups.isEmpty()) {
+        EffectiveScope scope = effectiveScope(dataSourceId, currentUser());
+        if (scope.unrestricted()) {
             stripRowScope(request);
             return;
         }
-        request.setFilter(composeFilter(request.getFilter(), groups));
+        request.setFilter(composeFilter(request.getFilter(), scope.groups()));
     }
 
-    /** 当前用户在某数据源某动作上的生效条件组；空 List = 不受限。 */
-    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, DataScopeAction action) {
-        return scopeGroups(dataSourceId, action, currentUser());
+    /** 当前用户在该数据源是否被范围约束（受控未授权 = true；无登录态/管理员/不受控 = false）。 */
+    public boolean hasScope(String dataSourceId) {
+        return !effectiveScope(dataSourceId, currentUser()).unrestricted();
     }
 
-    /** 多个动作的生效条件组交集；某个动作不受限时结果只受其余动作约束。 */
-    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, Collection<DataScopeAction> actions) {
-        List<List<Map<String, Object>>> combined = null;
-        for (DataScopeAction action : new LinkedHashSet<>(actions)) {
-            List<List<Map<String, Object>>> groups = scopeGroups(dataSourceId, action);
-            if (groups.isEmpty()) {
-                continue;
+    /**
+     * 业务表单底表通道（{@code /api/v1/biz-data/**}）的施加入口：先按 formKey 反查它的数据源，
+     * 再走与数据源通道同一份判定。
+     *
+     * <p>「管理数据」页、表单里的数据引用选择器读的是 {@code wf_biz_<formKey>} 物理表本身，
+     * 而权限对象挂在数据源上；同一张表两条通道若只有后者收紧，等于没收紧。
+     * 查不到数据源 = 该表没有被任何数据源描述过，自然不受控。
+     */
+    public void applyByFormKey(String formKey, FilterAware request) {
+        String dataSourceId = dataSourceIdOfForm(formKey);
+        if (dataSourceId == null) {
+            if (request != null) {
+                stripRowScope(request);
             }
-            combined = combined == null ? groups : crossProduct(combined, groups);
+            return;
         }
-        return combined == null ? List.of() : combined;
+        apply(dataSourceId, request);
     }
 
-    private static List<List<Map<String, Object>>> crossProduct(List<List<Map<String, Object>>> left,
-                                                               List<List<Map<String, Object>>> right) {
-        List<List<Map<String, Object>>> out = new ArrayList<>(left.size() * right.size());
-        for (List<Map<String, Object>> l : left) {
-            for (List<Map<String, Object>> r : right) {
-                List<Map<String, Object>> merged = new ArrayList<>(l.size() + r.size());
-                merged.addAll(l);
-                merged.addAll(r);
-                out.add(merged);
-            }
-        }
-        return out;
-    }
-
-    /** 指定主体的生效条件组（施加路径的唯一出口，「当前用户」与「指定用户」走同一实现）。 */
-    public List<List<Map<String, Object>>> scopeGroups(String dataSourceId, DataScopeAction action, LoginUser user) {
-        return resolveGroups(appliedPermissions(dataSourceId, action, user), user);
-    }
-
-    /** 当前用户在该数据源是否有生效范围（用于「是否存在单条归属校验」的快速判断）。 */
-    public boolean hasScope(String dataSourceId, DataScopeAction action) {
-        return !scopeGroups(dataSourceId, action).isEmpty();
-    }
-
-    private List<RowPermission> appliedPermissions(String dataSourceId, DataScopeAction action, LoginUser user) {
-        if (dataSourceId == null || dataSourceId.isBlank() || action == null || user == null || isAdmin(user)) {
-            return List.of();
-        }
-        Set<String> subjects = subjectResolver.subjectsOf(user);
-        if (subjects.isEmpty()) {
-            return List.of();
-        }
-        String tenantId = tenantProvider.getTenantId();
-        List<Long> permissionIds = sourceRepository.findByTenantIdAndDataSourceId(tenantId, dataSourceId).stream()
-                .map(RowPermissionSource::getPermissionId)
-                .distinct()
-                .toList();
-        if (permissionIds.isEmpty()) {
-            return List.of();
-        }
-        Set<Long> grantedIds = grantRepository
-                .findByTenantIdAndPermissionIdInAndAction(tenantId, permissionIds, action).stream()
-                .filter(g -> subjects.contains(g.subjectRef()))
-                .map(RowPermissionGrant::getPermissionId)
-                .collect(Collectors.toSet());
-        if (grantedIds.isEmpty()) {
-            return List.of();
-        }
-        return permissionRepository.findByTenantIdAndIdIn(tenantId, grantedIds).stream()
-                .sorted(Comparator.comparing(RowPermission::getId))
-                .toList();
-    }
-
-    private List<List<Map<String, Object>>> resolveGroups(List<RowPermission> permissions, LoginUser user) {
-        List<List<Map<String, Object>>> groups = new ArrayList<>();
-        for (RowPermission permission : permissions) {
-            List<Map<String, Object>> conditions = parseConditions(permission.getConditionsJson());
-            if (conditions.isEmpty()) {
-                // 显式放行对象命中：并集里只要有一条不受限，整体就不受限
-                return List.of();
-            }
-            groups.add(resolveConditions(conditions, user));
-        }
-        return groups;
-    }
-
-    // ==================== 内部 ====================
-
-    private Map<String, Object> leaf(String column, String op, Object value) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("column", column);
-        out.put("op", op);
-        out.put("value", value);
-        return out;
+    /** 该表单底表通道是否受控（受控才需要付一次带条件的反查成本）。 */
+    public boolean hasScopeByFormKey(String formKey) {
+        String dataSourceId = dataSourceIdOfForm(formKey);
+        return dataSourceId != null && hasScope(dataSourceId);
     }
 
     /** 读取已存条件（管理端展示用）；空串视为无条件。 */
@@ -211,34 +143,13 @@ public class DataScopeService {
         return parseConditions(conditionsJson);
     }
 
-    private List<Map<String, Object>> parseConditions(String conditionsJson) {
-        if (conditionsJson == null || conditionsJson.isBlank()) {
-            return List.of();
-        }
-        try {
-            List<Map<String, Object>> list = objectMapper.readValue(
-                    conditionsJson, new TypeReference<List<Map<String, Object>>>() { });
-            return list == null ? List.of() : list;
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(500, "行权限对象条件不是合法 JSON，请检查配置");
-        }
-    }
-
-    private String writeConditions(List<Map<String, Object>> conditions) {
-        try {
-            return objectMapper.writeValueAsString(conditions);
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(500, "行权限条件写入失败");
-        }
-    }
-
     /**
      * 保存期校验：结构、列名、运算符、取值形态（对象级权限管理复用，不解析用户模板）。
-     * 空条件对象在 v2 保存入口一律拒绝——「全部可见」靠不关联表达，不靠一条空条件。
+     * 空条件在 v3 是合法形态：「全部行」授权对象。
      */
     public List<Map<String, Object>> validateConditions(List<Map<String, Object>> conditions) {
         if (conditions == null || conditions.isEmpty()) {
-            throw new BusinessException(400, "权限对象至少需要一条条件；全部可见请直接不关联权限对象");
+            return List.of();
         }
         List<Map<String, Object>> out = new ArrayList<>(conditions.size());
         for (Map<String, Object> condition : conditions) {
@@ -254,11 +165,97 @@ public class DataScopeService {
         return out;
     }
 
-    /** 逐叶解析模板并校验列/运算符；非法配置快速失败，绝不静默降级为放行。 */
-    private List<Map<String, Object>> resolveConditions(List<Map<String, Object>> conditions, LoginUser user) {
-        if (conditions.isEmpty()) {
+    // ==================== 判定 ====================
+
+    /**
+     * 当前用户在某数据源的可见集合。
+     *
+     * <p>无登录态返回不受限：内部链路（无安全上下文的系统取数）不因范围判定报错；
+     * 面向用户的请求都带主体，走受控判定。
+     */
+    private EffectiveScope effectiveScope(String dataSourceId, LoginUser user) {
+        if (dataSourceId == null || dataSourceId.isBlank() || user == null || isAdmin(user)) {
+            return EffectiveScope.UNRESTRICTED;
+        }
+        String tenantId = tenantProvider.getTenantId();
+        List<Long> permissionIds = sourceRepository.findByTenantIdAndDataSourceId(tenantId, dataSourceId).stream()
+                .map(RowPermissionSource::getPermissionId)
+                .distinct()
+                .toList();
+        if (permissionIds.isEmpty()) {
+            return EffectiveScope.UNRESTRICTED;
+        }
+        Set<String> subjects = subjectResolver.subjectsOf(user);
+        Set<Long> grantedIds = subjects.isEmpty() ? Set.of() : grantRepository
+                .findByTenantIdAndPermissionIdIn(tenantId, permissionIds).stream()
+                .filter(g -> subjects.contains(g.subjectRef()))
+                .map(RowPermissionGrant::getPermissionId)
+                .collect(Collectors.toSet());
+        if (grantedIds.isEmpty()) {
+            return EffectiveScope.DENIED;
+        }
+        List<RowPermission> permissions = permissionRepository.findByTenantIdAndIdIn(tenantId, grantedIds).stream()
+                .sorted(Comparator.comparing(RowPermission::getId))
+                .toList();
+        if (permissions.isEmpty()) {
+            // 授权指向已消失的对象：受控数据源上不静默放行，按拒绝处理
+            return EffectiveScope.DENIED;
+        }
+        List<List<Map<String, Object>>> groups = new ArrayList<>(permissions.size());
+        for (RowPermission permission : permissions) {
+            List<Map<String, Object>> conditions = parseConditions(permission.getConditionsJson());
+            if (conditions.isEmpty()) {
+                // 空条件对象 = 全部行：并集里只要有一条不受限，整体不受限
+                return EffectiveScope.UNRESTRICTED;
+            }
+            groups.add(resolveConditions(conditions, user));
+        }
+        return EffectiveScope.of(groups);
+    }
+
+    // ==================== 内部 ====================
+
+    /**
+     * formKey → 描述该业务表的数据源 id（租户内 formKey 唯一，与 {@code DataSourceSyncListener}
+     * / {@code ModuleExportService} 的既有约定一致）。
+     */
+    private String dataSourceIdOfForm(String formKey) {
+        if (formKey == null || formKey.isBlank()) {
+            return null;
+        }
+        return dataSourceRepository
+                .findByTenantIdAndFormKey(tenantProvider.getTenantId(), formKey)
+                .map(DataSourceDefinition::getId)
+                .orElse(null);
+    }
+
+    private static boolean isAdmin(LoginUser user) {
+        return user.getRoles() != null && user.getRoles().stream().anyMatch(ADMIN_ROLES::contains);
+    }
+
+    private Map<String, Object> leaf(String column, String op, Object value) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("column", column);
+        out.put("op", op);
+        out.put("value", value);
+        return out;
+    }
+
+    private List<Map<String, Object>> parseConditions(String conditionsJson) {
+        if (conditionsJson == null || conditionsJson.isBlank()) {
             return List.of();
         }
+        try {
+            List<Map<String, Object>> list = objectMapper.readValue(
+                    conditionsJson, new TypeReference<List<Map<String, Object>>>() { });
+            return list == null ? List.of() : list;
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "行权限对象条件不是合法 JSON，请检查配置");
+        }
+    }
+
+    /** 逐叶解析模板并校验列/运算符；非法配置快速失败，绝不静默降级为放行。 */
+    private List<Map<String, Object>> resolveConditions(List<Map<String, Object>> conditions, LoginUser user) {
         List<Map<String, Object>> out = new ArrayList<>(conditions.size());
         for (Map<String, Object> condition : conditions) {
             if (condition == null || condition.get("column") == null) {
@@ -471,10 +468,11 @@ public class DataScopeService {
     }
 
     /**
-     * 把并集条件写入调用方 filter 的保留键，客户端自带同名键先移除。
+     * 把可见集合写入调用方 filter 的保留键，客户端自带同名键先移除。
      *
      * <p>保留键与调用方 filter 的原有形态互不干扰：三个 SQL 生成器先处理保留键（独立 AND 段），
      * 其余顶层键（map 形态或 conditions 形态）照旧。这样客户端 OR 筛选不再需要为范围让步。
+     * {@code groups} 传空数组即拒绝一切（生成器拼 {@code 1 = 0}）。
      */
     private String composeFilter(String callerFilterJson, List<List<Map<String, Object>>> groups) {
         Map<String, Object> caller = parseFilter(callerFilterJson);
@@ -525,7 +523,18 @@ public class DataScopeService {
         return null;
     }
 
-    private boolean isAdmin(LoginUser user) {
-        return user.getRoles() != null && user.getRoles().stream().anyMatch(ADMIN_ROLES::contains);
+    /** 三态可见集合：不受限（groups=null，键缺席）/ 拒绝一切（groups=空数组）/ 条件组。 */
+    private record EffectiveScope(List<List<Map<String, Object>>> groups) {
+
+        static final EffectiveScope UNRESTRICTED = new EffectiveScope(null);
+        static final EffectiveScope DENIED = new EffectiveScope(List.of());
+
+        static EffectiveScope of(List<List<Map<String, Object>>> groups) {
+            return new EffectiveScope(groups);
+        }
+
+        boolean unrestricted() {
+            return groups == null;
+        }
     }
 }

@@ -87,7 +87,6 @@ public class RowPermissionController {
         dto.setDataSourceIds(detail.dataSourceIds());
         dto.setGrants(detail.grants().stream().map(grant -> {
             RowPermissionDTO.GrantDTO item = new RowPermissionDTO.GrantDTO();
-            item.setAction(grant.action());
             item.setSubjectType(grant.subjectType());
             item.setSubjectKey(grant.subjectKey());
             return item;

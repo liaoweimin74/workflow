@@ -3,7 +3,6 @@ package com.workflow.api.controller;
 import com.workflow.api.dto.RoleDataPermissionDTO;
 import com.workflow.api.dto.RoleDataPermissionSaveRequest;
 import com.workflow.common.exception.BusinessException;
-import com.workflow.engine.datasource.scope.DataScopeAction;
 import com.workflow.engine.datasource.scope.RoleDataPermissionService;
 import com.workflow.framework.security.domain.LoginUser;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 角色数据权限端点的管理员门禁与请求映射。 */
+/** 角色数据权限端点的管理员门禁与请求映射（v3 单轴：授权即赋予可见行）。 */
 class RoleDataPermissionControllerTest {
 
     private RoleDataPermissionService service;
@@ -63,15 +63,23 @@ class RoleDataPermissionControllerTest {
         login(List.of("admin"));
         when(service.list(2L)).thenReturn(List.of(new RoleDataPermissionService.View(
                 10L, "一线可见", "备注", List.of(Map.of("column", "owner_id", "op", "eq", "value", "{userId}")),
-                List.of("ds-1"), true, false)));
+                List.of("ds-1"), true)));
 
         RoleDataPermissionDTO dto = controller.list(2L).getData().get(0);
 
         assertEquals(10L, dto.getPermissionId());
         assertEquals("一线可见", dto.getPermissionName());
         assertEquals(List.of("ds-1"), dto.getDataSourceIds());
-        assertTrue(dto.isRead());
-        assertEquals(false, dto.isWrite());
+        assertTrue(dto.isGranted());
+    }
+
+    @Test
+    void list_maps_ungranted_flag() {
+        login(List.of("admin"));
+        when(service.list(2L)).thenReturn(List.of(new RoleDataPermissionService.View(
+                10L, "一线可见", null, List.of(), List.of("ds-1"), false)));
+
+        assertFalse(controller.list(2L).getData().get(0).isGranted());
     }
 
     @Test
@@ -91,14 +99,11 @@ class RoleDataPermissionControllerTest {
         RoleDataPermissionSaveRequest request = new RoleDataPermissionSaveRequest();
         RoleDataPermissionSaveRequest.Item item = new RoleDataPermissionSaveRequest.Item();
         item.setPermissionId(10L);
-        item.setActions(List.of(DataScopeAction.READ, DataScopeAction.WRITE));
         request.setItems(List.of(item));
 
         controller.save(2L, request);
 
-        verify(service).save(eq(2L), eq(List.of(
-                new RoleDataPermissionService.Item(10L,
-                        List.of(DataScopeAction.READ, DataScopeAction.WRITE)))));
+        verify(service).save(eq(2L), eq(List.of(new RoleDataPermissionService.Item(10L))));
 
         RoleDataPermissionSaveRequest empty = new RoleDataPermissionSaveRequest();
         controller.save(2L, empty);

@@ -308,6 +308,19 @@ class JoinSqlGeneratorTest {
         assertThat(sql.params()).containsExactly(TENANT, TENANT, 10, 0);
     }
 
+    @Test
+    void buildSelect_rowScope_emptyArray_deniesEverything() {
+        // v3 可见集合白名单：受控未授权时服务端写空数组，必须拼 1 = 0
+        Map<String, Object> filters = Map.of(FilterAware.ROW_SCOPE_KEY, List.of());
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
+                filters, null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).contains(" WHERE m.tenant_id = ? AND (1 = 0)");
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, 10, 0);
+    }
+
     private static List<JoinSqlGenerator.QueryColumn> queryColumns() {
         // 主表列（ref = m.<key>）+ 虚拟列（ref = <alias>.<joinField>）
         return List.of(

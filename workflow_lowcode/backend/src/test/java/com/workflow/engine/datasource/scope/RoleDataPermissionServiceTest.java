@@ -2,6 +2,7 @@ package com.workflow.engine.datasource.scope;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.entity.SysRole;
@@ -28,7 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 角色数据权限：授权唯一入口，按 roleCode 维护该角色的 ROLE 授权与读写轴。 */
+/** 角色数据权限：授权唯一入口，按 roleCode 维护该角色被授到的权限对象（v3：不分读写轴）。 */
 class RoleDataPermissionServiceTest {
 
     private static final String TENANT = "t1";
@@ -52,7 +53,7 @@ class RoleDataPermissionServiceTest {
                 grantRepository,
                 new DataScopeSubjectResolver(),
                 new DataScopeVariables(mock(SysOrganizationRepository.class)),
-                om, new TenantProvider());
+                om, new TenantProvider(), mock(DataSourceDefinitionRepository.class));
         service = new RoleDataPermissionService(roleRepository, permissionRepository, sourceRepository,
                 grantRepository, dataScopeService, new TenantProvider());
         TenantContext.setTenantId(TENANT);
@@ -65,34 +66,30 @@ class RoleDataPermissionServiceTest {
     }
 
     @Test
-    void list_returns_all_objects_with_axes_for_the_role() throws Exception {
+    void list_returns_all_objects_with_granted_flag_for_the_role() throws Exception {
         RowPermission p1 = permission(1L, "一线可见");
         p1.setConditionsJson(om.writeValueAsString(List.of(leaf("owner_id", "eq", "{userId}"))));
-        RowPermission p2 = permission(2L, "只读共享");
-        p2.setConditionsJson(om.writeValueAsString(List.of(leaf("dept_id", "in", "{orgIdSubtree}"))));
+        RowPermission p2 = permission(2L, "全部行");
+        p2.setConditionsJson("[]");
         when(permissionRepository.findByTenantIdOrderByIdDesc(TENANT)).thenReturn(List.of(p2, p1));
         when(sourceRepository.findByTenantIdAndPermissionIdIn(eq(TENANT), anyCollection()))
                 .thenReturn(List.of(link(1L, "ds-b"), link(1L, "ds-a"), link(2L, "ds-a")));
         when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
-                .thenReturn(List.of(
-                        grant(1L, DataScopeAction.READ, ROLE_CODE),
-                        grant(2L, DataScopeAction.WRITE, ROLE_CODE),
-                        grant(99L, DataScopeAction.READ, ROLE_CODE)));
+                .thenReturn(List.of(grant(1L, ROLE_CODE), grant(99L, ROLE_CODE)));
 
         List<RoleDataPermissionService.View> views = service.list(2L);
 
         assertEquals(2, views.size());
-        RoleDataPermissionService.View read = views.get(0);
-        assertEquals(2L, read.permissionId());
-        assertEquals("只读共享", read.permissionName());
-        assertEquals(List.of("ds-a"), read.dataSourceIds());
-        assertFalse(read.read());
-        assertTrue(read.write());
+        RoleDataPermissionService.View all = views.get(0);
+        assertEquals(2L, all.permissionId());
+        assertEquals("全部行", all.permissionName());
+        assertEquals(List.of("ds-a"), all.dataSourceIds());
+        assertFalse(all.granted());
+        assertEquals(List.of(), all.conditions());
 
         RoleDataPermissionService.View owner = views.get(1);
         assertEquals(List.of("ds-a", "ds-b"), owner.dataSourceIds());
-        assertTrue(owner.read());
-        assertFalse(owner.write());
+        assertTrue(owner.granted());
         assertEquals(List.of(leaf("owner_id", "eq", "{userId}")), owner.conditions());
     }
 
@@ -106,40 +103,35 @@ class RoleDataPermissionServiceTest {
 
     @Test
     void save_replaces_only_role_grants_of_that_role() {
-        RowPermissionGrant read = grant(1L, DataScopeAction.READ, ROLE_CODE);
-        RowPermissionGrant write = grant(1L, DataScopeAction.WRITE, ROLE_CODE);
-        RowPermissionGrant otherObject = grant(2L, DataScopeAction.READ, ROLE_CODE);
+        RowPermissionGrant keep = grant(1L, ROLE_CODE);
+        RowPermissionGrant obsolete = grant(2L, ROLE_CODE);
         when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection()))
-                .thenReturn(List.of(permission(1L, "p1"), permission(2L, "p2")));
+                .thenReturn(List.of(permission(1L, "p1"), permission(3L, "p3")));
         when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
-                .thenReturn(List.of(read, write, otherObject));
+                .thenReturn(List.of(keep, obsolete));
 
         service.save(2L, List.of(
-                new RoleDataPermissionService.Item(1L, List.of(DataScopeAction.READ)),
-                new RoleDataPermissionService.Item(2L, List.of(DataScopeAction.WRITE))));
+                new RoleDataPermissionService.Item(1L),
+                new RoleDataPermissionService.Item(3L)));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<RowPermissionGrant>> deleted = ArgumentCaptor.forClass(List.class);
-        verify(grantRepository).deleteAll(deleted.capture());
-        assertEquals(List.of(write, otherObject), deleted.getValue());
-        verify(grantRepository).flush();
         ArgumentCaptor<RowPermissionGrant> saved = ArgumentCaptor.forClass(RowPermissionGrant.class);
+        verify(grantRepository).deleteAll(List.of(obsolete));
+        verify(grantRepository).flush();
         verify(grantRepository).save(saved.capture());
-        assertEquals(2L, saved.getValue().getPermissionId());
-        assertEquals(DataScopeAction.WRITE, saved.getValue().getAction());
+        assertEquals(3L, saved.getValue().getPermissionId());
         assertEquals(DataScopeSubject.ROLE, saved.getValue().getSubjectType());
         assertEquals(ROLE_CODE, saved.getValue().getSubjectKey());
     }
 
     @Test
     void save_empty_list_clears_all_role_grants() {
-        RowPermissionGrant read = grant(1L, DataScopeAction.READ, ROLE_CODE);
+        RowPermissionGrant existing = grant(1L, ROLE_CODE);
         when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
-                .thenReturn(List.of(read));
+                .thenReturn(List.of(existing));
 
         service.save(2L, List.of());
 
-        verify(grantRepository).deleteAll(List.of(read));
+        verify(grantRepository).deleteAll(List.of(existing));
         verify(grantRepository, never()).save(any(RowPermissionGrant.class));
     }
 
@@ -148,8 +140,7 @@ class RoleDataPermissionServiceTest {
         when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection())).thenReturn(List.of());
 
         BusinessException e = assertThrows(BusinessException.class,
-                () -> service.save(2L, List.of(
-                        new RoleDataPermissionService.Item(99L, List.of(DataScopeAction.READ)))));
+                () -> service.save(2L, List.of(new RoleDataPermissionService.Item(99L))));
 
         assertEquals(404, e.getCode());
         verify(grantRepository, never()).deleteAll(any());
@@ -160,8 +151,8 @@ class RoleDataPermissionServiceTest {
     void save_rejects_duplicate_permission() {
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.save(2L, List.of(
-                        new RoleDataPermissionService.Item(1L, List.of(DataScopeAction.READ)),
-                        new RoleDataPermissionService.Item(1L, List.of(DataScopeAction.WRITE)))));
+                        new RoleDataPermissionService.Item(1L),
+                        new RoleDataPermissionService.Item(1L))));
 
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("不能重复提交"), e.getMessage());
@@ -203,11 +194,10 @@ class RoleDataPermissionServiceTest {
         return link;
     }
 
-    private RowPermissionGrant grant(Long permissionId, DataScopeAction action, String roleCode) {
+    private RowPermissionGrant grant(Long permissionId, String roleCode) {
         RowPermissionGrant grant = new RowPermissionGrant();
         grant.setTenantId(TENANT);
         grant.setPermissionId(permissionId);
-        grant.setAction(action);
         grant.setSubjectType(DataScopeSubject.ROLE);
         grant.setSubjectKey(roleCode);
         return grant;

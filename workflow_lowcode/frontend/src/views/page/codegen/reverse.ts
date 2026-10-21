@@ -281,6 +281,11 @@ export function reverseToSchema(
       const refId = getPath(rebuilt, `${node.rulePath}.props.dsRefId`)
       return manifest.dataSources.find((d) => d.refId === refId)?.id
     },
+    // 选择器吃的是字面 refId（产物侧把绑定 id 换算过去了），回读要反查回 schema 里的绑定 id
+    globalDataSourceId: (node) => {
+      const refId = getPath(rebuilt, `${node.rulePath}.props.globalDataSourceId`)
+      return manifest.dataSources.find((d) => d.refId === refId)?.id
+    },
     containerDisplayMode: () => (t.findEl('el-drawer') ? 'drawer' : t.findEl('el-dialog') ? 'popup' : 'inline'),
     // 「容器里有没有表单」只能看弹层里的那棵 form：页面根 el-form 现在恒存在，
     // 用 findEl('el-form') 会把它当成容器表单，viewDetail.type 就恒回读成 'form'

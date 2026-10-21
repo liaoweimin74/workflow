@@ -39,7 +39,13 @@ export type PropEmit =
 /** 属性落点随展示方式变化（drawer 吃 size，dialog 吃 width） */
 export type AttrBy = 'containerSizeAttr'
 /** 反推依据 */
-export type DerivedBy = 'dsRefId' | 'containerDisplayMode' | 'containerHasForm' | 'footerConfirmButton' | 'footerCancelButton'
+export type DerivedBy =
+  | 'dsRefId'
+  | 'globalDataSourceId'
+  | 'containerDisplayMode'
+  | 'containerHasForm'
+  | 'footerConfirmButton'
+  | 'footerCancelButton'
 
 /**
  * 数据源记录（schema.dataSources[]）的落点。
@@ -303,8 +309,9 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     field: true,
     self: FIELD_SELF,
     props: {
-      // 选择器只认页面级数据源绑定 id，refId 由运行期从 activeDsBindings 解析
-      dataSourceId: { emit: 'prop' },
+      // schema 里存的是页面绑定 id，组件运行期靠 activeDsBindings 换 refId；产物是独立页没这张表，
+      // 透传就是死接线。换算成 refId 递进组件的逃生口（DataPicker.vue:265），逐节点查常量表。
+      dataSourceId: { emit: 'derived', by: 'globalDataSourceId', evidence: 'props.globalDataSourceId' },
       displayField: { emit: 'prop' },
       searchColumns: { emit: 'prop' },
       columns: { emit: 'prop' },
@@ -313,12 +320,6 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       allowCreate: { emit: 'default', value: false },
       detailReadonly: { emit: 'default', value: true },
     },
-    requires: [
-      {
-        key: 'dataSourceId',
-        note: 'DataPicker 取 refId 走 activeDsBindings 模块级存储（DataPicker.vue:261-265），产物里没有页面绑定表；globalDataSourceId 才是可直接内联的入口，需把 dataSourceId 换算成 refId 后改出 global-data-source-id',
-      },
-    ],
   },
   LookupPicker: {
     tag: 'LookupPicker',

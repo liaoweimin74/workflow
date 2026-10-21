@@ -37,7 +37,7 @@
           </el-form-item>
           <!-- lc:node=n2.f7 type=dataPicker field=warehouse -->
           <el-form-item label="发货仓库">
-            <dataPicker v-model="form.warehouse" data-source-id="ds_mvck4gv92" display-field="name" :search-columns="searchColumns2" :max-count="1" :columns="columns3" />
+            <dataPicker v-model="form.warehouse" :global-data-source-id="dataSources['ds_mvck4gv92']" display-field="name" :search-columns="searchColumns2" :max-count="1" :columns="columns3" />
           </el-form-item>
           <!-- lc:node=n2.f8 type=input field=warehouse_text -->
           <el-form-item label="发货仓库（显示）">

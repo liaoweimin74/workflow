@@ -9512,3 +9512,18 @@ Work Log:
 Stage Summary:
 - 事件 #108 单轮闭环，零 mvn 第 92 次；内存 3.13GB，oom 0
 - 收口 dump 20261021-021049 已推送 HEAD 668d72ac
+---
+Task ID: r182
+Agent: ops-cron
+Task: 2026-10-21 11:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 初始探活四链路全 000、3306 不在线 dump 自动跳过 → 判定事件 #109（冷启动）：bun install + prisma postinstall 进行中
+- 等 60s：vite 1272/mariadb 1245 已起，但 8080 被 bun 1163 占据（Node 假绿链），且冷启动自动触发 recover 走 mvn 构建分支（plexus 1376）
+- 按既定模式切零 mvn 路径：pkill mvn/bun/node index.ts → jar-parts checkout 重拼：121300861B，md5 e369839b ✓
+- recover 秒级干净退出（done: 8080=000 jar=ok 3306=ok，真绿 t+5s，EXIT=0）
+- ss 复验：3000=vite 1272、3306=mariadb 1245、8080=java 1467 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+
+Stage Summary:
+- 冷启动事件 #109 单轮闭环（拦截 mvn 分支），零 mvn 第 93 次；内存 3.18GB，oom 0
+- 收口 dump 20261021-030823（push 初次 FAILED，rebase 后补推成功）已推送 HEAD 5e81bae9

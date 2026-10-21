@@ -4,6 +4,7 @@ import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.domain.R;
+import com.workflow.engine.datasource.scope.BizDataScopeGuard;
 import com.workflow.engine.form.bizdata.BizDataService;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,15 +14,20 @@ import java.util.Map;
 /**
  * 业务数据（底表）Controller。
  * 提供业务表单数据行的增删改查，formKey 标识业务表单（表 = wf_biz_<formKey>）。
+ *
+ * <p>这里是「以登录用户身份直读业务表」的通道，所以读列表/单条与改删要过数据权限闸门
+ * （{@link BizDataScopeGuard}）；新增不按行校验，独立子表行与引用显示文本解析不参与范围判定。
  */
 @RestController
 @RequestMapping("/api/v1/biz-data")
 public class BizDataController {
 
     private final BizDataService bizDataService;
+    private final BizDataScopeGuard scopeGuard;
 
-    public BizDataController(BizDataService bizDataService) {
+    public BizDataController(BizDataService bizDataService, BizDataScopeGuard scopeGuard) {
         this.bizDataService = bizDataService;
+        this.scopeGuard = scopeGuard;
     }
 
     /**
@@ -43,19 +49,21 @@ public class BizDataController {
     }
 
     /**
-     * 分页查询业务数据。
+     * 分页查询业务数据（受当前用户的可见集合约束）。
      */
     @GetMapping("/{formKey}")
     public R<BizDataPageVO> query(@PathVariable String formKey, BizDataQueryRequest req) {
+        scopeGuard.apply(formKey, req);
         return R.ok(bizDataService.query(formKey, req));
     }
 
     /**
-     * 查询单条业务数据。
+     * 查询单条业务数据（不在可见集合内按 404 处理，与列表同源）。
      */
     @GetMapping("/{formKey}/{id}")
     public R<BizDataVO> getById(@PathVariable String formKey,
                                 @PathVariable String id) {
+        scopeGuard.requireReadable(formKey, id);
         return R.ok(bizDataService.getById(formKey, id));
     }
 
@@ -71,22 +79,24 @@ public class BizDataController {
     }
 
     /**
-     * 更新业务数据（乐观锁，请求体须携带 version）。
+     * 更新业务数据（乐观锁，请求体须携带 version；看即能操作——不可见的行改不到）。
      */
     @PutMapping("/{formKey}/{id}")
     public R<BizDataVO> update(@PathVariable String formKey,
                                @PathVariable String id,
                                @RequestBody Map<String, Object> data) {
+        scopeGuard.requireWritable(formKey, id);
         Integer version = data.get("version") instanceof Number n ? n.intValue() : null;
         return R.ok(bizDataService.update(formKey, id, data, version));
     }
 
     /**
-     * 删除业务数据。
+     * 删除业务数据（看即能操作）。
      */
     @DeleteMapping("/{formKey}/{id}")
     public R<Void> delete(@PathVariable String formKey,
                           @PathVariable String id) {
+        scopeGuard.requireWritable(formKey, id);
         bizDataService.delete(formKey, id);
         return R.ok();
     }

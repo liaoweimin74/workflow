@@ -9622,3 +9622,16 @@ Work Log:
 Stage Summary:
 - 事件 #116 单轮闭环 + 首次人工拦截残缺 dump 污染，零 mvn 第 100 次；内存 3.19GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r199
+Agent: ops-cron
+Task: 2026-10-22 05:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」（node index.ts 冒充 8080）→ 事件 #117（标准重供给）：vite 1223/mariadb 1235/node 1283/bun 1116，无 java；本轮 dump 268K 完整无污染
+- 清理+重拼+recover 一条龙，timeout 170 被杀（幸存型）；重拼产物 md5 e369839b ✓
+- ss 复验：3000=vite 1223、3306=mariadb 1235、8080=java 1445 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+
+Stage Summary:
+- 事件 #117 单轮闭环，零 mvn 第 101 次；内存 3.14GB，oom 0
+- 收口 dump 已推送（见 git log）

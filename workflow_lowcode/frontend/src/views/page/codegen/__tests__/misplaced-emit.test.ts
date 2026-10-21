@@ -3,6 +3,7 @@
 // 撞见的第一条 —— 卡片节点出成 <page-list-cards title="卡片列表">，而 PageDataCards 没有 title prop。
 // 渲染器不往组件传节点 title（form-create 自己拿它当 el-form-item 的 label，真机上标题本来看得见），
 // 所以这个写法只在产物里成立：值落到组件根 DOM 变成浏览器原生 tooltip，回读却照样零差异。
+// （正解见 page-root-form.test.ts：产物补了页面根 el-form，标题改出成 el-form-item 的 label。）
 // 这条口径要靠组件自己说话，不能靠契约表的注释：
 //   用例2 静态面 —— 契约里登记成 prop/attr 的键，逐个查组件运行时 props 表（不依赖语料有没有配）
 //   用例3 产物面 —— 语料 + test_page 真出码，扫模板里 runtime 标签上的属性名（抓契约之外多写的）
@@ -114,9 +115,13 @@ describe('错位 emit 口径', () => {
 
   it('丢弃要有归属：消掉错位 emit 的类型，其 title 必须进登记（不许静默丢）', () => {
     for (const type of ['page-table', 'page-list-cards']) {
-      const entry = TYPE_CONTRACTS[type].self?.title
+      const contract = TYPE_CONTRACTS[type]
+      const entry = contract.self?.title
       expect(entry, `${type} 的 title 落点未登记`).toBeTruthy()
-      expect(entry!.emit, `${type} 的 title 仍会在非默认值时落模板`).toBe('drop')
+      // 落点是 label 载体（el-form-item），不是组件自己 —— 组件没声明 title，写上去就是错位
+      expect(entry!.emit, `${type} 的 title 仍会在非默认值时落模板`).toBe('attr')
+      expect((entry as any).on, `${type} 的 title 落到了组件标签上`).toBeTruthy()
+      expect((entry as any).on).not.toBe(contract.tag)
     }
   })
 })

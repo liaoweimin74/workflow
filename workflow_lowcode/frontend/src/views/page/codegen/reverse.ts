@@ -265,7 +265,14 @@ export function reverseToSchema(
       return manifest.dataSources.find((d) => d.refId === refId)?.id
     },
     containerDisplayMode: () => (t.findEl('el-drawer') ? 'drawer' : t.findEl('el-dialog') ? 'popup' : 'inline'),
-    containerHasForm: () => (t.findEl('el-form') ? 'form' : undefined),
+    // 「容器里有没有表单」只能看弹层里的那棵 form：页面根 el-form 现在恒存在，
+    // 用 findEl('el-form') 会把它当成容器表单，viewDetail.type 就恒回读成 'form'
+    containerHasForm: () => {
+      const inner = t.els.find(
+        (e) => e.tag === 'el-form' && !!(t.nearest(e, 'el-dialog') || t.nearest(e, 'el-drawer')),
+      )
+      return inner ? 'form' : undefined
+    },
     footerConfirmButton: () => footerButtons().some((x) => /确定|保存/.test(x)),
     footerCancelButton: () => footerButtons().some((x) => /取消/.test(x)),
   }

@@ -9635,3 +9635,18 @@ Work Log:
 Stage Summary:
 - 事件 #117 单轮闭环，零 mvn 第 101 次；内存 3.14GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r200
+Agent: ops-cron
+Task: 2026-10-22 06:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路全 000、3306 不在线、无任何服务进程 → 事件 #118（全链路冷启动）
+- 首轮 recover 失败定位根因：/home/z/tools 目录被重供给清除 → apt-get download 输出重定向失败 → mariadb deb 未下载 → 3306 无法重建（dpkg-deb 报 *.deb 不存在）
+- 修复：mkdir -p /home/z/tools 后重跑幂等 recover → deb 8 包下载安装成功、mariadb-install-db 完成、mariadbd 1406 拉起、dump 导入、Java 1444 拉起
+- 3000 由 start-services.sh 拉起（超时被杀属幸存型）：vite 1559 ✓
+- 40s 复验全绿 200×4 + auth 真绿 + node 探针 200 OK；内存 3.26GB，oom 0
+
+Stage Summary:
+- 事件 #118 单轮闭环（含 tools 目录修复+MariaDB 全新重建），零 mvn 第 102 次
+- 收口 dump 已推送（见 git log）

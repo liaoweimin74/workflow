@@ -118,32 +118,52 @@ const FIELD_SELF: Record<string, PropEmit> = {
   title: { emit: 'attr', as: 'label', on: 'el-form-item' },
 }
 
-/**
- * 展示组件共有 self：type/field 进锚点，col.span 落栅格列。
- *
- * 节点的 title/info 被渲染器无条件置空（PageRendererPage.vue:522-523），可见标题来自 props.title，
- * 所以这里不能像字段控件那样把 title 出成 el-form-item 的 label —— 写上去就是「错位 emit」
- * （dash 组件没声明 title，值落到根 DOM 当悬停提示）。但 el-form-item 这一层壳照样要出：
- * 现网每个节点都被 form-create 套了 el-col.fc-form-col > el-form-item > __content，
- * 撑满档（props.height='100%'）靠 dash-fill-height.css:16-19 的 :has() 沿这条链传高，少一层就静默退化。
- */
-const WIDGET_SELF: Record<string, PropEmit> = {
+/** 展示组件共有的身份键与栅格：type/field 进锚点，col.span 落栅格列 */
+const WIDGET_IDENTITY: Record<string, PropEmit> = {
   type: { emit: 'anchor', key: 'type' },
   field: { emit: 'anchor', key: 'field' },
-  title: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 title（PageRendererPage.vue:522），可见标题来自 props.title' },
-  info: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 info（PageRendererPage.vue:523）' },
   /** 栅格跨度真身：form-create 用它包 el-col；props.span 只是组件留白镜像（PageDesigner.vue:819-823 双写） */
   'col.span': { emit: 'attr', as: 'span', on: 'el-col' },
 }
 
-/** 展示组件共有 props：宽高镜像 + 只有运行期才有的注入键 */
-const WIDGET_SHARED_PROPS: Record<string, PropEmit> = {
-  /** 组件侧留白镜像（dashSpanGapStyle），与 col.span 各自独立出码 */
+/**
+ * dash 族共有 self：节点的 title/info 被渲染器无条件置空（PageRendererPage.vue:522-523），
+ * 可见标题来自 props.title，所以不能像字段控件那样把 title 出成 el-form-item 的 label ——
+ * 写上去就是「错位 emit」（dash 组件没声明 title，值落到根 DOM 当悬停提示）。
+ * 但 el-form-item 这一层壳照样要出：现网每个节点都被 form-create 套了
+ * el-col.fc-form-col > el-form-item > __content，撑满档（props.height='100%'）靠
+ * dash-fill-height.css:16-19 的 :has() 沿这条链传高，少一层就静默退化。
+ */
+const WIDGET_SELF: Record<string, PropEmit> = {
+  ...WIDGET_IDENTITY,
+  title: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 title（PageRendererPage.vue:522），可见标题来自 props.title' },
+  info: { emit: 'drop', kind: 'overridden-at-runtime', note: '渲染器置空节点 info（PageRendererPage.vue:523）' },
+}
+
+/**
+ * page-* 展示组件共有 self：置空名单（PageRendererPage.vue:519）只含 dash 族，
+ * 这三类的节点 title 照旧由 form-create 当 el-form-item 的 label 渲染；
+ * 组件自己的 props.title（图表/详情有，步骤条没有）是卡片内部的标题行，两个载体各出各的。
+ */
+const WIDGET_SELF_LABELED: Record<string, PropEmit> = {
+  ...WIDGET_IDENTITY,
+  title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+}
+
+/** 只有运行期才有的注入键：产物侧的值来自出码入参或数据源表，按丢弃登记，不落组件标签 */
+const RUNTIME_INJECTED: Record<string, PropEmit> = {
+  designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器画布态标记，产物恒为运行态' },
+  dsRefId: { emit: 'drop', kind: 'overridden-at-runtime', note: '运行期由渲染器按 dataSourceId 注入（PageRendererPage.vue:524-528、555-559），产物侧的值来自 dataSources 常量表' },
+}
+
+/** 组件侧尺寸镜像（dashSpanGapStyle 与各组件根样式），与 col.span 各自独立出码 */
+const SIZE_MIRROR: Record<string, PropEmit> = {
   span: { emit: 'prop' },
   height: { emit: 'prop' },
-  designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器画布态标记，产物恒为运行态' },
-  dsRefId: { emit: 'drop', kind: 'overridden-at-runtime', note: '运行期由渲染器按 dataSourceId 注入（PageRendererPage.vue:524-528），产物侧的值来自 dataSources 常量表' },
 }
+
+/** 展示组件共有 props：宽高镜像 + 运行期注入键 */
+const WIDGET_SHARED_PROPS: Record<string, PropEmit> = { ...SIZE_MIRROR, ...RUNTIME_INJECTED }
 
 export const TYPE_CONTRACTS: Record<string, TypeContract> = {
 
@@ -493,6 +513,65 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       view: { emit: 'prop' },
       limit: { emit: 'prop' },
       orderBy: { emit: 'prop' },
+    },
+  },
+
+  // ===== 页面展示组件（page-*）：也走栅格，但节点标题不被渲染器置空，且要自己传 page-key =====
+
+  /**
+   * 图表页组件（渲染器把 'page-chart' 注册到 PageDataChartPage，PageRendererPage.vue:126）。
+   * 与 dash-chart 是两套东西：配置由 PageChartConfigDialog 整体产出一个 config 对象，
+   * 而 dash-chart 是一堆平铺键；两者各自的标题载体也不同（见 WIDGET_SELF_LABELED 注释）。
+   */
+  'page-chart': {
+    tag: 'page-chart',
+    runtime: true,
+    widget: true,
+    needsPageKey: true,
+    self: WIDGET_SELF_LABELED,
+    props: {
+      ...SIZE_MIRROR,
+      ...RUNTIME_INJECTED,
+      height: { emit: 'default', value: '', note: '空 = 自适应（PageDataChartPage withDefaults height: ""）' },
+      title: { emit: 'default', value: '', note: '空标题不落模板（组件标题行缺省不渲染）' },
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+      /** 图表配置整块（{type, dimension, measures:[{key,agg}]}）：对象走顶层常量 */
+      config: { emit: 'prop' },
+    },
+  },
+  /**
+   * KV 详情：数据不是自己取的，是表格行点击后由渲染器拿 detailRefs 调 load(record) 灌进来的
+   * （PageRendererPage.vue:245-257、567-571）。产物没有实例登记表，这一段是语义债，必须记账。
+   */
+  'page-detail': {
+    tag: 'page-detail',
+    runtime: true,
+    widget: true,
+    needsPageKey: true,
+    self: WIDGET_SELF_LABELED,
+    props: {
+      ...RUNTIME_INJECTED,
+      title: { emit: 'prop' },
+      columns: { emit: 'prop' },
+      dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
+    },
+    requires: [
+      {
+        key: 'recordLinkage',
+        note: '记录来源由表格行点击联动，现网靠 PageRendererPage.vue:245-257 的 detailRefs 调 load(record)；产物没有实例登记表：需在产物 onRowClick 里改调本组件 ref 的 load(row)（组件没声明 expose 面，先补 defineExpose 再接）',
+      },
+    ],
+  },
+  /** 步骤条：纯展示，不取数（渲染器的数据组件名单 552/592 都不含它），所以没有取数身份槽位 */
+  'page-steps': {
+    tag: 'page-steps',
+    runtime: true,
+    widget: true,
+    self: WIDGET_SELF_LABELED,
+    props: {
+      items: { emit: 'prop' },
+      active: { emit: 'prop' },
+      direction: { emit: 'prop' },
     },
   },
 }

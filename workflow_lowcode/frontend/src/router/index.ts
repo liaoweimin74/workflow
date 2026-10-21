@@ -2,6 +2,23 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+/**
+ * 【真机探测脚手架，非产品路由】出码 spike 用来把产物直接挂到浏览器上量真机表现的
+ * （详见 codegen/__tests__/runtime-probe.test.ts）。只登记到 dev：生产构建里连那条
+ * 懒 import 一起不进包，探测页带着的 vue-tsc 脚手架债也不会伪装成产品代码。
+ * 换探测页面时改这里的 component，同时同步 runtime-probe.test.ts 的 PROBE_PAGE。
+ */
+const codegenProbeRoutes: RouteRecordRaw[] = import.meta.env.DEV
+  ? [
+      {
+        path: 'codegen-probe',
+        name: 'CodegenProbe',
+        component: () => import('@/views/page/codegen/probe/CardlistTest.vue'),
+        meta: { title: '出码产物探测' },
+      },
+    ]
+  : []
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -198,14 +215,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/page/PageRenderer.vue'),
         meta: { title: '页面' }
       },
-      {
-        // 【真机探测 spike，未合并】直接挂载出码产物，绕开 PageRendererPage，
-        // 用来量"产物在真机上跑不跑得动"，不进菜单、不给权限、不接 AI 桥
-        path: 'codegen-probe',
-        name: 'CodegenProbe',
-        component: () => import('@/views/page/codegen/probe/CardlistTest.vue'),
-        meta: { title: '出码产物探测' }
-      },
+      ...codegenProbeRoutes,
       {
         // 远程物料管理页（remote-materials 6.3）：V57 预置菜单「物料管理」指向此路由
         path: 'material',

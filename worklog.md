@@ -9567,3 +9567,17 @@ Work Log:
 Stage Summary:
 - 事件 #112 单轮闭环，零 mvn 第 96 次；内存 3.16GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r191
+Agent: ops-cron
+Task: 2026-10-21 21:05 轻量运维巡检（Job 446961）
+
+Work Log:
+- 四链路 200×4 但真伪核验「no such table: SYS_USER」→ 事件 #113（标准重供给）：vite 1255/mariadb 1221/node 1309/bun 1108，无 java
+- 清理+重拼+recover 一条龙，timeout 170 被杀（幸存型）；补查重拼产物 121300861B md5 e369839b ✓
+- ss 复验：3000=vite 1255、3306=mariadb 1221、8080=java 1454 ✓；auth 真绿；40s 复验全绿 200×4 + node 探针 200 OK
+- r189/r190 沙箱故障二连空窗，本轮自愈
+
+Stage Summary:
+- 事件 #113 单轮闭环，零 mvn 第 97 次；内存 2.97GB，oom 0
+- 收口 dump 已推送（见 git log）

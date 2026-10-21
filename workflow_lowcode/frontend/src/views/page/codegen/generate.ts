@@ -19,6 +19,7 @@ import {
   IDENTITY_KEYS,
   OPTION_CONTRACT,
   STRUCT_DEFAULTS,
+  TABLE_COLUMN_CONTRACT,
   TYPE_CONTRACTS,
   isFieldType,
   listOf,
@@ -64,6 +65,8 @@ export interface NodeArtifact {
   renames: Rename[]
   wireOnly: string[]
   warnings: Warning[]
+  /** 整节点降级（没有可承载它的模板位置）：元素不出，键全部按丢弃登记，产物也不 import 它 */
+  degraded?: boolean
 }
 
 export interface Behavior {
@@ -184,12 +187,67 @@ interface NodePlan {
   attrs: Record<string, Record<string, unknown>>
   anchorKv: Record<string, string>
   children: NodePlan[]
+  /**
+   * 行配置常量（contract 里 emit:'config' 的键都并进这一份）：产物模板与 handler 读它，
+   * 回读核对的是常量里的值。首次落到 config 键时才具名化，没有配置键就不造空常量。
+   */
+  config?: { name: string; obj: Record<string, unknown> }
+  /** 嵌套容器（group / tableForm / subForm）的产物形态信息 */
+  nested?: NestedPlan
+  /**
+   * 整节点降级（页面级嵌套容器没有 form 后端、隐藏列首版不出码）：不渲染元素，
+   * 改为逐键登记丢弃 + 一行 lc:todo 挂点。登记齐了回读仍零空洞，债记在 unsupported 上。
+   */
+  degraded?: boolean
+  /** 降级时要写进 lc:todo 的原因 */
+  degradeReason?: string
+  /** 本节点所有有落点的 schema 相对路径（applyLeaves 记录）：降级时整份转成丢弃登记 */
+  leafPaths?: string[]
 }
+
+/** 嵌套容器的一段产物：值形态、行别名与（tableForm 的）列登记 */
+interface NestedPlan {
+  carrier: 'props.rule' | 'props.columns[].rule'
+  shape: 'array' | 'object'
+  /** 容器自身字段：form.items —— 它进 form 声明，行内子字段不进 */
+  valuePath: string
+  /** 行别名（数组形态才有）：v-for 的行变量，行内字段的 v-model 前缀 */
+  rowVar: string
+  /** 子字段名：新行的空对象按它铺（与组件 add() 推入的行形状一致） */
+  rowKeys: string[]
+  /** tableForm 的列登记：列对象自己的 schema 键按 node 记，label 的证据就是列元素的属性 */
+  columns: NestedColumn[]
+}
+
+interface NestedColumn {
+  index: number
+  node: NodeArtifact
+  label: string
+  hidden: boolean
+  children: NodePlan[]
+}
+
+/**
+ * planNode 的递归环境。
+ *  prefix：字段值的前缀 —— 页面级是 form，行容器里是行别名（itemsRow.qty），子表单里是
+ *          form.<容器字段>（invoice_info 的值形态是对象）。回读靠它把控件对回 schema 节点。
+ *  inContainer：子树是否在 formContainer 内 —— 只有那里才有 form 后端可接（带回/注入/嵌套容器）。
+ *  nestedOwner：最近的嵌套容器类型。它的字段值挂在行对象/子对象上，写回与注入都没有 form.<字段> 可指。
+ */
+interface Env {
+  prefix: string
+  inContainer: boolean
+  nestedOwner: string | null
+}
+
+const ROOT_ENV: Env = { prefix: 'form', inContainer: false, nestedOwner: null }
 
 
 
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
 const camel = (s: string) => s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+/** 字段名 → 标识符片段：业务字段大量是蛇形（delivery_plan），常量与 handler 名要转驼峰 */
+const camelField = (s: string) => s.replace(/[-_]+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
 const pascal = (s: string) => s.split('-').filter(Boolean).map((x) => x[0].toUpperCase() + x.slice(1)).join('')
 const leafName = (rel: string) => rel.split('.').pop()!.replace(/\[\d+\]$/, '')
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -335,7 +393,7 @@ export function generatePage(
   const ds = schema.dataSources?.[0] ?? { id: '', refId: '' }
   const apiFile = `api/${meta.pageKey.replace(/_/g, '-')}.ts`
 
-  const plans = (schema.rule || []).map((node, i) => planNode(node, `rule[${i}]`, `n${i + 1}`, ctx))
+  const plans = (schema.rule || []).map((node, i) => planNode(node, `rule[${i}]`, `n${i + 1}`, ctx, ROOT_ENV))
   if (ctx.containerMode === 'inline') {
     ctx.unsupported.push({
       path: 'rule[]',
@@ -418,6 +476,11 @@ function flattenPlans(plans: NodePlan[]): NodeArtifact[] {
   const walk = (p: NodePlan) => {
     out.push(p.node)
     p.children.forEach(walk)
+    // 列不是 rule 节点，但它的元数据有登记表条目（label 有真载体），必须进清单被回读
+    for (const c of p.nested?.columns || []) {
+      out.push(c.node)
+      c.children.forEach(walk)
+    }
   }
   plans.forEach(walk)
   return out
@@ -428,12 +491,18 @@ function flattenPlans(plans: NodePlan[]): NodeArtifact[] {
  * FormulaField），过去只看顶层 plans 把它们漏掉了 —— 出成裸标签、清单也说不出要打包谁。
  */
 function runtimeTagsOf(plans: NodePlan[]): string[] {
-  return [...new Set(flattenPlans(plans).filter((n) => TYPE_CONTRACTS[n.type]?.runtime).map((n) => String(n.host.tag)))]
+  return [
+    ...new Set(
+      flattenPlans(plans)
+        .filter((n) => !n.degraded && TYPE_CONTRACTS[n.type]?.runtime)
+        .map((n) => String(n.host.tag)),
+    ),
+  ]
 }
 
 // ==================== 单节点 ====================
 
-function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
+function planNode(node: any, rulePath: string, id: string, ctx: Ctx, env: Env = ROOT_ENV): NodePlan {
   const contract: TypeContract | undefined = TYPE_CONTRACTS[node.type]
   if (!contract) {
     ctx.unsupported.push({ path: rulePath, type: node.type, key: '', message: `组件类型 ${node.type} 无出码契约，整节点未出码` })
@@ -484,9 +553,9 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
       warnings: [],
     },
     tag,
-    // 展示组件的元素必须自带节点地址：同类型多实例（两个 dash-notice 并排）只按标签找元素的话，
-    // 找到的永远是第一个，回读把第一张卡的属性套到所有卡上还能零差异。
-    propSnippets: contract.widget ? [`lc:node="${id}"`] : [],
+    // 元素必须自带节点地址的类型：展示组件（同类型多实例并排）与嵌套容器（一类容器可能有多个）。
+    // 只按标签找第一个元素的话，回读会把第一份的属性套到所有份上还能零差异。
+    propSnippets: contract.widget || contract.nested ? [`lc:node="${id}"`] : [],
     attrs: {},
     anchorKv: {},
     children: [],
@@ -507,22 +576,36 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   for (const req of contract.requires || []) {
     ctx.unsupported.push({ path: `${rulePath}.props.${req.key}`, type: node.type, key: req.key, message: req.note })
   }
+  // 嵌套容器内的字段控件：值挂在行对象（itemsRow.qty）或子表单对象（form.invoice_info.tax_no）上，
+  // 带回与注入 adapter 都只会读写 form.<字段> —— 硬接就是假绿灯，首版统一记语义债不接线。
+  const nestedScoped = !!env.nestedOwner && (isFieldType(node.type) || !!contract.field)
   // 注入接线（contract.injects）：字段控件才需要 form 后端，容器归属在 assembleVue 定
   if (contract.injects && contract.field) {
-    ctx.injections.set(id, {
-      nodeId: id,
-      rulePath,
-      type: node.type,
-      prop: contract.injects.prop,
-      constName: contract.injects.constName,
-    })
+    if (nestedScoped) {
+      ctx.unsupported.push({
+        path: `${rulePath}.props`,
+        type: node.type,
+        key: contract.injects.prop,
+        message: `${node.type} 在嵌套容器（${env.nestedOwner}）里，字段值挂在${env.nestedOwner === 'subForm' ? '子表单对象' : '行对象'}上而不是 form.${plan.node.field}，产物没有对应后端，不接 ${contract.injects.prop}`,
+      })
+    } else {
+      ctx.injections.set(id, { nodeId: id, rulePath, type: node.type, prop: contract.injects.prop, constName: contract.injects.constName })
+    }
   }
   // 带回声明（LookupPicker 的 idField/returnFields）：此处只记账，容器归属与 handler
   // 命名在 assembleVue 定 —— 字段控件可能不在容器里，那种没有 form 可写，不能假接线。
   if (contract.writes) {
     const idRaw = contract.writes.idKey ? node.props?.[contract.writes.idKey] : undefined
     const mapRaw = contract.writes.mapKey ? node.props?.[contract.writes.mapKey] : undefined
-    if (idRaw || (isPlainObject(mapRaw) && Object.keys(mapRaw).length)) {
+    const declared = !!idRaw || (isPlainObject(mapRaw) && Object.keys(mapRaw).length)
+    if (declared && nestedScoped) {
+      ctx.unsupported.push({
+        path: `${rulePath}.props`,
+        type: node.type,
+        key: 'writes',
+        message: `${node.type} 在嵌套容器（${env.nestedOwner}）里配了带回，字段值挂在${env.nestedOwner === 'subForm' ? '子表单对象' : '行对象'}上而不是 form.<字段>，handler 无处写，产物不接线`,
+      })
+    } else if (declared) {
       ctx.writes.set(id, {
         nodeId: id,
         rulePath,
@@ -539,23 +622,163 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx): NodePlan {
   const self = Object.fromEntries(
     Object.entries(node).filter(([k]) => k !== 'props' && k !== 'children' && !IDENTITY_KEYS.includes(k)),
   )
-  applyLeaves(plan, flatten(self, '', contract.self || {}), rulePath, ctx)
-  applyLeaves(plan, flatten(node.props ?? {}, 'props', prefixTable('props', contract.props)), rulePath, ctx)
+  const leaves = [
+    ...flatten(self, '', contract.self || {}),
+    ...flatten(node.props ?? {}, 'props', prefixTable('props', contract.props)),
+  ]
+  // 行/列配置常量先建：config 键要并进同一份，且 addConst 的去重比对得看到完整对象
+  const cfg = leaves.filter((l) => l.entry?.emit === 'config')
+  if (cfg.length) {
+    const obj: Record<string, unknown> = {}
+    for (const l of cfg) obj[leafName(l.path)] = l.value
+    plan.config = { name: addConst(ctx, `${camelField(plan.node.field)}Config`, obj), obj }
+  }
+  applyLeaves(plan, leaves, rulePath, ctx)
 
-  // 子规则递归的唯一开关：契约把 props.rule 登记成 children 才摊成真模板。
+  // 子规则递归的唯一开关：契约把载体登记成 children 才摊成真模板。
   // 登记成 prop 的（page-data-container 的 childRules）是交给组件自己解释的数据，
   // 再递归一遍就会出现两份真相 —— 子节点既进 plan 要出码，原件又整块透传，回读必然报多造。
-  if (contract.props?.rule?.emit === 'children' && Array.isArray(node.props?.rule)) {
+  if (contract.nested) planNested(plan, node, contract, rulePath, id, ctx, env)
+  else if (contract.props?.rule?.emit === 'children' && Array.isArray(node.props?.rule)) {
+    const childEnv: Env = { ...env, inContainer: env.inContainer || node.type === 'formContainer' }
     node.props.rule.forEach((child: any, ci: number) => {
-      plan.children.push(planNode(child, `${rulePath}.props.rule[${ci}]`, `${id}.f${ci + 1}`, ctx))
+      plan.children.push(planNode(child, `${rulePath}.props.rule[${ci}]`, `${id}.f${ci + 1}`, ctx, childEnv))
     })
   }
-  // 字段控件的 v-model 路径：回导侧靠它把 el-input 对回 schema 节点
-  if (plan.node.field && contract.field) plan.node.host.vmodel = `form.${plan.node.field}`
+
+  // 页面级（容器外）的嵌套容器：产物在页面主体那层没有 form 模型，行增删无处落，整节点降级。
+  // 逐键登记丢弃 + 一行 lc:todo，债记在 unsupported，回读仍零空洞（不是把差异吞掉）。
+  if (contract.nested && !env.inContainer) {
+    degradePlan(plan, ctx, '页面级嵌套容器首版不出码：产物页面主体没有 form 模型，行增删与取值无处落')
+    ctx.unsupported.push({
+      path: rulePath,
+      type: node.type,
+      key: 'nested',
+      message: `${node.type} 在容器外（页面级），没有 form 后端，整节点降级为挂点注释`,
+    })
+  }
+
+  // 字段控件的 v-model 路径：回导侧靠它把 el-input 对回 schema 节点。
+  // 前缀随作用域变（form / 行别名 / 子表单对象），行别名按容器字段命名 —— 同页多个行容器
+  // 的同名字段（两张表都有 remark）才不会互相套到同一行上。
+  if (plan.node.field && contract.field) plan.node.host.vmodel = `${env.prefix}.${plan.node.field}`
 
   const dsKv = plan.anchorKv.ds
   plan.node.anchor = `lc:node=${id} type=${node.type} field=${plan.node.field}` + (dsKv ? ` ds=${dsKv}` : '')
   return plan
+}
+
+/**
+ * 嵌套容器（group / tableForm / subForm）的子树规划。
+ * 两类载体分开走：props.rule（group/subForm 直接子规则）与 props.columns[].rule（tableForm 按列挂），
+ * 列对象本身不是 rule 节点，但它的元数据有真载体（label 落 el-table-column），所以给它合成一条登记条目。
+ */
+function planNested(plan: NodePlan, node: any, contract: TypeContract, rulePath: string, id: string, ctx: Ctx, env: Env): void {
+  const shape = contract.nested!.shape
+  const field = plan.node.field
+  const nested: NestedPlan = {
+    carrier: contract.nested!.carrier,
+    shape,
+    valuePath: `${env.prefix}.${field}`,
+    // 行别名按容器字段命名：同页两个行容器都有 remark 时，deliveryPlanRow.remark 与 itemsRow.remark
+    // 才是两个可对回元素的地址（v-model 是回导侧唯一的字段控件寻址手段）
+    rowVar: shape === 'array' ? `${camelField(field)}Row` : '',
+    rowKeys: [],
+    columns: [],
+  }
+  plan.nested = nested
+  const childEnv: Env = { ...env, prefix: shape === 'array' ? nested.rowVar : nested.valuePath, nestedOwner: node.type }
+  const colOf = (child: NodePlan) => {
+    if (shape === 'array' && child.node.field) nested.rowKeys.push(child.node.field)
+  }
+
+  if (nested.carrier === 'props.rule') {
+    asArray(node.props?.rule).forEach((child: any, ci: number) => {
+      const cp = planNode(child, `${rulePath}.props.rule[${ci}]`, `${id}.f${ci + 1}`, ctx, childEnv)
+      plan.children.push(cp)
+      colOf(cp)
+    })
+    return
+  }
+
+  asArray(node.props?.columns).forEach((col: any, ci: number) => {
+    const colId = `${id}.c${ci}`
+    const colPath = `${rulePath}.props.columns[${ci}]`
+    const colNode: NodeArtifact = {
+      id: colId,
+      rulePath: colPath,
+      type: 'tableForm-column',
+      field: '',
+      anchor: `lc:node=${colId}`,
+      file: ctx.file,
+      // 列元素的地址写在元素上（同类型多实例并排），回读按 lc:node 各回各的列
+      host: { tag: 'el-table-column', ref: null },
+      dropped: [],
+      renames: [],
+      wireOnly: [],
+      warnings: [],
+    }
+    const column: NestedColumn = { index: ci, node: colNode, label: String(col?.label ?? ''), hidden: !!col?.hidden, children: [] }
+    nested.columns.push(column)
+    for (const k of Object.keys(col || {})) {
+      if (k === 'rule') continue
+      const e = TABLE_COLUMN_CONTRACT[k]
+      if (!e) {
+        ctx.unsupported.push({ path: `${colPath}.${k}`, type: 'tableForm-column', key: k, message: '列配置键无落点登记 —— 必须补 TABLE_COLUMN_CONTRACT 或人工确认' })
+        continue
+      }
+      if (e.emit === 'attr') {
+        colNode.renames.push({ from: k, to: `${(e as { on: string }).on}@${(e as { as: string }).as}` })
+        continue
+      }
+      if (e.emit === 'children') continue
+      if (e.emit !== 'drop') {
+        ctx.unsupported.push({ path: `${colPath}.${k}`, type: 'tableForm-column', key: k, message: `列配置键登记了不支持的落点 ${e.emit}` })
+        continue
+      }
+      colNode.warnings.push({ kind: e.kind, path: k, message: e.note })
+    }
+    // 隐藏列首版不出码：产物没有「隐藏的列」这种形态，列整块不渲染，label 跟着按丢弃登记
+    if (column.hidden) {
+      for (const r of colNode.renames) colNode.warnings.push({ kind: 'not-in-artifact', path: r.from, message: '隐藏列首版不出码，列标题随之无落点' })
+      colNode.renames = []
+    }
+    asArray(col?.rule).forEach((child: any, ri: number) => {
+      const cp = planNode(child, `${colPath}.rule[${ri}]`, `${colId}.f${ri + 1}`, ctx, childEnv)
+      column.children.push(cp)
+      colOf(cp)
+      if (column.hidden) degradePlan(cp, ctx, '隐藏列首版不出码')
+    })
+  })
+}
+
+const asArray = (v: unknown): any[] => (Array.isArray(v) ? v : [])
+
+/**
+ * 整节点降级：元素不出，但每个 schema 键都要有解释 —— 否则回读把「没出码」报成编译器不忠实
+ * （C 桶），真实缺陷和广度债就分不开了。做法：非锚点登记全转丢弃登记，锚点（type/field）保留，
+ * 由 lc:todo 注释继续提供寻址；本节点的具名常量不再被模板读，跟着删掉免得产物里多个死变量。
+ */
+function degradePlan(p: NodePlan, ctx: Ctx, reason: string): void {
+  p.degraded = true
+  p.degradeReason = reason
+  p.node.degraded = true
+  // 没有元素就没有绑定可读：tag 置空让回读侧别再按标签抓到一个无关元素
+  p.node.host = { ...p.node.host, tag: null }
+  const kept = new Set(p.node.renames.filter((r) => r.to.startsWith('anchor:')).map((r) => r.from))
+  for (const path of [...(p.leafPaths || []), ...p.node.renames.map((r) => r.from)]) {
+    if (kept.has(path) || p.node.warnings.some((w) => w.path === path)) continue
+    p.node.warnings.push({ kind: 'not-in-artifact', path, message: reason })
+  }
+  p.node.renames = p.node.renames.filter((r) => kept.has(r.from))
+  p.propSnippets = []
+  if (p.config) ctx.consts.delete(p.config.name)
+  p.children.forEach((c) => degradePlan(c, ctx, reason))
+  for (const c of p.nested?.columns || []) {
+    c.node.warnings = [...c.node.warnings, ...c.node.renames.map((r) => ({ kind: 'not-in-artifact', path: r.from, message: reason }))]
+    c.node.renames = []
+    c.children.forEach((cp) => degradePlan(cp, ctx, reason))
+  }
 }
 
 function applyLeaves(plan: NodePlan, leaves: Leaf[], rulePath: string, ctx: Ctx): void {
@@ -568,6 +791,7 @@ function applyLeaves(plan: NodePlan, leaves: Leaf[], rulePath: string, ctx: Ctx)
       nestedDrops.set(l.under, list)
     }
   }
+  plan.leafPaths = [...(plan.leafPaths || []), ...leaves.filter((l) => l.entry).map((l) => l.path)]
   for (const leaf of leaves) applyLeaf(plan, leaf, rulePath, ctx, nestedDrops)
 }
 
@@ -638,6 +862,13 @@ function applyLeaf(plan: NodePlan, leaf: Leaf, rulePath: string, ctx: Ctx, neste
     }
     case 'children':
       return // 子规则由 planNode 递归处理
+    case 'config': {
+      // 行/列配置：产物模板与 handler 读的是 script 顶层那份常量，回读核对的也必须是它。
+      // 写成 prop 就是错位 emit —— 嵌套容器的载体是 div / el-table，没有 min、sortBtn 这些 prop，
+      // 值只会落到根 DOM 当悬空属性；锚点注释里的值都是字符串，数字与布尔核不出真相。
+      node.renames.push({ from: rel, to: `const:${plan.config!.name}.${leafName(rel)}` })
+      return
+    }
     default: {
       const propName = entry.as ?? leafName(rel)
       const value = stripPaths(leaf.value, nestedDrops.get(rel) || [])
@@ -888,10 +1119,16 @@ function assembleVue(args: {
   const listPlans = plans.filter((p) => listOf(p.node.type))
   const container = plans.find((p) => p.node.type === 'formContainer')
   const refName = listPlans[0]?.node.host.ref
-  const fields: string[] = []
+  // form 里的字段带初值形态：普通字段 '' ，嵌套容器按值形态给 [] / {}（行数组 / 子表单对象）。
+  // 容器的子字段不进 form —— 它们的值挂在行对象或容器对象上，摊平进 form 就是第二套真相。
+  const fields: Array<{ name: string; init: string }> = []
   if (container) {
     const walk = (p: NodePlan) => {
-      if (isFieldType(p.node.type) && p.node.field) fields.push(p.node.field)
+      if (p.nested) {
+        if (p.node.field && !p.degraded) fields.push({ name: p.node.field, init: p.nested.shape === 'array' ? '[]' : '{}' })
+        return
+      }
+      if (isFieldType(p.node.type) && p.node.field) fields.push({ name: p.node.field, init: "''" })
       p.children.forEach(walk)
     }
     container.children.forEach(walk)
@@ -954,7 +1191,7 @@ function assembleVue(args: {
   // idField 目标没有可见 input 时（卡片语料页的 customer_id）不声明就是编辑态回填不回、保存丢 id。
   // 业务数据整包落 data_json（FormData.dataJson），多声明一个键无列冲突。
   for (const t of writebacks.flatMap((w) => [w.idTarget, ...Object.values(w.map ?? {})])) {
-    if (typeof t === 'string' && t && !fields.includes(t)) fields.push(t)
+    if (typeof t === 'string' && t && !fields.some((f) => f.name === t)) fields.push({ name: t, init: "''" })
   }
 
   const L: string[] = []
@@ -996,6 +1233,12 @@ function assembleVue(args: {
       L.push(`${wrap ? '        ' : '      '}<${p.tag}${head}${props} ${events.join(' ')} />`)
       if (wrap) L.push('      </el-form-item>')
       p.node.wireOnly.push(...list.events.map((e) => `on.${camel(e.on)}`))
+      continue
+    }
+    // 降级节点（页面级嵌套容器）：不猜形态、不出死标签，整棵子树各留一行挂点注释。
+    // 注释里的 node/type/field 就是回读侧的锚点，登记齐了 holes 仍为零，债走 unsupported。
+    if (p.degraded) {
+      L.push(...degradeComments(p, '      '))
       continue
     }
     // 未登记类型：留一行挂点注释（与容器子节点同一口径），别让整节点静默消失
@@ -1044,7 +1287,8 @@ function assembleVue(args: {
     L.push("const containerRecordId = ref('')")
     L.push('const containerVersion = ref<number | undefined>(undefined)')
     L.push('const formRef = ref()')
-    L.push(`const form = reactive<Record<string, unknown>>({ ${fields.map((f) => `${f}: ''`).join(', ')} })`)
+    // any 而不是 unknown：行容器要 form.items.push(...) / splice，unknown 上这些方法都不存在
+    L.push(`const form = reactive<Record<string, any>>({ ${fields.map((f) => `${f.name}: ${f.init}`).join(', ')} })`)
     // 注入 prop 的 form 后端：值绑组件自己声明过的 prop（FormulaField.vue:53），求值逻辑留在组件里
     for (const [constName, prop] of injectConsts) {
       const line = INJECT_ADAPTERS[constName]
@@ -1068,6 +1312,8 @@ function assembleVue(args: {
     L.push('  containerVersion.value = undefined')
     // 整表重置：只清首个字段的话，看完整条记录再点「新建」，其余字段还是上一条的值
     L.push("  Object.keys(form).forEach((k) => { form[k] = '' })")
+    // 嵌套容器按形态复位：行数组清空（组件的初始值就是空数组），子表单回到空对象
+    for (const f of fields.filter((x) => x.init !== "''")) L.push(`  form.${f.name} = ${f.init}`)
     L.push('  containerVisible.value = true')
     L.push('  if (recordId) {')
     L.push('    const res = await getData(recordId)')
@@ -1112,6 +1358,33 @@ function assembleVue(args: {
         L.push(`function ${w.clear}() {`)
         for (const t of targets) L.push(`  form['${q(t)}'] = null`)
         L.push('}')
+        L.push('')
+      }
+    }
+    // 行容器的行增删：与组件同一套语义（add 推一行空对象、min/max 由模板里的禁用/显隐条件表达）
+    const rowPlans = nestedPlansOf(container.children)
+    if (rowPlans.length) {
+      L.push('// ==================== 行容器（group / tableForm）的增删 ====================')
+      for (const p of rowPlans) {
+        const h = rowHandlerNames(p)
+        const n = p.nested!
+        const has = (k: string) => !!p.config && k in p.config.obj
+        // 只出模板真绑到的 handler：没配增删/排序还留空函数，就是 vue-tsc 里的 TS6133 孤儿
+        const canAdd = has(n.carrier === 'props.columns[].rule' ? 'addable' : 'button')
+        const canRemove = has(n.carrier === 'props.columns[].rule' ? 'deletable' : 'button')
+        const keys = n.rowKeys.map((k) => `${k}: ''`).join(', ')
+        if (!canAdd && !canRemove && !has('sortBtn')) continue
+        L.push(`/** lc:node=${p.node.id} type=${p.node.type} field=${p.node.field} 行增删（新行形状 = 子字段） */`)
+        if (canAdd) L.push(`function ${h.add}() { ${n.valuePath}.push(${keys ? `{ ${keys} }` : '{}'}) }`)
+        if (canRemove) L.push(`function ${h.remove}(i: number) { ${n.valuePath}.splice(i, 1) }`)
+        if (has('sortBtn')) {
+          L.push(`function ${h.move}(i: number, d: number) {`)
+          L.push(`  const rows = ${n.valuePath}`)
+          L.push('  const j = i + d')
+          L.push('  if (j < 0 || j >= rows.length) return')
+          L.push('  rows.splice(j, 0, rows.splice(i, 1)[0])')
+          L.push('}')
+        }
         L.push('')
       }
     }
@@ -1168,6 +1441,28 @@ function assembleVue(args: {
   L.push('.lc-container-body {')
   L.push('  overflow-y: auto;')
   L.push('  height: 600px;')
+  L.push('}')
+  // 嵌套容器：行壳、行头与格内 label 的收起。列头已经是标题，格内再挂一遍就是两行字
+  L.push('.lc-nested {')
+  L.push('  width: 100%;')
+  L.push('}')
+  L.push('.lc-nested-row + .lc-nested-row {')
+  L.push('  margin-top: 8px;')
+  L.push('}')
+  L.push('.lc-nested-row-head {')
+  L.push('  display: flex;')
+  L.push('  align-items: center;')
+  L.push('  justify-content: space-between;')
+  L.push('  margin-bottom: 8px;')
+  L.push('}')
+  L.push('.lc-nested-row-ops :deep(.el-button + .el-button) {')
+  L.push('  margin-left: 4px;')
+  L.push('}')
+  L.push('.lc-nested .lc-cell-item {')
+  L.push('  margin-bottom: 0;')
+  L.push('}')
+  L.push('.lc-nested .lc-cell-item :deep(.el-form-item__label) {')
+  L.push('  display: none;')
   L.push('}')
   L.push('</style>')
   L.push('')
@@ -1227,6 +1522,15 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
       continue
     }
     flushNested()
+    if (c.degraded) {
+      items.push(...degradeComments(c, '          '))
+      continue
+    }
+    // 嵌套容器不是单个控件，出的是行壳/表格/子表单（v-model 前缀由它自己定）
+    if (c.nested) {
+      items.push(...renderNested(c, ctx, '          '))
+      continue
+    }
     if (!c.tag) {
       // 未登记的字段类型没有标签可出。绝不能用空 tag 占位：`< v-model="…" />` 既过不了
       // Vue 编译，又会把回导侧的 el-form-item 祖先关系搅乱（语料体检里 8 条 label 错位的根因）。
@@ -1238,21 +1542,7 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
       )
       continue
     }
-    const f = c.node.field
-    const label = c.attrs['el-form-item']?.label ?? f
-    const control = c.propSnippets.length ? ` ${c.propSnippets.join(' ')}` : ''
-    // 带回接线：事件不在契约 props 面（产物有、schema 无），进 wireOnly 让回导剥离不报多造
-    const wb = ctx.writes.get(c.node.id)
-    const wbEvents = wb?.select ? ` @select="${wb.select}" @clear="${wb.clear}"` : ''
-    if (wb?.select) c.node.wireOnly.push('on.select', 'on.clear')
-    items.push(
-      [
-        `          <!-- ${c.node.anchor} -->`,
-        `          <el-form-item label="${label}">`,
-        `            <${c.tag} v-model="form.${f}"${control}${wbEvents} />`,
-        '          </el-form-item>',
-      ].join('\n'),
-    )
+    items.push(...fieldBlock(c, ctx, `form.${c.node.field}`, '          '))
   }
   flushNested()
   return [
@@ -1272,6 +1562,171 @@ function renderContainer(plan: NodePlan, ctx: Ctx): string {
     '      </template>',
     `    </${plan.tag}>`,
   ].join('\n')
+}
+
+/** 字段控件的一整块（锚点注释 + form-item + 控件），v-model 路径由调用方给：页面级 form / 行别名 / 子表单对象 */
+function fieldBlock(c: NodePlan, ctx: Ctx, valuePath: string, indent: string, itemClass?: string): string[] {
+  const label = c.attrs['el-form-item']?.label ?? c.node.field
+  const control = c.propSnippets.length ? ` ${c.propSnippets.join(' ')}` : ''
+  // 带回接线：事件不在契约 props 面（产物有、schema 无），进 wireOnly 让回导剥离不报多造
+  const wb = ctx.writes.get(c.node.id)
+  const wbEvents = wb?.select ? ` @select="${wb.select}" @clear="${wb.clear}"` : ''
+  if (wb?.select) c.node.wireOnly.push('on.select', 'on.clear')
+  const inner = `${indent}  `
+  const open = `${inner}<${c.tag} v-model="${valuePath}"${control}${wbEvents}`
+  const cls = itemClass ? ` class="${itemClass}"` : ''
+  const L = [`${indent}<!-- ${c.node.anchor} -->`, `${indent}<el-form-item${cls} label="${label}">`]
+  // options 在 rule 顶层（form-create 形状）：选项由常量驱动 el-option，写成 :options= 是错位 emit
+  if (c.config && Array.isArray(c.config.obj.options)) {
+    L.push(`${open}>`)
+    L.push(`${inner}  <el-option v-for="opt in ${c.config.name}.options" :key="opt.value" :label="opt.label" :value="opt.value" />`)
+    L.push(`${inner}</${c.tag}>`)
+  } else {
+    L.push(`${open} />`)
+  }
+  L.push(`${indent}</el-form-item>`)
+  return L
+}
+
+interface RowHandlers {
+  add: string
+  remove: string
+  move: string
+}
+
+const rowHandlerNames = (p: NodePlan): RowHandlers => {
+  const base = pascal(camelField(p.node.field))
+  return { add: `add${base}Row`, remove: `remove${base}Row`, move: `move${base}Row` }
+}
+
+/** 容器子树里真会渲染的行容器（数组形态、未降级），按出现顺序 —— handler 按它们逐个出 */
+function nestedPlansOf(plans: NodePlan[]): NodePlan[] {
+  const out: NodePlan[] = []
+  const walk = (p: NodePlan) => {
+    if (p.nested && !p.degraded) {
+      if (p.nested.shape === 'array') out.push(p)
+      for (const col of p.nested.columns) col.children.forEach(walk)
+      return
+    }
+    p.children.forEach(walk)
+  }
+  plans.forEach(walk)
+  return out
+}
+
+function degradeComments(p: NodePlan, indent: string): string[] {
+  const out = [`${indent}<!-- lc:todo node=${p.node.id} type=${p.node.type} field=${p.node.field} ${p.degradeReason ?? '整节点未出码'} -->`]
+  p.children.forEach((c) => out.push(...degradeComments(c, indent)))
+  for (const col of p.nested?.columns || []) col.children.forEach((c) => out.push(...degradeComments(c, indent)))
+  return out
+}
+
+/**
+ * 嵌套容器的产物形态。
+ * 行容器（group/tableForm）出 v-for + 行别名，行内控件的 v-model 落在行对象上；
+ * 子表单（subForm）的值形态是对象，子字段直接挂 form.<容器字段>。
+ * 行增删的上下限条件照组件语义出（add 受 max 限、删除受 min 限），配置一律读 script 里的那份常量。
+ */
+function renderNested(p: NodePlan, ctx: Ctx, indent: string): string[] {
+  const n = p.nested!
+  const cfgName = p.config?.name
+  const has = (k: string) => !!p.config && k in p.config.obj
+  const opt = (k: string, fallback: string) => (has(k) ? `${cfgName}.${k}` : fallback)
+  const rows = n.valuePath
+  const label = p.attrs['el-form-item']?.label
+  const head = (tagLine: string) => [
+    `${indent}<!-- ${p.node.anchor} -->`,
+    `${indent}<el-form-item${label === undefined ? '' : ` label="${label}"`}>`,
+    tagLine,
+  ]
+
+  if (n.shape === 'object') {
+    // 子表单：值是一个对象（component.jsx:17-21），子字段写进 form.<容器字段>
+    const L = head(`${indent}  <div lc:node="${p.node.id}" class="lc-nested lc-nested--sub">`)
+    for (const c of p.children) {
+      if (c.degraded) L.push(...degradeComments(c, `${indent}    `))
+      else L.push(...fieldBlock(c, ctx, `${rows}.${c.node.field}`, `${indent}    `))
+    }
+    L.push(`${indent}  </div>`, `${indent}</el-form-item>`)
+    return L
+  }
+
+  const h = rowHandlerNames(p)
+  const body = `${indent}  `
+
+  if (n.carrier === 'props.columns[].rule') {
+    // 子表格：行数组 + 每列一个 el-table-column（列标题来自列的 label），格内控件仍按行别名绑值
+    const L = head(`${indent}  <div lc:node="${p.node.id}" class="lc-nested lc-nested--table">`)
+    L.push(`${indent}    <el-table :data="${rows} || []" border>`)
+    if (has('showIndex')) L.push(`${indent}      <el-table-column v-if="${cfgName}.showIndex" type="index" label="#" width="60" />`)
+    for (const col of n.columns) {
+      // 隐藏列首版不出码（TABLE_COLUMN_CONTRACT.hidden），列元素与格内控件都不渲染
+      if (col.hidden) continue
+      L.push(`${indent}      <el-table-column lc:node="${col.node.id}" label="${col.label}">`)
+      L.push(`${indent}        <template #default="{ row: ${n.rowVar}, $index }">`)
+      for (const c of col.children) {
+        if (c.degraded) L.push(...degradeComments(c, `${indent}          `))
+        // 列头已经是标题，格内复刻的 form-item label 由 CSS 收起（保留 form-item 供后续校验挂 prop）
+        else L.push(...fieldBlock(c, ctx, `${n.rowVar}.${c.node.field}`, `${indent}          `, 'lc-cell-item'))
+      }
+      L.push(`${indent}        </template>`, `${indent}      </el-table-column>`)
+    }
+    if (has('deletable')) {
+      L.push(`${indent}      <el-table-column v-if="${cfgName}.deletable" label="操作" width="90">`)
+      L.push(`${indent}        <template #default="{ $index }">`)
+      L.push(
+        `${indent}          <el-button link :disabled="(${rows} || []).length <= ${opt('min', '0')}" @click="${h.remove}($index)">删除</el-button>`,
+      )
+      L.push(`${indent}        </template>`, `${indent}      </el-table-column>`)
+    }
+    L.push(`${indent}    </el-table>`)
+    if (has('addable')) {
+      L.push(
+        `${indent}    <el-button v-if="${condOf(p, cfgName!, rows, 'addable')}" @click="${h.add}">添加行</el-button>`,
+      )
+    }
+    L.push(`${indent}  </div>`, `${indent}</el-form-item>`)
+    return L
+  }
+
+  // 分组：component-elm-group 的行是对象数组，card 型每行一张 el-card，其余普通块
+  const rowTag = p.config?.obj.type === 'card' ? 'el-card' : 'div'
+  const L = head(`${indent}  <div lc:node="${p.node.id}" class="lc-nested lc-nested--group">`)
+  L.push(`${body}<${rowTag} class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`)
+  L.push(`${body}  <div class="lc-nested-row-head">`)
+  // 行标题是模板（component.jsx:313 title.replace('{index}', index+1)）：只在配置了 title 时出
+  if (has('title')) L.push(`${body}    <span>{{ ${cfgName}.title.replace('{index}', String(i + 1)) }}</span>`)
+  L.push(`${body}    <span class="lc-nested-row-ops">`)
+  if (has('sortBtn')) {
+    L.push(`${body}      <el-button link :disabled="i === 0" @click="${h.move}(i, -1)">上移</el-button>`)
+    L.push(`${body}      <el-button link :disabled="i === (${rows} || []).length - 1" @click="${h.move}(i, 1)">下移</el-button>`)
+  }
+  // 组件是 total > min 才出删除键；产物常驻按钮、用禁用态表达同一条下限
+  if (has('button')) {
+    L.push(
+      `${body}      <el-button link :disabled="(${rows} || []).length <= ${opt('min', '0')}" @click="${h.remove}(i)">删除</el-button>`,
+    )
+  }
+  L.push(`${body}    </span>`, `${body}  </div>`)
+  for (const c of p.children) {
+    if (c.degraded) L.push(...degradeComments(c, `${body}  `))
+    else L.push(...fieldBlock(c, ctx, `${n.rowVar}.${c.node.field}`, `${body}  `))
+  }
+  L.push(`${body}</${rowTag}>`)
+  if (has('button')) {
+    L.push(`${body}<el-button v-if="${condOf(p, cfgName!, rows, 'button')}" @click="${h.add}">添加</el-button>`)
+  }
+  L.push(`${indent}  </div>`, `${indent}</el-form-item>`)
+  return L
+}
+
+/**
+ * 添加按钮的显示条件：开关 && 未到上限。上限键缺省时组件按不限处理（component max 默认 0 /
+ * TableForm max 不限），产物写成 `!0` 恒真，回读仍核对常量里的原值。
+ */
+function condOf(p: NodePlan, cfgName: string, rows: string, toggle: string): string {
+  const max = p.config && 'max' in p.config.obj ? `${cfgName}.max` : '0'
+  return `${cfgName}.${toggle} && (!${max} || (${rows} || []).length < ${max})`
 }
 
 /** 常量序列化：合法标识符键名去引号、无引号的字符串值用单引号，贴近人写的风格便于 review */

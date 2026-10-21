@@ -27,6 +27,12 @@ export type PropEmit =
   | { emit: 'attr'; as?: string; by?: AttrBy; on?: string }
   /** 子规则（容器的 props.rule），交给容器递归出码 */
   | { emit: 'children' }
+  /**
+   * 落到本节点的行配置常量（嵌套容器的 min/max/button、select 的 options）：
+   * 产物的模板与 handler 按这份常量实现，回读核对的是产物里真在使用的那个值。
+   * 这类键不能走 'prop' —— 嵌套容器的载体是 div，写上去就是组件没声明的悬空属性。
+   */
+  | { emit: 'config' }
   /** 只进锚点注释：模板上别处没有这个信息 */
   | { emit: 'anchor'; key: string }
   /** 由产物形态反推（回导侧 computed，不是值搬运） */
@@ -75,6 +81,12 @@ export interface TypeContract {
   list?: { events: Array<{ on: string; handler: string }>; expose?: 'refresh' | 'none' }
   /** 容器类：标签与尺寸属性名由展示方式决定（数据表格的 viewDetail.formMode） */
   displayModeDriven?: boolean
+  /**
+   * 嵌套容器（group / tableForm / subForm）：子规则在 schema 里的载体与产物的值形态。
+   * array = 行对象数组（v-for 行 + 行别名 v-model，组件的 modelValue 就是数组）；
+   * object = 单个对象（子字段绑 form.<容器字段>.<子字段>）。
+   */
+  nested?: { carrier: 'props.rule' | 'props.columns[].rule'; shape: 'array' | 'object' }
   /** 节点自身键（type/field/title/display/... ，不在 props 里） */
   self?: Record<string, PropEmit>
   /** props 内键；路径支持数组下标模式：columns[].onCellClick */
@@ -376,6 +388,86 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       note: '求值逐依赖走 formCreateInject.api.getValue（FormulaField.vue:79-89）并 watchEffect 回写自身字段；spike 8 起产物把声明过的 formCreateInject prop 接上 form 后端（const formulaApi），求值/舍入/显示留在组件里',
     },
   },
+
+  // ===== 嵌套容器：子表（group / tableForm）与子表单（subForm） =====
+
+  /**
+   * 分组 = 行对象数组。组件面 @form-create/component-elm-group/src/component.jsx:13-64
+   * （button :18、max :22、min :26、sortBtn :35、title :47、type :51）。
+   * 配置键一律 config：产物把行壳、按钮显隐、上下限都按这份常量生成，回读核对的是常量里的值；
+   * 登记成 prop 会把它们写成包裹 div 的悬空属性（div 没有这些 prop，只落到根 DOM 当摆设）。
+   * expand / defaultValue / onBeforeAdd 等组件面剩余键语料未配置，留白即 unsupported 噪声。
+   */
+  group: {
+    tag: 'div',
+    runtime: false,
+    self: FIELD_SELF,
+    nested: { carrier: 'props.rule', shape: 'array' },
+    props: {
+      rule: { emit: 'children' },
+      /** 'card' → 出行卡片，其余出普通块（component.jsx:334 isCardType） */
+      type: { emit: 'config' },
+      /** 行标题模板，{index} 由产物按行号展开（component.jsx:313） */
+      title: { emit: 'config' },
+      min: { emit: 'config' },
+      max: { emit: 'config' },
+      button: { emit: 'config' },
+      sortBtn: { emit: 'config' },
+    },
+  },
+  /**
+   * 子表格 = 行对象数组，子规则在 props.columns[].rule（每列一条），
+   * 运行期组件是本项目 vendor 的 src/vendor/components/tableForm/TableForm.vue
+   * （由 src/vendor/form/index.js:12 注册成 TableForm）。
+   * columns 必须登记成 children：整块透传就是「列既出模板又当数据带走」的双份真相。
+   */
+  tableForm: {
+    tag: 'div',
+    runtime: false,
+    self: FIELD_SELF,
+    nested: { carrier: 'props.columns[].rule', shape: 'array' },
+    props: {
+      columns: { emit: 'children' },
+      addable: { emit: 'config' },
+      deletable: { emit: 'config' },
+      showIndex: { emit: 'config' },
+      /** 只影响回填写入的行过滤（TableForm.vue:146），产物按原样回填 —— 值进常量供人工接管 */
+      filterEmptyColumn: { emit: 'config' },
+      min: { emit: 'config' },
+      max: { emit: 'config' },
+    },
+  },
+  /**
+   * 子表单 = 单个对象（@form-create/component-subform/src/component.jsx:17-21 modelValue 是 Object）。
+   * 子字段写进这个对象，所以产物的 v-model 前缀是 form.<容器字段>，与行容器的行别名不同形。
+   */
+  subForm: {
+    tag: 'div',
+    runtime: false,
+    self: FIELD_SELF,
+    nested: { carrier: 'props.rule', shape: 'object' },
+    props: {
+      rule: { emit: 'children' },
+    },
+  },
+  /**
+   * 下拉：form-create 把候选项挂在 rule 顶层（options，不在 props 里 —— PageDataTable.vue:427
+   * 造的 rule 就是这个形状），el-select 没有 options prop，所以 options 走 config 常量、
+   * 由产物里的 el-option v-for 消费；写成 :options= 就是错位 emit。
+   */
+  select: {
+    tag: 'el-select',
+    runtime: false,
+    field: true,
+    self: { ...FIELD_SELF, options: { emit: 'config' } },
+    props: {
+      placeholder: { emit: 'prop' },
+      multiple: { emit: 'prop' },
+      clearable: { emit: 'prop' },
+      filterable: { emit: 'prop' },
+      disabled: { emit: 'prop' },
+    },
+  },
   'page-list-cards': {
     tag: 'page-list-cards',
     runtime: true,
@@ -625,6 +717,22 @@ export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_C
 
 /** 展示组件（仪表盘组件族）：出栅格列，不出 v-model 也不挂 ref */
 export const widgetOf = (type: string): boolean => !!TYPE_CONTRACTS[type]?.widget
+
+/**
+ * tableForm 的列对象（props.columns[i]）落点。列不是 rule 节点，但有真实运行期消费者：
+ * TableForm.vue:263-271 只读 label / hidden / required（表头星号）/ style 与 rule，
+ * formatter 与 fixed 是设计器列配置带进来的，运行期没人读 —— 登记成 no-consumer，
+ * 不许跟着列对象整块透传进产物。
+ */
+export const TABLE_COLUMN_CONTRACT: Record<string, PropEmit> = {
+  label: { emit: 'attr', as: 'label', on: 'el-table-column' },
+  rule: { emit: 'children' },
+  hidden: { emit: 'drop', kind: 'not-in-artifact', note: '隐藏列首版不出码：产物的列都是显式模板，要隐藏需人工删掉对应 el-table-column' },
+  required: { emit: 'drop', kind: 'not-in-artifact', note: '列必填在现网只是表头星号（TableForm.vue:269 的 _fc-tf-head-required），产物的行内校验需人工补' },
+  style: { emit: 'drop', kind: 'not-in-artifact', note: '列自定义样式不落产物' },
+  formatter: { emit: 'drop', kind: 'no-consumer', note: '运行期 TableForm 不读 formatter（只有设计器列配置用）' },
+  fixed: { emit: 'drop', kind: 'no-consumer', note: '运行期 TableForm 不读 fixed' },
+}
 
 /**
  * 页面 option 的落点（宿主渲染项，不是 rule 节点）。

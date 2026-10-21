@@ -79,7 +79,7 @@ describe('LookupPicker 带回写回', () => {
 
   it('写回目标进 form 声明：cardlistpage 的 idField 目标没有可见 input，不声明就编辑态回填不回来', () => {
     const { source } = run(clone(cardlistpage), 'cardlistpage')
-    const form = source.match(/const form = reactive<Record<string, unknown>>\(\{ ([^}]+) \}\)/)?.[1] ?? ''
+    const form = source.match(/const form = reactive<Record<string, any>>\(\{([\s\S]*?)\}\)/)?.[1] ?? ''
     expect(form).toContain("customer_id")
     // 同页 returnFields 目标（contact_name / contact_phone 有可见 input）保持单份
     expect(form.match(/contact_name/g)?.length).toBe(1)

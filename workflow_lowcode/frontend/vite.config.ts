@@ -90,6 +90,21 @@ export default defineConfig({
     postcss: {}
   },
   plugins: [vue(), tailwindcss(), materialImportMap()],
+  build: {
+    rollupOptions: {
+      // 宿主 shim 被登记成额外 entry 后，Rollup 会把 element-plus 的传递依赖（@floating-ui）
+      // 归进 shim 的 entry chunk，于是「shim chunk ↔ 库 chunk」互相 import。
+      // 库 chunk 先求值时 shim 里的绑定还是 undefined，浏览器抛 "x is not a function"，
+      // main.ts 的 app.mount 根本执行不到（dev 走源码不做分块，所以只在生产构建复现）。
+      // 显式把 element-plus 与其依赖并到一个 chunk 断环。
+      output: {
+        manualChunks(id) {
+          if (id.includes('platform/hosts/element-plus-host.ts')) return 'element-plus'
+          if (/node_modules[\\/](?:element-plus|@floating-ui)[\\/]/.test(id)) return 'element-plus'
+        }
+      }
+    }
+  },
   optimizeDeps: {
     // @codemirror/lang-javascript 的 npm dist 预打包了 @codemirror/state/language 的完整副本；
     // esbuild 依赖预优化在特定分块形态下会把它内联成零 import 的自包含 chunk，

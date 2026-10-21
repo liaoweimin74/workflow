@@ -90,6 +90,12 @@ export interface TypeContract {
    */
   requires?: Array<{ key: string; note: string }>
   /**
+   * 字段写回声明：组件在 form-create 宿主里靠 formCreateInject.api.setValue 把选中值写进
+   * 其他表单字段（LookupPicker 的 idField/returnFields），产物没有那个实例，改接组件的
+   * select/clear emit 由产物 handler 显式赋值。idKey/mapKey 是承载目标字段名/映射的 props 键。
+   */
+  writes?: { on: string; clearOn: string; idKey?: string; mapKey?: string }
+  /**
    * 产物要传页面 key：现网由 PageRendererPage.vue:552-553 给数据组件统一注入 props.pageKey，
    * 产物没有这层注入。PageDataTable 把它声明成必填无默认（PageDataTable.vue:185-187），
    * 还拿它拼 Excel 导入导出 URL（:723），漏传就是运行时缺参 + 导出指向空页面。
@@ -336,12 +342,10 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       searchColumns: { emit: 'prop' },
       columns: { emit: 'prop' },
     },
-    requires: [
-      {
-        key: 'returnFields',
-        note: '带回靠 formCreateInject.api.setValue 写别的字段（含 idField），出码产物是裸 v-model 表单，没有 form-create 实例；需把带回写成 handler 里的显式赋值 —— 组件另有 select/clear 两个 emit（LookupPicker.vue:92-93）可让产物自己写回',
-      },
-    ],
+    requires: [],
+    // 带回链的显式化：组件宿主里走 formCreateInject.api.setValue（LookupPicker.vue:267-277、:295-299），
+    // 产物没有 form-create 实例，改接组件自己的 select/clear emit（:271、:312）由 handler 显式赋值
+    writes: { on: 'select', clearOn: 'clear', idKey: 'idField', mapKey: 'returnFields' },
   },
   /**
    * 计算字段：保留 runtime 标签（求值器 formulaEval 是纯函数，但依赖取值仍走 form-create 实例）。

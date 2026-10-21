@@ -110,9 +110,10 @@ describe('选择器取数身份', () => {
       emit: 'derived',
       by: 'globalDataSourceId',
     })
-    // 只剩带回那条：idField/returnFields 靠 formCreateInject.api.setValue，产物里没有 form-create 实例
+    // 带回那条（idField/returnFields 靠 formCreateInject.api.setValue）已在 spike 7F-2 显式接线销账，
+    // 见 lookup-writeback.test.ts；这里钉住不再回潮
     const debt = gen.manifest.unsupported.filter((u) => u.type === 'LookupPicker').map((u) => u.key)
-    expect(debt).toEqual(['returnFields'])
+    expect(debt).toEqual([])
   })
 
   it('LookupPicker 的身份也走反查：往返不差，证据链和 dataPicker 同一条', () => {

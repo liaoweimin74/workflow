@@ -9745,3 +9745,19 @@ Work Log:
 
 Stage Summary:
 - 事件 #125 单轮闭环，零 mvn 第 109 次；累计 125 次
+---
+Task ID: r213
+Agent: main (cron 轻量运维)
+Task: 2026-10-22 20:05 例行巡检（Job 446961）
+
+Work Log:
+- r212 沙箱故障空窗后本轮自愈 ✓
+- 探活：3000×3=000（vite 未起）、8080=Node 假绿 no such table → 事件 #126 冷启动降级；bun install 进行中；mariadb 已起但库空，dump-db 自保护「dump 无效放弃本轮」（未产出污染快照 ✓）
+- 自动脚本拉起 vite(1282)+假绿链（bun src/index.ts 1108 / node index.ts 1343），自动 recover 日志显示误走 mvn 分支（历史遗留误报）
+- 干预：pkill 五连清假绿链（vite 幸存 3000=200）→ 重拼 jar md5 e369839b ✓ → recover 零 mvn 路径（MVNCHECK 空）拉起 java pid 1438
+- 复验：40s 全绿 200×4 + nodeProbe 200；内存 3223MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #126（冷启动降级亚型）单轮闭环，零 mvn 第 110 次；累计 126 次
+- 再次实证：自动 recover 的「无 jar 备份→mvn」误报仍待授权修复

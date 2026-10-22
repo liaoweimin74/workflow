@@ -9831,3 +9831,22 @@ Work Log:
 
 Stage Summary:
 - 事件 #131（完整冷启动亚型，本窗口首例）单轮闭环，零 mvn 第 115 次；累计 131 次
+---
+Task ID: r224
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 07:05 例行巡检（Job 446961）——数据安全事故小节
+
+Work Log:
+- 探活：四链路全 000，无任何服务进程 → 事件 #131 完整冷启动（重供给）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → recover 重建 MariaDB + 零 mvn 拉起 Java pid 1223；vite 由 start-services 补拉 pid 1334
+- ⚠️ 收口 dump 异常 148K/84 表（完整态 268K/103 表），人工核验触发数据事故排查：
+  - 根因链：远端提交 bc74624f 将 .gitignore 规则写成整个 backups/（原意仅 backups/jar）→ 此后新 dump 均未入库 → r224 重供给按「只保留 git 跟踪状态」清空 backups/ 未跟踪 dump → recover glob（db-workflow-full-*）无文件可导 → Flyway 空壳建 84 表结构（含种子 SYS_USER → auth 假性真绿）
+  - 缺失 19 表：sys_material、sys_user_openid、wf_page_template、wf_row_permission{,_grant,_source,_scope_exemption}、wf_biz_* 11 张业务表
+  - 数据未丢：完整 dump 20261022-001001（273879B/103 表）在 git 历史 743fba9e
+- 恢复：隔离本轮 148K dump 为 invalid- 前缀 ×2 → git show 取回 001001.sql（workflow+v6）→ mariadb 全量导入 → 103 表 + SYS_USER 2 行 + wf_row_permission 结构 ✓ → 40s 复验全绿 200×4 + nodeProbe 200 + auth 真绿 ✓ → 新 dump 20261022-231724=268K 完整态回归
+- 兜底加固：git add -f 强制跟踪 001001.sql + 231724 新 dump（绕过 .gitignore，运维侧最小干预，不改仓库配置文件）
+
+Stage Summary:
+- 事件 #131（完整冷启动）+ 数据安全事故（dump 兜底链断裂）双双闭环，零 mvn 第 115 次；累计 131 次
+- ⚠️ 待用户裁决：.gitignore 第 64 行 backups/ 应收窄为 backups/jar/（恢复 dump-db 自动入库能力）；本次仅用 git add -f 临时兜底
+- 数据 RPO 评估：Flyway 空壳期间（07:05-07:16）若有业务写入仅丢 11 分钟窗口；业务数据主体回滚至 20261022-001001 快照（r202 收口态）

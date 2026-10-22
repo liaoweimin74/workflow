@@ -1,11 +1,11 @@
 <template>
   <el-dialog v-model="visible" title="导出模块" width="760px" :close-on-click-modal="false" @closed="reset">
-    <el-form label-width="80px">
-      <el-form-item label="模块名称" required>
-        <el-input v-model="moduleName" placeholder="如：请假管理模块" maxlength="60" />
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+      <el-form-item label="模块名称" prop="moduleName">
+        <el-input v-model="form.moduleName" placeholder="如：请假管理模块" maxlength="60" />
       </el-form-item>
       <el-form-item label="模块说明">
-        <el-input v-model="moduleDescription" type="textarea" :rows="2" maxlength="300" placeholder="模块用途说明（将写入描述文件）" />
+        <el-input v-model="form.moduleDescription" type="textarea" :rows="2" maxlength="300" placeholder="模块用途说明（将写入描述文件）" />
       </el-form-item>
     </el-form>
 
@@ -78,7 +78,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { firstValidateMessage } from '@/views/form/validateError'
 import { moduleApi, ELEMENT_TYPE_LABELS, type ModuleElementType, type AnalyzeNode } from '@/api/module'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import { pageApi, type PageDefinitionDTO } from '@/api/page'
@@ -104,8 +105,11 @@ const loading = ref(false)
 const analyzing = ref(false)
 const exporting = ref(false)
 const analyzeVisible = ref(false)
-const moduleName = ref('')
-const moduleDescription = ref('')
+const formRef = ref<FormInstance>()
+const form = reactive({ moduleName: '', moduleDescription: '' })
+const rules: FormRules = {
+  moduleName: [{ required: true, whitespace: true, message: '请输入模块名称', trigger: 'blur' }]
+}
 const activeTab = ref<ModuleElementType>('FORM')
 const closureNodes = ref<AnalyzeNode[]>([])
 const missing = ref<string[]>([])
@@ -183,8 +187,9 @@ function open(): void {
 defineExpose({ open })
 
 function reset(): void {
-  moduleName.value = ''
-  moduleDescription.value = ''
+  form.moduleName = ''
+  form.moduleDescription = ''
+  formRef.value?.clearValidate()
   analyzeVisible.value = false
   closureNodes.value = []
   missing.value = []
@@ -263,22 +268,24 @@ function autoCheckClosure(): void {
 }
 
 async function doExport(): Promise<void> {
-  if (!moduleName.value.trim()) {
-    ElMessage.warning('请填写模块名称')
-    return
-  }
+  const valid = await formRef.value?.validate().catch((error: unknown) => {
+    ElMessage.warning(firstValidateMessage(error) || '请检查必填项')
+    return false
+  })
+  if (!valid) return
+  const name = form.moduleName.trim()
   exporting.value = true
   try {
     const blob = await moduleApi.exportModule(
-      moduleName.value.trim(),
-      moduleDescription.value,
+      name,
+      form.moduleDescription,
       selectedRefs.value,
       !userAdjusted.value
     )
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `module-${moduleName.value.trim()}.zip`
+    a.download = `module-${name}.zip`
     a.click()
     URL.revokeObjectURL(url)
     ElMessage.success('模块导出成功')

@@ -16,10 +16,10 @@
       </div>
     </el-alert>
 
-    <el-form label-width="90px" label-position="left">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
       <el-row :gutter="12">
         <el-col :span="12">
-          <el-form-item label="名称" required>
+          <el-form-item label="名称" prop="name">
             <el-input v-model="form.name" data-testid="rp-name" maxlength="100" show-word-limit placeholder="例如：销售本人数据" />
           </el-form-item>
         </el-col>
@@ -29,7 +29,7 @@
           </el-form-item>
         </el-col>
       </el-row>
-      <el-form-item label="关联数据源" required>
+      <el-form-item label="关联数据源" prop="dataSourceIds">
         <el-select
           v-model="form.dataSourceIds"
           data-testid="rp-sources"
@@ -144,9 +144,10 @@
 <script setup lang="ts">
 defineOptions({ name: 'RowPermissionEditor' })
 
-import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, ref, watch } from 'vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import VarInsertPopover from './VarInsertPopover.vue'
+import { firstValidateMessage } from '@/views/form/validateError'
 import { rowPermissionApi, type RowPermissionColumnOption, type RowPermissionDTO } from '@/api/rowPermission'
 import type { DataSourceDTO } from '@/api/data-source'
 import {
@@ -182,9 +183,18 @@ const form = ref<{
 })
 
 const submitting = ref(false)
+const formRef = ref<FormInstance>()
 const roleGrantCount = ref(0)
 const columnOptions = ref<RowPermissionColumnOption[]>([])
 const candidatesFailed = ref(false)
+
+/** 名称与关联数据源走 el-form 规则（红字标在字段下方）；条件表在表单外，仍按行给提示 */
+const rules: FormRules<typeof form.value> = {
+  name: [{ required: true, whitespace: true, message: '请填写权限名称', trigger: 'blur' }],
+  dataSourceIds: [
+    { type: 'array', required: true, message: '请至少关联一个数据源', trigger: 'change' },
+  ],
+}
 
 const VARIABLE_LEGEND = VARIABLE_OPTIONS.map((item) => ({
   token: `{${item.name}}`,
@@ -248,6 +258,9 @@ async function initialize(): Promise<void> {
     dataSourceIds: [...(props.permission?.dataSourceIds ?? [])],
     conditions: props.permission ? fromApiConditions(props.permission.conditions) : [emptyConditionRow()],
   }
+  // 重新赋值整个 form 后清掉上次的红字，否则新建弹窗会带着编辑态的校验错误
+  await nextTick()
+  formRef.value?.clearValidate()
   await loadColumns()
 }
 
@@ -260,14 +273,12 @@ watch(
 )
 
 async function submit(): Promise<void> {
-  if (!form.value.name.trim()) {
-    ElMessage.warning('请填写权限名称')
-    return
-  }
-  if (form.value.dataSourceIds.length === 0) {
-    ElMessage.warning('请至少关联一个数据源')
-    return
-  }
+  const formValid = await formRef.value?.validate().catch((error: unknown) => {
+    ElMessage.warning(firstValidateMessage(error) || '请检查必填项')
+    return false
+  })
+  if (!formValid) return
+
   const conditionError = validateConditionRows(form.value.conditions)
   if (conditionError) {
     ElMessage.warning(conditionError)

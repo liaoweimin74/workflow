@@ -1,12 +1,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'MessageAnnouncementList' })
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { SearchTable } from '@/components/business'
 import { Plus, Delete, View } from '@element-plus/icons-vue'
 import type { TableColumn, ActionButton, SearchField } from '@/components/business/types'
 import { getAnnouncements, getAnnouncement, publishAnnouncement, recallAnnouncement } from '../../api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { firstValidateMessage } from '@/views/form/validateError'
 import DataPicker from '@/views/form/components/DataPicker.vue'
 import { dataSourceApi } from '@/api/data-source'
 import MarkdownIt from 'markdown-it'
@@ -48,31 +49,46 @@ async function fetchApi(params: any) {
 // ========== 发布公告对话框 ==========
 const publishVisible = ref(false)
 const publishing = ref(false)
+const publishFormRef = ref<FormInstance>()
 const publishForm = ref({ title: '', content: '', recipientIds: '[]' })
 
-function openPublish() {
-  publishForm.value = { title: '', content: '', recipientIds: '[]' }
-  publishVisible.value = true
+const publishRules: FormRules = {
+  title: [{ required: true, whitespace: true, message: '请输入公告标题', trigger: 'blur' }],
+  content: [{ required: true, whitespace: true, message: '请输入公告内容', trigger: 'blur' }],
+  recipientIds: [{ validator: (_rule, value: unknown, callback) => {
+    const error = parseRecipientIds(String(value ?? '')).length
+      ? undefined
+      : new Error('请选择至少一个接收用户')
+    callback(error)
+  }, trigger: 'change' }],
 }
 
-async function handlePublish() {
-  if (!publishForm.value.title || !publishForm.value.content) {
-    ElMessage.warning('请填写标题和内容')
-    return
-  }
-  let ids: number[] = []
+/** DataPicker 交回的是 id 数组的 JSON 串，脏值（非正整数）直接丢掉 */
+function parseRecipientIds(text: string): number[] {
   try {
-    const parsed: unknown = JSON.parse(publishForm.value.recipientIds || '[]')
-    ids = Array.isArray(parsed)
+    const parsed: unknown = JSON.parse(text || '[]')
+    return Array.isArray(parsed)
       ? parsed.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
       : []
   } catch {
-    ids = []
+    return []
   }
-  if (ids.length === 0) {
-    ElMessage.warning('请填写至少一个接收用户ID（逗号分隔）')
-    return
-  }
+}
+
+async function openPublish() {
+  publishForm.value = { title: '', content: '', recipientIds: '[]' }
+  publishVisible.value = true
+  await nextTick()
+  publishFormRef.value?.clearValidate()
+}
+
+async function handlePublish() {
+  const valid = await publishFormRef.value?.validate().catch((error: unknown) => {
+    ElMessage.warning(firstValidateMessage(error) || '请检查必填项')
+    return false
+  })
+  if (!valid) return
+  const ids = parseRecipientIds(publishForm.value.recipientIds)
   publishing.value = true
   try {
     await publishAnnouncement({
@@ -153,11 +169,11 @@ const tableRef = ref()
       width="560px"
       :close-on-click-modal="false"
     >
-      <el-form label-width="80px">
-        <el-form-item label="标题" required>
+      <el-form ref="publishFormRef" :model="publishForm" :rules="publishRules" label-width="80px">
+        <el-form-item label="标题" prop="title">
           <el-input v-model="publishForm.title" placeholder="公告标题" maxlength="255" />
         </el-form-item>
-        <el-form-item label="内容" required>
+        <el-form-item label="内容" prop="content">
           <el-input
             v-model="publishForm.content"
             type="textarea"
@@ -165,7 +181,7 @@ const tableRef = ref()
             placeholder="支持 Markdown 语法，例如：**加粗**、# 标题、- 列表"
           />
         </el-form-item>
-        <el-form-item label="接收用户">
+        <el-form-item label="接收用户" prop="recipientIds">
           <DataPicker
             v-if="userDataSourceId"
             v-model="publishForm.recipientIds"

@@ -2,14 +2,20 @@
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
+const formRef = ref<FormInstance>()
 const loginForm = ref({
   username: '',
   password: ''
 })
+const rules: FormRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
 const loading = ref(false)
 const rememberMe = ref(false)
 
@@ -28,7 +34,9 @@ watch(rememberMe, (val) => {
 })
 
 async function handleLogin() {
-  if (!loginForm.value.username || !loginForm.value.password) return
+  // 空账号/空密码过去是静默 return：用户只看到按钮没反应，这里改成立即标红对应字段
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
   loading.value = true
   try {
     await authStore.login(loginForm.value)
@@ -124,8 +132,8 @@ async function handleLogin() {
             <p class="text-sm text-gray-400 dark:text-gray-500 mt-1.5">请使用平台账号登录，开始今天的工作</p>
           </div>
 
-          <el-form :model="loginForm" @keyup.enter="handleLogin" label-position="top">
-            <el-form-item label="用户名">
+          <el-form ref="formRef" :model="loginForm" :rules="rules" @keyup.enter="handleLogin" label-position="top">
+            <el-form-item label="用户名" prop="username">
               <el-input
                 v-model="loginForm.username"
                 placeholder="请输入用户名"
@@ -133,7 +141,7 @@ async function handleLogin() {
                 class="!rounded-xl"
               />
             </el-form-item>
-            <el-form-item label="密码">
+            <el-form-item label="密码" prop="password">
               <el-input
                 v-model="loginForm.password"
                 type="password"

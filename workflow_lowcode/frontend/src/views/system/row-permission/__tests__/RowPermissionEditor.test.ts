@@ -167,6 +167,20 @@ describe('RowPermissionEditor', () => {
     expect(ElMessage.warning).toHaveBeenCalledWith('请填写权限名称')
   })
 
+  /** 提示要落到具体字段：名称与关联数据源各自在字段下方标红，而不是只有一句笼统 toast */
+  it('必填项在对应字段下方标红', async () => {
+    const wrapper = await mountEditor()
+
+    await wrapper.find('[data-testid="rp-save"]').trigger('click')
+    await flushPromises()
+    // 错误文案有 100ms 防抖，等它落地
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    const errors = wrapper.findAll('.el-form-item__error').map((node) => node.text())
+    expect(errors).toContain('请填写权限名称')
+    expect(errors).toContain('请至少关联一个数据源')
+  })
+
   it('条件缺列名不提交', async () => {
     const { ElMessage } = await import('element-plus')
     const wrapper = await mountEditor()

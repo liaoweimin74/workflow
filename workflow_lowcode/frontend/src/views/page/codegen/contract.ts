@@ -28,6 +28,11 @@ export type PropEmit =
   /** 子规则（容器的 props.rule），交给容器递归出码 */
   | { emit: 'children' }
   /**
+   * 布局表格的几何载体（fcTable 的 props.rule）：row/col/style/class/layout 不在模板上落地，
+   * 由几何算法换算成 td 的 colspan/rowspan 与逐格 style/class，回读从 td 坐标反推。
+   */
+  | { emit: 'table' }
+  /**
    * 落到本节点的行配置常量（嵌套容器的 min/max/button、select 的 options）：
    * 产物的模板与 handler 按这份常量实现，回读核对的是产物里真在使用的那个值。
    * 这类键不能走 'prop' —— 嵌套容器的载体是 div，写上去就是组件没声明的悬空属性。
@@ -52,6 +57,17 @@ export type DerivedBy =
   | 'containerHasForm'
   | 'footerConfirmButton'
   | 'footerCancelButton'
+  /** fcTable 几何：行数/列数/合并项/逐格样式与类名，全部从产物 td 坐标反推 */
+  | 'tableRows'
+  | 'tableCols'
+  | 'tableLayout'
+  | 'tableStyle'
+  | 'tableClass'
+  | 'tableBorder'
+  | 'tableMini'
+  | 'tableFormStyle'
+  | 'tableBorderColor'
+  | 'tableBorderWidth'
 
 /**
  * 数据源记录（schema.dataSources[]）的落点。
@@ -77,8 +93,19 @@ export interface TypeContract {
   /**
    * 列表类 runtime 组件：产物要接的事件与容器形态来源。
    * expose=none 表示组件没 defineExpose，产物拿不到 refresh()，保存后的刷新要人工接。
+   * exposed 是组件 defineExpose 方法名的事实记录（动作链只能调在册的方法，链要落卡片就得记 unsupported）。
+   * events.when='chain' = 只有该节点真有对应动作链才绑定并出 handler（无链还出空 handler 就是假挂点）。
    */
-  list?: { events: Array<{ on: string; handler: string }>; expose?: 'refresh' | 'none' }
+  list?: {
+    events: Array<{ on: string; handler: string; when?: 'chain' }>
+    expose?: 'refresh' | 'none'
+    exposed?: string[]
+    /**
+     * 该组件在运行期真分发的链载体：view = props.viewEvents（triggerViewEvents），cell = columns[].onCellClick。
+     * 只有 page-table 两个都有；卡片组件里没有这两个分发器，配了也只能记 unsupported。
+     */
+    chainCarriers?: Array<'view' | 'cell'>
+  }
   /** 容器类：标签与尺寸属性名由展示方式决定（数据表格的 viewDetail.formMode） */
   displayModeDriven?: boolean
   /**
@@ -128,6 +155,11 @@ export interface TypeContract {
    */
   widget?: true
   /**
+   * 布局表格（fcTable）：子节点在 node.children 且带 slot:"行:列" 地址，按 props.rule 的
+   * row/col/layout 摊成静态 <table> 的单元格。几何键走 TABLE_RULE_CONTRACT 逐键登记。
+   */
+  table?: true
+  /**
    * dash-filter 广播接线（PageRendererPage.vue:263-278、505-549）：
    * source = 筛选器，变更时触发广播（autoBroadcast 非 false 才接 filter-change）；
    * target = 挂载后 emit('ready') 上报实例、暴露 setFilter 的组件，收进产物的 dashInstances。
@@ -153,12 +185,16 @@ const FIELD_SELF: Record<string, PropEmit> = {
   type: { emit: 'anchor', key: 'type' },
   field: { emit: 'anchor', key: 'field' },
   title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+  /** fcTable 子节点的格地址（"行:列"），模板上只有锚点能承载 */
+  slot: { emit: 'anchor', key: 'slot' },
 }
 
 /** 展示组件共有的身份键与栅格：type/field 进锚点，col.span 落栅格列 */
 const WIDGET_IDENTITY: Record<string, PropEmit> = {
   type: { emit: 'anchor', key: 'type' },
   field: { emit: 'anchor', key: 'field' },
+  /** fcTable 子节点的格地址（"行:列"），模板上只有锚点能承载 */
+  slot: { emit: 'anchor', key: 'slot' },
   /** 栅格跨度真身：form-create 用它包 el-col；props.span 只是组件留白镜像（PageDesigner.vue:819-823 双写） */
   'col.span': { emit: 'attr', as: 'span', on: 'el-col' },
 }
@@ -213,8 +249,15 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
         { on: 'row-click', handler: 'onRowClick' },
         { on: 'button-click', handler: 'onButtonClick' },
         { on: 'selection-change', handler: 'onSelectionChange' },
+        // 列链与排序链的出口：无链时不绑定，避免产物里挂一个没人调的空 handler
+        { on: 'cell-click', handler: 'onCellClick', when: 'chain' },
+        { on: 'sort-change', handler: 'onSortChange', when: 'chain' },
       ],
       expose: 'refresh',
+      // PageDataTable.vue 的 defineExpose 面（externalActions.test.ts 逐名核对，别凭记忆加）
+      exposed: ['refresh', 'setFilter', 'resetFilter', 'setPage', 'setSort', 'clearSelection', 'records'],
+      // handleCellClick 与 triggerViewEvents 都在 PageDataTable 里，卡片组件没有这两个分发器
+      chainCarriers: ['view', 'cell'],
     },
     self: {
       type: { emit: 'anchor', key: 'type' },
@@ -230,8 +273,12 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
     props: {
       dataSourceId: { emit: 'derived', by: 'dsRefId', evidence: 'props.dsRefId' },
       columns: { emit: 'prop' },
-      // 列点击链首版不出码：整列数组照常出，链在里面 → 必须登记，不能随数组一起静默带走
-      'columns[].onCellClick': { emit: 'drop', kind: 'not-in-artifact', note: '列点击链首版不出码，需人工在产物里补 handler' },
+      // 列点击链：page-table 有 cell-click 出口，parse phase 4 按链改判（真出 handler 时不再是丢弃）
+      'columns[].onCellClick': {
+        emit: 'drop',
+        kind: 'not-in-artifact',
+        note: '列点击链：该列真配了动作时产物出 onCellClick 分支，否则按丢弃登记（卡片无 cell-click 出口，链只能记 unsupported）',
+      },
       searchFields: { emit: 'prop' },
       sortableFields: { emit: 'prop' },
       pageSize: { emit: 'prop' },
@@ -258,9 +305,10 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       designMode: { emit: 'drop', kind: 'ignored-by-runtime', note: '设计器态标记' },
     },
     /**
-     * 产物接管按钮语义的开关：为真时组件把 action/toolbar 按钮只 emit `button-click`，
-     * 不再派发 pageActionBus、也不再弹组件自带的兜底表单（那份表单按数据源业务表单生成，
-     * 跟页面配的容器不是同一个）。必须与 list.events 里的 button-click 成对出现。
+     * 事件语义交给产物的开关：为真时按钮/行/单元格/选择/排序一律只 emit，
+     * 组件不再派发 pageActionBus、不再自跑 viewEvents 与列级 onCellClick 链，
+     * 也不弹组件自带的兜底表单（那份表单按数据源业务表单生成，跟页面配的容器不是同一个）。
+     * 必须与 list.events 成对出现：只绑事件不开接管＝组件和产物各执行一遍（双执行）。
      */
     constAttrs: { externalActions: true },
   },
@@ -288,6 +336,40 @@ export const TYPE_CONTRACTS: Record<string, TypeContract> = {
       customButtons: { emit: 'default', value: [], note: '空自定义按钮不落模板' },
       showConfirmButton: { emit: 'derived', by: 'footerConfirmButton' },
       showCancelButton: { emit: 'derived', by: 'footerCancelButton' },
+    },
+  },
+  /**
+   * 布局表格（src/vendor/components/table/Table.vue，form/index.js:14 注册成 FcTable）：
+   * 几何在 props.rule（row/col/style/class/layout），子节点在 node.children 且带 slot:"行:列"。
+   * 产物出静态 <table> 还原几何（D2），不引 form-create 运行时；子节点按 slot 放进对应格，
+   * 被合并覆盖的 slot 由 home 格渲染（与 Table.vue 的 lattice.slot 一致）。
+   */
+  fcTable: {
+    tag: 'table',
+    runtime: false,
+    table: true,
+    self: {
+      type: { emit: 'anchor', key: 'type' },
+      field: { emit: 'anchor', key: 'field' },
+      /**
+       * 真机 A/B：现网 fcTable 外层只有 el-col，没有 el-form-item（rule 没有 field，
+       * form-create 不给它包壳），节点 title 只是设计器标签。产物若自造一层 el-form-item，
+       * 会命中 EP 的 `.el-form-item .el-form-item { margin-bottom: 0 }`，把格内每个组件的
+       * 下边距吃掉 18px（dashboard 每行矮 18px 的根因）。
+       */
+      title: { emit: 'drop', kind: 'not-in-artifact', note: 'fcTable 非表单字段，form-create 不套 el-form-item；节点 title 是设计器标签' },
+    },
+    props: {
+      rule: { emit: 'table' },
+      /** Table.vue:35-39 的默认值：true 时出原生 border，false 出无边框类 */
+      border: { emit: 'default', value: true, note: '等于组件默认值（Table.vue:37）' },
+      mini: { emit: 'default', value: false, note: '等于组件默认值' },
+      formStyle: { emit: 'default', value: false, note: '等于组件默认值' },
+      borderColor: { emit: 'default', value: '', note: '空 = 不覆盖边框色' },
+      borderWidth: { emit: 'default', value: '', note: '空 = 不覆盖边框宽' },
+      /** 组件声明了 prop 但模板从不读：出成属性只会落到 table 根节点当摆设 */
+      label: { emit: 'drop', kind: 'no-consumer', note: 'Table.vue 声明 label 但模板从不读' },
+      width: { emit: 'drop', kind: 'no-consumer', note: 'Table.vue 声明 width 但模板从不读' },
     },
   },
   input: {
@@ -726,6 +808,60 @@ export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_C
 /** 展示组件（仪表盘组件族）：出栅格列，不出 v-model 也不挂 ref */
 export const widgetOf = (type: string): boolean => !!TYPE_CONTRACTS[type]?.widget
 
+/** 产物能否给该类型挂 ref：没 defineExpose 的组件挂了也取不到方法，那是假接线 */
+export const refableOf = (type: string): boolean => {
+  const c = TYPE_CONTRACTS[type]
+  return !!c?.runtime && !c.widget && c.list?.expose !== 'none'
+}
+
+/** 列表组件的固定事件出口（when='chain' 的出口要该载体真配了链才绑，由 chains 阶段追加） */
+export const fixedOutletsOf = (type: string): Array<{ on: string; handler: string }> =>
+  (listOf(type)?.events || []).filter((e) => !e.when)
+
+/**
+ * 动线 op（chain 动作类型与总线 op 同名共用一份）在产物侧的能力面。
+ * gates 是「产物必须真拿得到」的前置条件，缺一就整步记 unsupported；
+ * needs 是产物要备的材料（import / 常量 / helper），由 emit 按出现补齐。
+ * 表外 op 一律不接线 —— 新增动作类型必须先在这里表态，避免产物里出现没人执行的语句。
+ */
+export type ChainGate = 'list-ref' | 'container'
+export type ChainMaterial = 'message' | 'router' | 'export'
+export const ACTION_OPS: Record<string, { gates: ChainGate[]; needs: ChainMaterial[]; note: string }> = {
+  'set-filter': { gates: ['list-ref'], needs: [], note: 'setFilter 是列表实例方法，产物靠 ref 调它' },
+  refresh: { gates: ['list-ref'], needs: [], note: '刷新走列表实例暴露的 refresh()' },
+  'set-page': { gates: ['list-ref'], needs: [], note: '跳页走暴露的 setPage（内部 SearchTable 的 setQuery 不直接给产物）' },
+  'set-sort': { gates: ['list-ref'], needs: [], note: '服务端排序走暴露的 setSort' },
+  'clear-selection': { gates: ['list-ref'], needs: [], note: '清空选择走暴露的 clearSelection' },
+  export: {
+    gates: ['list-ref'],
+    needs: ['export'],
+    note: '导出取列表实例暴露的 records，产物复刻组件 exportData 的 JSON 下载',
+  },
+  message: { gates: [], needs: ['message'], note: 'ElMessage 按用引入' },
+  'open-link': { gates: [], needs: ['router'], note: 'router.push 按用引入 useRouter' },
+  delete: { gates: [], needs: [], note: '产物已有 api 模块的 deleteData，删除后刷新列表' },
+  'open-container': { gates: ['container'], needs: [], note: '打开容器复用产物的 openContainer' },
+  'load-record': { gates: ['container'], needs: [], note: '加载记录＝带 id 打开容器，与总线 load-record 同语义' },
+  'close-container': { gates: ['container'], needs: [], note: 'closeContainer 是产物容器段自带的函数' },
+  'save-container': { gates: ['container'], needs: [], note: 'confirmSave 是产物容器段自带的函数' },
+  script: { gates: [], needs: [], note: '脚本正文出成普通函数；越界标识符或产物没有的上下文整条链不接线' },
+}
+
+/**
+ * 产物明确不接线的 op 与原因（登记在册，别让人以为「配了就生效」）。
+ * 共同点：执行体在组件内部（本地兜底表单/详情弹窗/新增记录），产物没有那层，
+ * 换成页面的 formContainer 就是改语义，所以只记账不出码。
+ */
+export const ACTION_OPS_REJECTED: Record<string, string> = {
+  'open-detail': '详情弹窗是列表组件内置的（openDetail→detailVisible），产物没有那层；页面容器不是同一个载体，替代会改变语义',
+  'open-create': '运行期打开组件内置的本地兜底表单（openLocalForm），不是页面的 formContainer，产物不做替换',
+  edit: '同上：链里的 edit 走组件内置本地表单，产物只有页面容器，替换会改变语义（内建 edit 按钮的兜底另算）',
+  'new-record': 'pageActionCatalog 里 renderers 为空，没有任何渲染器消费这个动作',
+  'set-value': '组件没有 setValue 暴露面，总线里 configurable 也是 false',
+  'reload-record': '重载记录依赖渲染器的 pageEngine/lastRecord 状态机，产物没有',
+  'save-record': '总线 op 走页面引擎保存整条记录，产物的保存路径是容器的 confirmSave',
+}
+
 /**
  * tableForm 的列对象（props.columns[i]）落点。列不是 rule 节点，但有真实运行期消费者：
  * TableForm.vue:263-271 只读 label / hidden / required（表头星号）/ style 与 rule，
@@ -740,6 +876,20 @@ export const TABLE_COLUMN_CONTRACT: Record<string, PropEmit> = {
   style: { emit: 'drop', kind: 'not-in-artifact', note: '列自定义样式不落产物' },
   formatter: { emit: 'drop', kind: 'no-consumer', note: '运行期 TableForm 不读 formatter（只有设计器列配置用）' },
   fixed: { emit: 'drop', kind: 'no-consumer', note: '运行期 TableForm 不读 fixed' },
+}
+
+/**
+ * fcTable 的几何载体（props.rule）逐键落点。
+ * row/col/style/class/layout 都不在模板上落地：产物按 row/col/layout 算出 td 的 colspan/rowspan，
+ * style/class 落逐格 td，回读再从 td 坐标反推 —— 所以五个键都登记成 derived，
+ * 表外的键（设计器未来加的）走 unsupported，不许随对象静默带走。
+ */
+export const TABLE_RULE_CONTRACT: Record<string, PropEmit> = {
+  row: { emit: 'derived', by: 'tableRows' },
+  col: { emit: 'derived', by: 'tableCols' },
+  layout: { emit: 'derived', by: 'tableLayout' },
+  style: { emit: 'derived', by: 'tableStyle' },
+  class: { emit: 'derived', by: 'tableClass' },
 }
 
 /**

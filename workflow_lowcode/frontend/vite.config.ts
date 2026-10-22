@@ -2,6 +2,7 @@ import { defineConfig, type PluginOption } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { codegenProbeWriter } from './vite.codegen-probe-writer'
 
 // 【远程物料 import map（change: remote-materials，design D2）】
 // 物料 bundle 里 import 的是裸模块名（vue / element-plus / @platform/sdk），
@@ -89,7 +90,13 @@ export default defineConfig({
   css: {
     postcss: {}
   },
-  plugins: [vue(), tailwindcss(), materialImportMap()],
+  plugins: [
+    vue(),
+    tailwindcss(),
+    materialImportMap(),
+    // 出码按钮的落盘通道（dev-only：configureServer 钩子只在 `vite dev` 执行，build 不带）
+    codegenProbeWriter(__dirname)
+  ],
   build: {
     rollupOptions: {
       // 宿主 shim 被登记成额外 entry 后，Rollup 会把 element-plus 的传递依赖（@floating-ui）
@@ -118,10 +125,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       // FcDesigner 使用项目内 vendor 源码（支持表单配置页签 formConfigExtra slot 扩展）
-      '@form-create/designer': path.resolve(__dirname, 'src/vendor'),
-      // 【真机探测 spike，未合并】出码产物按 @lc/runtime/<tag> 引用 runtime 组件，
-      // @lc/runtime 包尚未抽出，先由 src/lc-runtime/ shim 指向现网真实组件
-      '@lc/runtime': path.resolve(__dirname, 'src/lc-runtime')
+      '@form-create/designer': path.resolve(__dirname, 'src/vendor')
     }
   },
   server: {

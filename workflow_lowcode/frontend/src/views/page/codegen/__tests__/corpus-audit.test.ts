@@ -1,21 +1,21 @@
 /**
- * 语料体检（spike 2）：把现网真实页面批量过 生成 → 回读，量出三件事
+ * 语料体检（spike 2，阶段 5.2 起消费出码报告）：把现网真实页面批量过 生成，量出三件事
  *  1. 类型轴：TYPE_CONTRACTS 覆盖了语料里多少组件节点（能力表真实缺口）
- *  2. 已登记部分的可信度：holes 里有多少落在未登记节点子树上（预期丢弃），
+ *  2. 已登记部分的可信度：空洞里有多少落在未登记节点子树上（预期丢弃），
  *     有多少落在已登记节点上（真 bug —— 编译器在真实数据上不忠实）
  *  3. unsupported 分类：广度债（类型/键未登记）与语义债（触发器、动作链）各占多少
  *
  * 覆盖率的分母口径（spike 7D）：按「出码器真走得到的节点」算，不是按「类型登记了没有」算。
- * 采集器走全四处 rule 载体（含 node.children 与 props.columns[].rule），和运行时取字段用的
- * formRuleWalk.ts:walkRules 同一口径；每个节点带 blocked 归因，登记了但递归进不去的不许算成绩。
+ * 采集与分桶现在住在 report.ts（生产模块，随每次 generatePage 执行），本文件不再自带一份口径 ——
+ * 体检读的数与出码自己声称的数必须是同一个函数算出来的，否则仪器和被测物各说各话。
  *
  * 报表走 stdout，不落文件；断言钉三条不变式：不许崩、已登记子树必须零空洞、分母口径不许漂。
  */
 import { describe, expect, it } from 'vitest'
 
 import { TYPE_CONTRACTS } from '../contract'
-import { generatePage } from '../generate'
-import { reverseToSchema } from '../reverse'
+import { generatePage, type GenerateReport } from '../generate'
+import { BASELINE } from './baseline'
 
 const corpus = import.meta.glob('./fixtures/corpus/*.json', { eager: true, import: 'default' }) as Record<
   string,
@@ -26,84 +26,10 @@ const pages = Object.entries(corpus)
   .map(([p, schema]) => ({ key: p.split('/').pop()!.replace('.json', ''), schema }))
   .sort((a, b) => a.key.localeCompare(b.key))
 
-interface NodeRef {
-  type: string
-  /** schema 内路径前缀，与 reverse 报出的 hole path 同一坐标系：rule[0] / rule[0].props.rule[2] */
-  path: string
-  /** 该节点 props 的顶层键（rule 载体键除外）—— 补契约的工作量就是这个数 */
-  propsKeys: string[]
-  /**
-   * 出码器走不到这里的原因（null = 真能出码）。光看「类型有没有契约」会算进三类假覆盖：
-   *  unregistered:<类型> —— 这个节点自己或它某个祖先压根没登记，生成器在那里就降级成 unsupported；
-   *  carrier:<类型> —— 该类型把 props.rule 登记成 prop 透传（数据容器的 childRules），
-   *    子树是给组件内嵌 form-create 解释的数据，不是模板；
-   *  children:<类型> —— 子节点挂在 node.children（fcTable 画布态），生成器一条都不递归；
-   *  columns:<类型> —— 嵌在 props.columns[].rule 里，目前没有类型把它登记成 children 载体。
-   * 只保留最外层那个阻断点：补完它才看得见下一层。
-   */
-  blocked: string | null
-}
-
-/**
- * 组件节点遍历：走 schema 里真实存在的四处 rule 载体
- * （容器 props.rule、卡片/详情列内嵌 props.columns[].rule、画布态/布局容器的 node.children），
- * 与运行时取字段用的 formRuleWalk.ts:walkRules 同一口径 —— 少一处就少统计一类节点。
- */
-function collectNodes(rule: any[], prefix = 'rule', out: NodeRef[] = [], blocked: string | null = null): NodeRef[] {
-  ;(rule || []).forEach((node, i) => {
-    if (!node || typeof node !== 'object') return
-    const path = `${prefix}[${i}]`
-    const propsKeys = Object.keys(node.props || {}).filter((k) => k !== 'rule')
-    const contract = TYPE_CONTRACTS[node.type]
-    // 先有阻断就沿用：最高那个阻断点才是该先修的那个（下面再套几层都不改变结论）
-    const own = blocked ?? (contract ? null : `unregistered:${node.type}`)
-    if (typeof node.type === 'string') out.push({ type: node.type, path, propsKeys, blocked: own })
-    if (Array.isArray(node.props?.rule)) {
-      // 只有登记成 children 的 props.rule 才会被 planNode 递归（generate.ts 的子规则开关）
-      const carrier = own ?? (contract?.props?.rule?.emit === 'children' ? null : `carrier:${node.type}`)
-      collectNodes(node.props.rule, `${path}.props.rule`, out, carrier)
-    }
-    if (Array.isArray(node.children)) collectNodes(node.children, `${path}.children`, out, own ?? `children:${node.type}`)
-    ;(node.props?.columns || []).forEach((col: any, ci: number) => {
-      if (Array.isArray(col?.rule)) {
-        // 列载体与 props.rule 同一口径：契约把 columns 登记成 children 的（tableForm）才递归得进去
-        const colCarrier = own ?? (contract?.props?.columns?.emit === 'children' ? null : `columns:${node.type}`)
-        collectNodes(col.rule, `${path}.props.columns[${ci}].rule`, out, colCarrier)
-      }
-    })
-  })
-  return out
-}
-
-/** hole path 是否落在某个前缀子树内（边界必须是 . 或 [，别拿 rule[1] 当 rule[10] 的前缀） */
-function under(path: string, prefix: string): boolean {
-  return path === prefix || path.startsWith(`${prefix}.`) || path.startsWith(`${prefix}[`)
-}
-
-/** 空洞落在哪个组件子树上（最深的那个 rule 节点）—— 分桶和报表都要用它 */
-function ownerOf(holePath: string, nodes: NodeRef[]): NodeRef | undefined {
-  return nodes
-    .filter((n) => under(holePath, n.path))
-    .sort((a, b) => b.path.length - a.path.length)[0]
-}
-
-/**
- * 空洞分桶：
- *  A 未登记组件子树 —— 广度债，补 contract.ts 就消
- *  B 页面级（rule 之外：option / dataSources / actions）—— 页面骨架债，与组件类型无关
- *  C 已登记组件子树 —— 保真度 bug，编译器在真实数据上写错/漏写，这才是危险信号
- */
-type Bucket = 'A' | 'B' | 'C'
-
-function bucket(holePath: string, nodes: NodeRef[]): Bucket {
-  if (!holePath.startsWith('rule[')) return 'B'
-  const owner = ownerOf(holePath, nodes)
-  return owner && !TYPE_CONTRACTS[owner.type] ? 'A' : 'C'
-}
-
 interface Row {
   key: string
-  nodes: NodeRef[]
+  /** 节点表由出码报告给出（report.ts 的采集口径），本文件不另立一份 */
+  nodes: GenerateReport['nodes']
   registeredNodes: number
   /** 有契约**且**出码器走得到的节点（blocked 为空）：覆盖率只按这个数算 */
   emittableNodes: number
@@ -118,7 +44,7 @@ interface Row {
   /** B 桶明细 —— 页面级债的形态 */
   bHoles: { path: string; kind: string }[]
   failedRenames: number
-  failedRenameList: { path: string; to: string; detail: string; bucket: Bucket }[]
+  failedRenameList: { path: string; to: string; detail: string; bucket: 'A' | 'B' | 'C' }[]
   threw: string | null
 }
 
@@ -127,59 +53,50 @@ const memo: Row[] = []
 function audit(): Row[] {
   if (memo.length) return memo
   for (const { key, schema } of pages) {
-    const nodes = collectNodes(schema.rule || [])
-    const unregTypes = [...new Set(nodes.filter((n) => !TYPE_CONTRACTS[n.type]).map((n) => n.type))].sort()
     let threw: string | null = null
+    let nodes: Row['nodes'] = []
     let unsupported: Row['unsupported'] = []
-    let holes = 0
+    let registeredNodes = 0
+    let emittableNodes = 0
     let bucketA = 0
     let bucketB = 0
     let bucketC = 0
+    let holes = 0
+    let failedRenames = 0
     const cHoles: { path: string; kind: string; owner: string }[] = []
     const bHoles: { path: string; kind: string }[] = []
-    let failedRenames = 0
-    const failedRenameList: { path: string; to: string; detail: string; bucket: Bucket }[] = []
+    const failedRenameList: { path: string; to: string; detail: string; bucket: 'A' | 'B' | 'C' }[] = []
     try {
-      const res = generatePage(schema as any, { pageKey: key, pageName: key, exportedAt: 'corpus-audit' })
-      unsupported = res.manifest.unsupported
-      const vue = Object.keys(res.files).find((f) => f.endsWith('.vue'))!
-      const back = reverseToSchema(schema as any, res.files[vue], res.manifest)
-      holes = back.holes.length
-      for (const h of back.holes as any[]) {
-        const b = bucket(String(h.path), nodes)
-        if (b === 'A') bucketA += 1
-        else if (b === 'B') {
-          bucketB += 1
-          bHoles.push({ path: String(h.path), kind: String(h.kind) })
-        } else {
-          bucketC += 1
-          cHoles.push({
-            path: String(h.path),
-            kind: String(h.kind),
-            owner: ownerOf(String(h.path), nodes)?.type ?? '（不属于任何 rule 节点）',
-          })
-        }
+      const { report } = generatePage(schema as any, { pageKey: key, pageName: key, exportedAt: 'corpus-audit' })
+      nodes = report.nodes
+      unsupported = report.unsupported
+      registeredNodes = report.codegenRate.registeredNodes
+      emittableNodes = report.codegenRate.emittableNodes
+      bucketA = report.buckets.A
+      bucketB = report.buckets.B
+      bucketC = report.buckets.C
+      holes = report.holes.length
+      for (const h of report.holes) {
+        if (h.bucket === 'B') bHoles.push({ path: h.path, kind: h.kind })
+        else if (h.bucket === 'C') cHoles.push({ path: h.path, kind: h.kind, owner: h.owner || '（不属于任何 rule 节点）' })
       }
-      failedRenames = back.renameChecks.filter((r: any) => !r.ok).length
-      back.renameChecks
-        .filter((r: any) => !r.ok)
-        .forEach((r: any) =>
-          failedRenameList.push({
-            path: String(r.path),
-            to: String(r.to),
-            bucket: bucket(String(r.path), nodes),
-            detail: `产物=${JSON.stringify(r.artifact)} schema=${JSON.stringify(r.schema)}`,
-          }),
-        )
+      failedRenames = report.renameFailures.length
+      for (const r of report.renameFailures)
+        failedRenameList.push({
+          path: r.path,
+          to: r.to,
+          bucket: r.bucket,
+          detail: `产物=${JSON.stringify(r.artifact)} schema=${JSON.stringify(r.schema)}`,
+        })
     } catch (e: any) {
       threw = `${e.name}: ${e.message}`
     }
     memo.push({
       key,
       nodes,
-      registeredNodes: nodes.filter((n) => TYPE_CONTRACTS[n.type]).length,
-      emittableNodes: nodes.filter((n) => !n.blocked).length,
-      unregisteredTypes: unregTypes,
+      registeredNodes,
+      emittableNodes,
+      unregisteredTypes: [...new Set(nodes.filter((n) => !TYPE_CONTRACTS[n.type]).map((n) => n.type))].sort(),
       unsupported,
       holes,
       bucketA,
@@ -208,6 +125,25 @@ describe('语料体检：现网真实页面批量出码回读', () => {
     }
   })
 
+  it('基线桶计数与固化值一致（阶段 2 起只许变好，C 恒为 0）', () => {
+    const rs = audit()
+    const sum = (k: 'bucketA' | 'bucketB' | 'bucketC') => rs.reduce((s, r) => s + r[k], 0)
+    expect(sum('bucketA')).toBe(BASELINE.corpus.bucketA)
+    expect(sum('bucketB')).toBe(BASELINE.corpus.bucketB)
+    expect(sum('bucketC')).toBe(BASELINE.corpus.bucketC)
+  })
+
+  it('持续 Gate：C 桶必须为 0，可出码率不得低于上一基线（5.2）', () => {
+    const rs = audit()
+    const total = rs.reduce((s, r) => s + r.nodes.length, 0)
+    const emittable = rs.reduce((s, r) => s + r.emittableNodes, 0)
+    expect(rs.reduce((s, r) => s + r.bucketC, 0), 'C 桶必须为 0').toBe(0)
+    expect(
+      emittable / total,
+      `可出码率 ${emittable}/${total} 低于基线 ${BASELINE.corpus.emittableNodes}/${BASELINE.corpus.totalNodes}`,
+    ).toBeGreaterThanOrEqual(BASELINE.corpus.nodeRate)
+  })
+
   it('分母诚实：覆盖率只算「有契约且出码器真走得到」，走不到的按最外层阻断点归因', () => {
     const rs = audit()
     const total = rs.reduce((s, r) => s + r.nodes.length, 0)
@@ -215,20 +151,21 @@ describe('语料体检：现网真实页面批量出码回读', () => {
     const emittable = rs.reduce((s, r) => s + r.emittableNodes, 0)
     // 旧口径把 registered 当分子，报出 82.8%；7D 修仪器后只有 56.1%，差值就是那批
     // 「类型登记了、生成器却进不去」的假覆盖。9 登记嵌套容器（group/tableForm/subForm/select）
-    // 并把 columns 载体接进递归后，可出码 88/98：剩下的 10 个是 fcTable 子树与数据容器 childRules。
-    expect(total).toBe(98)
-    expect(registered).toBe(94)
-    expect(emittable).toBe(88)
+    // 并把 columns 载体接进递归；P2 阶段 2 登记 fcTable（children 按 slot 递归）后，可出码 94/98：
+    // 剩下 4 个是数据容器的 childRules（3，数据不是模板）与一张 material 节点（1，首版不支持）。
+    // 数字固化在 baseline.ts：Gate 只许不降。
+    expect(total).toBe(BASELINE.corpus.totalNodes)
+    expect(registered).toBe(BASELINE.corpus.registeredNodes)
+    expect(emittable).toBe(BASELINE.corpus.emittableNodes)
 
     const of = (key: string) => rs.find((r) => r.key === key)!
-    // fcTable：子节点挂 node.children，生成器不 walk。这 5 个全是已登记类型，旧口径白送 5 分。
+    // fcTable 整页可出码：表本体 + 5 个 slot 子节点都走得到。
+    // 旧口径下这 5 个子节点挂在 node.children，生成器不 walk，已登记的类型白送 5 分。
     const dash = of('dashboard')
     expect(dash.nodes.map((n) => n.type)).toEqual(['fcTable', 'dash-todo', 'dash-kpi', 'dash-kpi', 'dash-chart', 'dash-chart'])
-    expect(dash.emittableNodes).toBe(0)
-    // 归因只报最外层那个阻断点：fcTable 未登记是先要补的，补完才会露出 children 这一层
-    expect([...new Set(dash.nodes.filter((n) => n.path.includes('.children')).map((n) => n.blocked))]).toEqual([
-      'unregistered:fcTable',
-    ])
+    expect(dash.emittableNodes).toBe(6)
+    // fcTable 登记成 table 载体后，children 不再算阻断；5 个 slot 子节点全部可出码
+    expect([...new Set(dash.nodes.filter((n) => n.path.includes('.children')).map((n) => n.blocked))]).toEqual([null])
     // 数据容器：props.rule 登记成 prop 透传（childRules），子树是数据不是模板，递归进去就是双份真相
     const dc = of('tmp_data_container_verify')
     expect(dc.emittableNodes).toBe(3)

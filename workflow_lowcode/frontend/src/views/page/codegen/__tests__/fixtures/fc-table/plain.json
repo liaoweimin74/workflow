@@ -1,0 +1,54 @@
+{
+  "rule": [
+    {
+      "type": "fcTable",
+      "props": {
+        "rule": {
+          "row": 1,
+          "col": 2,
+          "style": {},
+          "class": {},
+          "layout": []
+        }
+      },
+      "children": [
+        {
+          "type": "dash-kpi",
+          "field": "kpiA",
+          "title": "A",
+          "col": { "span": 24 },
+          "props": { "title": "A", "agg": "count", "dataSourceId": "ds_def", "span": 24, "height": "100%" },
+          "slot": "0:0",
+          "_fc_id": "id_kpiA",
+          "name": "ref_kpiA",
+          "_fc_drag_tag": "dash-kpi",
+          "display": true,
+          "hidden": false
+        },
+        {
+          "type": "dash-kpi",
+          "field": "kpiB",
+          "title": "B",
+          "col": { "span": 24 },
+          "props": { "title": "B", "agg": "count", "dataSourceId": "ds_def", "span": 24, "height": "100%" },
+          "slot": "0:1",
+          "_fc_id": "id_kpiB",
+          "name": "ref_kpiB",
+          "_fc_drag_tag": "dash-kpi",
+          "display": true,
+          "hidden": false
+        }
+      ],
+      "_fc_id": "id_plain",
+      "name": "ref_plain",
+      "_fc_drag_tag": "fcTable",
+      "display": true,
+      "hidden": false
+    }
+  ],
+  "option": {
+    "form": { "inline": false, "hideRequiredAsterisk": false, "labelPosition": "top", "size": "default", "labelWidth": "auto" }
+  },
+  "dataSources": [{ "id": "ds_def", "refId": "ds-builtin-process-definitions", "name": "流程定义" }],
+  "actions": []
+}

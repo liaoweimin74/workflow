@@ -1,0 +1,41 @@
+{
+  "name": "@lc/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "出码产物的页面运行时边界：列表 / 容器 / 字段控件 / 取数 / 工具",
+  "exports": {
+    "./package.json": "./package.json",
+    "./FormulaField": "./src/FormulaField.ts",
+    "./LookupPicker": "./src/LookupPicker.ts",
+    "./dash-chart": "./src/dash-chart.ts",
+    "./dash-filter": "./src/dash-filter.ts",
+    "./dash-kpi": "./src/dash-kpi.ts",
+    "./dash-notice": "./src/dash-notice.ts",
+    "./dash-todo": "./src/dash-todo.ts",
+    "./dataPicker": "./src/dataPicker.ts",
+    "./http": "./src/http.ts",
+    "./lookupFetch": "./src/lookupFetch.ts",
+    "./page-chart": "./src/page-chart.ts",
+    "./page-data-container": "./src/page-data-container.ts",
+    "./page-detail": "./src/page-detail.ts",
+    "./page-list-cards": "./src/page-list-cards.ts",
+    "./page-steps": "./src/page-steps.ts",
+    "./page-table": "./src/page-table.ts"
+  },
+  "scripts": {
+    "build": "vite build"
+  },
+  "peerDependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@form-create/designer": "^3.5.0",
+    "@form-create/element-ui": "^3.3.0",
+    "axios": "^1.18.1",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.14.3",
+    "markdown-it": "^15.0.1",
+    "pinia": "^4.0.2",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
+  }
+}

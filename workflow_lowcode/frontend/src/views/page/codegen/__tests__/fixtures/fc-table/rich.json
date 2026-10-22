@@ -1,0 +1,105 @@
+{
+  "rule": [
+    {
+      "type": "fcTable",
+      "props": {
+        "rule": {
+          "row": 3,
+          "col": 4,
+          "style": {
+            "0:0": { "width": "200px", "height": "120px" },
+            "0:2": { "width": "120px" }
+          },
+          "class": { "0:0": "hero-cell" },
+          "layout": [
+            { "top": 0, "left": 0, "row": 2, "col": 2 },
+            { "top": 2, "left": 0, "row": 1, "col": 4 }
+          ]
+        }
+      },
+      "children": [
+        {
+          "type": "dash-todo",
+          "field": "todo1",
+          "title": "待办",
+          "col": { "span": 24 },
+          "props": { "view": "todo", "limit": 5, "orderBy": "priority", "span": 24, "height": "100%" },
+          "slot": "0:0",
+          "_fc_id": "id_todo1",
+          "name": "ref_todo1",
+          "_fc_drag_tag": "dash-todo",
+          "display": true,
+          "hidden": false
+        },
+        {
+          "type": "dash-kpi",
+          "field": "kpi1",
+          "title": "定义数",
+          "col": { "span": 24 },
+          "props": {
+            "title": "流程定义数",
+            "agg": "count",
+            "dataSourceId": "ds_def",
+            "span": 24,
+            "height": "100%"
+          },
+          "slot": "1:1",
+          "_fc_id": "id_kpi1",
+          "name": "ref_kpi1",
+          "_fc_drag_tag": "dash-kpi",
+          "display": true,
+          "hidden": false
+        },
+        {
+          "type": "dash-chart",
+          "field": "chart1",
+          "title": "趋势",
+          "col": { "span": 24 },
+          "props": {
+            "title": "发起趋势",
+            "chartType": "line",
+            "group": "start_time",
+            "agg": "count",
+            "dataSourceId": "ds_inst",
+            "span": 24,
+            "height": "100%"
+          },
+          "slot": "0:3",
+          "_fc_id": "id_chart1",
+          "name": "ref_chart1",
+          "_fc_drag_tag": "dash-chart",
+          "display": true,
+          "hidden": false
+        },
+        {
+          "type": "dash-notice",
+          "field": "notice1",
+          "title": "公告",
+          "col": { "span": 24 },
+          "props": { "title": "公告栏", "limit": 5, "span": 24, "height": "100%" },
+          "slot": "2:2",
+          "_fc_id": "id_notice1",
+          "name": "ref_notice1",
+          "_fc_drag_tag": "dash-notice",
+          "display": true,
+          "hidden": false
+        }
+      ],
+      "_fc_id": "id_table",
+      "name": "ref_table",
+      "_fc_drag_tag": "fcTable",
+      "display": true,
+      "hidden": false
+    }
+  ],
+  "option": {
+    "form": { "inline": false, "hideRequiredAsterisk": false, "labelPosition": "top", "size": "default", "labelWidth": "auto" },
+    "resetBtn": { "show": false, "innerText": "重置" },
+    "submitBtn": { "show": true, "innerText": "提交" }
+  },
+  "dataSources": [
+    { "id": "ds_def", "refId": "ds-builtin-process-definitions", "name": "流程定义" },
+    { "id": "ds_inst", "refId": "ds-builtin-process-instances", "name": "流程实例" }
+  ],
+  "actions": []
+}

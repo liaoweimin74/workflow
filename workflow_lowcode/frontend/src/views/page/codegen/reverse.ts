@@ -13,7 +13,7 @@
 
 import { parse as parseSfc } from '@vue/compiler-sfc'
 import { parse as parseAst } from '@babel/parser'
-import type { GeneratedManifest, NodeArtifact } from './generate'
+import type { GeneratedManifest, NodeArtifact } from './ir'
 
 export interface Hole {
   path: string
@@ -97,6 +97,91 @@ function nodeIdOf(el: Ctx): string | undefined {
     if (p.type === 6 && String(p.name) === 'lc:node') return String(p.value?.content ?? '')
   }
   return undefined
+}
+
+/** 静态属性值（type 6）；带绑定的属性不在这里读 */
+function staticAttr(el: Ctx | undefined, name: string): string | undefined {
+  for (const p of el?.props || []) {
+    if (p.type === 6 && String(p.name) === name) return String(p.value?.content ?? '')
+  }
+  return undefined
+}
+
+const elChildren = (el: Ctx | undefined): Ctx[] => (el?.children || []).filter((c: Ctx) => c.type === 1)
+
+/** 内联样式串 → 对象：emit 按 `键: 值; 键: 值` 输出，回读按同一口径还原（kebab → camel） */
+function cssObject(text: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const decl of (text || '').split(';')) {
+    const i = decl.indexOf(':')
+    if (i <= 0) continue
+    const k = decl.slice(0, i).trim()
+    const v = decl.slice(i + 1).trim()
+    if (k && v) out[camel(k)] = v
+  }
+  return out
+}
+
+interface TableGeom {
+  rows: number
+  cols: number
+  layout: Array<{ top: number; left: number; row: number; col: number }>
+  style: Record<string, Record<string, string>>
+  className: Record<string, string>
+  border: boolean
+  mini: boolean
+  formStyle: boolean
+  borderColor?: string
+  borderWidth?: string
+}
+
+/**
+ * 静态表格 → 几何。td 的列坐标由「行内游标 + 已占用格」算出（rowspan 会占住后续行），
+ * colspan/rowspan > 1 的可见格即 layout。产物只保留几何、没有原始 layout 项序，
+ * 回读按行优先给规范序 —— 同一几何换了 layout 顺序会被报成差异，这是有意的严格。
+ */
+function tableGeomOf(table: Ctx | undefined): TableGeom {
+  const trs = elChildren(table).filter((c) => c.tag === 'tr')
+  const taken = new Set<string>()
+  const cells: Array<{ row: number; col: number; rowspan: number; colspan: number; el: Ctx }> = []
+  trs.forEach((tr, r) => {
+    let c = 0
+    for (const td of elChildren(tr).filter((x) => x.tag === 'td')) {
+      while (taken.has(`${r}:${c}`)) c++
+      const rowspan = Math.max(1, Number(staticAttr(td, 'rowspan') ?? 1) || 1)
+      const colspan = Math.max(1, Number(staticAttr(td, 'colspan') ?? 1) || 1)
+      for (let dr = 0; dr < rowspan; dr++) {
+        for (let dc = 0; dc < colspan; dc++) taken.add(`${r + dr}:${c + dc}`)
+      }
+      cells.push({ row: r, col: c, rowspan, colspan, el: td })
+      c += colspan
+    }
+  })
+  const style: Record<string, Record<string, string>> = {}
+  const className: Record<string, string> = {}
+  for (const cell of cells) {
+    const slot = `${cell.row}:${cell.col}`
+    const s = cssObject(staticAttr(cell.el, 'style'))
+    if (Object.keys(s).length) style[slot] = s
+    const cls = staticAttr(cell.el, 'class')
+    if (cls) className[slot] = cls
+  }
+  const tableStyle = cssObject(staticAttr(table, 'style'))
+  const classes = (staticAttr(table, 'class') || '').split(/\s+/).filter(Boolean)
+  return {
+    rows: trs.length,
+    cols: cells.reduce((m, c) => Math.max(m, c.col + c.colspan), 0),
+    layout: cells
+      .filter((c) => c.rowspan > 1 || c.colspan > 1)
+      .map((c) => ({ top: c.row, left: c.col, row: c.rowspan, col: c.colspan })),
+    style,
+    className,
+    border: !classes.includes('lc-fc-table--no-border'),
+    mini: classes.includes('lc-fc-table--mini'),
+    formStyle: classes.includes('lc-fc-table--form'),
+    borderColor: tableStyle.borderColor,
+    borderWidth: tableStyle.borderWidth,
+  }
 }
 
 interface Template {
@@ -297,6 +382,17 @@ export function reverseToSchema(
     },
     footerConfirmButton: () => footerButtons().some((x) => /确定|保存/.test(x)),
     footerCancelButton: () => footerButtons().some((x) => /取消/.test(x)),
+    // fcTable 的五个几何键都只能从 td 坐标反推（产物里没有 rule 对象）
+    tableRows: (node) => tableGeomOf(elFor(node)).rows,
+    tableCols: (node) => tableGeomOf(elFor(node)).cols,
+    tableLayout: (node) => tableGeomOf(elFor(node)).layout,
+    tableStyle: (node) => tableGeomOf(elFor(node)).style,
+    tableClass: (node) => tableGeomOf(elFor(node)).className,
+    tableBorder: (node) => tableGeomOf(elFor(node)).border,
+    tableMini: (node) => tableGeomOf(elFor(node)).mini,
+    tableFormStyle: (node) => tableGeomOf(elFor(node)).formStyle,
+    tableBorderColor: (node) => tableGeomOf(elFor(node)).borderColor ?? '',
+    tableBorderWidth: (node) => tableGeomOf(elFor(node)).borderWidth ?? '',
   }
 
   function resolveEvidence(to: string, node: NodeArtifact): unknown {

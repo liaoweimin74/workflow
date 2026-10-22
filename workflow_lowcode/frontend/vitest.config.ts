@@ -11,9 +11,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      // 【真机探测 spike，未合并】出码相关测试要读 runtime 组件自己的 props 表，
-      // 与 vite.config.ts / tsconfig.json 用同一套别名，别出现第二份真相
-      '@lc/runtime': path.resolve(__dirname, 'src/lc-runtime'),
     },
   },
   test: {

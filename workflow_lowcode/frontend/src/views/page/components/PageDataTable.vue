@@ -227,9 +227,10 @@ const props = withDefaults(defineProps<{
   summaryRow?: boolean | { enabled?: boolean }
   styleRule?: CardStyle
   /**
-   * 按钮语义交给宿主：为真时 action/toolbar 按钮一律 emit `button-click`，
-   * 既不派发到 pageActionBus，也不弹组件自带的兜底表单（那份表单按数据源业务
-   * 表单生成 rule，跟页面配的容器不是同一个）。运行态渲染器不传，行为不变。
+   * 事件语义交给宿主（出码产物）：为真时按钮/行/单元格/选择/排序一律只 emit，
+   * 既不派发到 pageActionBus，也不再自跑 viewEvents 与列级 onCellClick 链，
+   * 更不弹组件自带的兜底表单（那份表单按数据源业务表单生成 rule，跟页面配的容器不是同一个）。
+   * 运行态渲染器不传，行为不变。
    */
   externalActions?: boolean
   /** 附加属性（border/stripe 等） */
@@ -248,6 +249,10 @@ const emit = defineEmits<{
   (e: 'selection-change', rows: any[]): void
   /** externalActions 模式下按钮的唯一出口 */
   (e: 'button-click', payload: { key: string; label: string; row: Record<string, unknown> | null }): void
+  /** 单元格点击（列链的产物出口）：与 el-table 同款两参数 (row, column)，产物按 column.property 找列配置 */
+  (e: 'cell-click', row: any, column: any): void
+  /** 排序变化（组件链的产物出口）：只给 prop/order，column 对象对产物没有额外信息 */
+  (e: 'sort-change', payload: { prop: string; order: string }): void
 }>()
 
 const tableRef = ref<InstanceType<typeof SearchTable> | null>(null)
@@ -1030,12 +1035,12 @@ async function dispatchButtonAction(
     case 'set-page': {
       const page = parseInt(resolved.page, 10)
       if (!isNaN(page) && page > 0) {
-        tableRef.value?.setQuery({ page }, false)
+        setPage(page)
       }
       break
     }
     case 'set-sort':
-      tableRef.value?.sort(resolved.field || resolved.prop || '', resolved.order || 'ascending')
+      setSort(resolved.field || resolved.prop || '', resolved.order || 'ascending')
       break
     case 'clear-selection':
       tableRef.value?.clearSelection()
@@ -1179,12 +1184,16 @@ function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; co
 
 function handleRowClick(row: any, _column?: any, _event?: Event) {
   emit('row-click', row)
+  // 接管模式：产物里的 onRowClick 是唯一执行者，组件再派总线/再跑链就是双执行
+  if (props.externalActions) return
   actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
   triggerViewEvents('row-click', 'table', { row })
 }
 
 /** 单元格点击（新增） */
 function handleCellClick(row: any, column: any) {
+  emit('cell-click', row, column)
+  if (props.externalActions) return
   // 列级 onCellClick 短路整表级 cell-click（点击该列触发列级事件链）
   const col = (props.columns || []).find(
     (c: any) => (c.key ?? c.prop) === (column?.property ?? column?.prop),
@@ -1202,11 +1211,14 @@ function handleCellClick(row: any, column: any) {
 function handleSelectionChange(selection: any[]) {
   selectedRows.value = selection || []
   emit('selection-change', selectedRows.value)
+  if (props.externalActions) return
   triggerViewEvents('selection-change', 'table', { selectedRows: selectedRows.value })
 }
 
 /** 排序变化（新增） */
 function handleSortChange(args: { column: any; prop: string; order: string }) {
+  emit('sort-change', { prop: args.prop, order: args.order })
+  if (props.externalActions) return
   triggerViewEvents('sort-change', 'table', { column: args.column, prop: args.prop, order: args.order })
 }
 
@@ -1225,6 +1237,16 @@ function resetFilter() {
   tableRef.value?.fetchList()
 }
 
+/** 跳页（动作链 set-page 的暴露面：内部 SearchTable 的 setQuery 不直接给产物） */
+function setPage(page: number) {
+  tableRef.value?.setQuery({ page }, false)
+}
+
+/** 服务端排序（动作链 set-sort 的暴露面），order 取 ascending/descending */
+function setSort(field: string, order: string) {
+  tableRef.value?.sort(field, order || 'ascending')
+}
+
 function openCreate() {
   tableRef.value?.openFormDialog()
 }
@@ -1235,6 +1257,8 @@ defineExpose({
   records,
   setFilter,
   resetFilter,
+  setPage,
+  setSort,
   openCreate,
   /** 已选行集合（批量动作挂载点；ref 经 expose 自动解包） */
   selectedRows,

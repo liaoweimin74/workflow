@@ -443,6 +443,8 @@ onMounted(() => {
 
 function handleRowClick(row: any) {
   emit('row-click', row)
+  // 接管模式：产物的 onRowClick 是唯一执行者，组件再派一次总线就是双执行
+  if (props.externalActions) return
   actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
 }
 

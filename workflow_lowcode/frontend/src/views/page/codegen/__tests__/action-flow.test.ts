@@ -89,11 +89,13 @@ describe('组件级动作链：现网 0 样本，产物当前不执行', () => {
     return schema
   }
 
-  it('按钮链登记 unsupported，产物不生成该按钮的 case（点击落空）', () => {
+  it('按钮链逐步判不了：产物不生成该按钮的 case（点击落空），也不还原兜底', () => {
     const { gen, source } = run(withChain())
-    const u = gen.manifest.unsupported.find((x) => x.path.includes('buttons(edit).events'))!
-    expect(u.key).toBe('edit')
-    expect(u.message).toContain('不接线')
+    const us = gen.manifest.unsupported.filter((x) => x.path.includes('buttons(edit).events'))
+    // 阶段 4 起按步登记（哪一步判不了就说哪一步），不再是一整条 key=按钮名
+    expect(us.map((u) => u.key)).toEqual(['set-filter', 'refresh'])
+    expect(us.every((u) => u.message.includes('不接线'))).toBe(true)
+    // 链消费点击：卡片拿不到实例，兜底也不能当这个按钮的语义
     expect(source).not.toMatch(/case 'edit':/)
     // 打开容器的执行函数仍会因 delete 之外的内建按钮或容器生成，但 edit 不再是入口
     expect(source).toContain("@button-click=\"onButtonClick\"")
@@ -105,18 +107,20 @@ describe('组件级动作链：现网 0 样本，产物当前不执行', () => {
     expect(source).toContain("value: '$row.status'")
   })
 
-  it('列点击链整块不出码：产物无 onCellClick，登记 not-in-artifact 后回读不报丢失', () => {
+  it('列点击链编不进产物时整块不出码：登记 not-in-artifact 后回读不报丢失', () => {
     const schema = clone(testPageSchema)
-    schema.rule[0].props.columns[0].onCellClick = {
-      actions: [{ type: 'open-link', params: [{ key: 'url', value: '/detail/$row.id' }] }],
-    }
-    const { gen, source, rev } = run(schema, 'test_page_cell_chain')
-    const drop = gen.manifest.nodes
-      .find((n) => n.rulePath === 'rule[0]')!
-      .warnings.find((w) => w.path === 'props.columns[0].onCellClick')!
-    expect(drop.kind).toBe('not-in-artifact')
-    expect(source).not.toContain('onCellClick')
+    // 卡片没有 handleCellClick 那层分发器：列级链配了也没人执行
+    const cards = clone(cardlist)
+    listNode(cards).props.columns = [
+      { prop: 'customer_name', label: '客户', onCellClick: { actions: [{ type: 'open-link', params: [{ key: 'url', value: '/x' }] }] } },
+    ]
+    const { gen, source, rev } = run(cards, 'cardlist_cell_chain')
+    expect(gen.manifest.unsupported.some((x) => x.message.includes('onCellClick'))).toBe(true)
+    expect(source).not.toContain('@cell-click')
     expect(rev.holes).toEqual([])
+    // 同一支链在 page-table 上是丢弃登记（阶段 4 的透传面见 action-chain.test.ts）
+    const plain = run(schema, 'test_page_cell_chain')
+    expect(plain.gen.manifest.nodes.find((n) => n.rulePath === 'rule[0]')!.warnings.some((w) => w.path === 'props.columns[0].onCellClick')).toBe(false)
   })
 })
 

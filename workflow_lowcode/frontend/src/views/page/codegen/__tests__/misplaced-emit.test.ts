@@ -42,7 +42,7 @@ const pages = [
 ]
   .sort((a, b) => a.key.localeCompare(b.key))
 
-/** runtime 标签 → 组件（@lc/runtime 还没成包，这里走 src/lc-runtime/ 的 shim，指向的就是真组件） */
+/** runtime 标签 → 组件（经 @lc/runtime 包解析，和产物拿到的是同一份实现） */
 const RUNTIME_COMPONENTS: Record<string, unknown> = {
   'page-table': PageTable,
   'page-list-cards': PageListCards,

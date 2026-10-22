@@ -81,9 +81,9 @@ describe('出码 spike 1：generate → reverse 闭环', () => {
 
   it('整块出码的列里，登记丢弃的点击链会被剥掉', () => {
     const withChain = JSON.parse(JSON.stringify(schema))
-    withChain.rule[0].props.columns[0].onCellClick = {
-      actions: [{ type: 'open-container', params: [{ key: 'target', value: 'ds_mu2jhb3n' }] }],
-    }
+    // 阶段 4 起真配了动作的列链会编进 onCellClick（随 columns 常量透传）；这里给的是面板存过的空链，
+    // 仍然按丢弃登记 —— 丢弃剥键这条机制本身要有人核
+    withChain.rule[0].props.columns[0].onCellClick = { actions: [] }
     const gen = generatePage(withChain, META)
     const drop = gen.manifest.nodes
       .find((n) => n.rulePath === 'rule[0]')!

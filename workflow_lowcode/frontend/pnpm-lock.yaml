@@ -38,6 +38,9 @@ importers:
       '@form-create/element-ui':
         specifier: ^3.3.1
         version: 3.3.5(vue@3.5.40(typescript@6.0.3))
+      '@lc/runtime':
+        specifier: file:packages/lc-runtime
+        version: file:packages/lc-runtime(@element-plus/icons-vue@2.3.2(vue@3.5.40(typescript@6.0.3)))(@form-create/designer@3.5.0(vue@3.5.40(typescript@6.0.3)))(@form-create/element-ui@3.3.5(vue@3.5.40(typescript@6.0.3)))(axios@1.18.1(debug@4.4.3))(echarts@5.6.0)(element-plus@2.14.3(vue@3.5.40(typescript@6.0.3)))(markdown-it@15.0.2)(pinia@4.0.2(@vue/devtools-api@8.1.5)(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(vue-router@4.6.4(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
       '@lezer/highlight':
         specifier: ^1
         version: 1.2.5
@@ -417,6 +420,20 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@lc/runtime@file:packages/lc-runtime':
+    resolution: {directory: packages/lc-runtime, type: directory}
+    peerDependencies:
+      '@element-plus/icons-vue': ^2.3.2
+      '@form-create/designer': ^3.5.0
+      '@form-create/element-ui': ^3.3.0
+      axios: ^1.18.1
+      echarts: ^5.6.0
+      element-plus: ^2.14.3
+      markdown-it: ^15.0.1
+      pinia: ^4.0.2
+      vue: ^3.5.40
+      vue-router: ^4.6.4
 
   '@lezer/common@1.5.3':
     resolution: {integrity: sha512-H0iErY4e43LpXbYDyBci5W4v/RwTgGV3YzYOlJPiGZ8RY8w51kVE+xLn1tg3Z6UmSfyETvtsUK3r7YsgDQEI7Q==}
@@ -2342,6 +2359,19 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@lc/runtime@file:packages/lc-runtime(@element-plus/icons-vue@2.3.2(vue@3.5.40(typescript@6.0.3)))(@form-create/designer@3.5.0(vue@3.5.40(typescript@6.0.3)))(@form-create/element-ui@3.3.5(vue@3.5.40(typescript@6.0.3)))(axios@1.18.1(debug@4.4.3))(echarts@5.6.0)(element-plus@2.14.3(vue@3.5.40(typescript@6.0.3)))(markdown-it@15.0.2)(pinia@4.0.2(@vue/devtools-api@8.1.5)(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(vue-router@4.6.4(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))':
+    dependencies:
+      '@element-plus/icons-vue': 2.3.2(vue@3.5.40(typescript@6.0.3))
+      '@form-create/designer': 3.5.0(vue@3.5.40(typescript@6.0.3))
+      '@form-create/element-ui': 3.3.5(vue@3.5.40(typescript@6.0.3))
+      axios: 1.18.1(debug@4.4.3)
+      echarts: 5.6.0
+      element-plus: 2.14.3(vue@3.5.40(typescript@6.0.3))
+      markdown-it: 15.0.2
+      pinia: 4.0.2(@vue/devtools-api@8.1.5)(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3))
+      vue: 3.5.40(typescript@6.0.3)
+      vue-router: 4.6.4(vue@3.5.40(typescript@6.0.3))
 
   '@lezer/common@1.5.3': {}
 

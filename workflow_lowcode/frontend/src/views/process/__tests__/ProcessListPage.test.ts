@@ -36,18 +36,23 @@ vi.mock('element-plus', async () => {
   const actual = await vi.importActual('element-plus')
   return { ...actual, ElMessage: { success: vi.fn(), error: vi.fn() }, ElMessageBox: { confirm: vi.fn(), alert: vi.fn() } }
 })
-vi.mock('@element-plus/icons-vue', () => ({
-  Plus: { name: 'Plus', render: () => h('span', '+') },
-  Fold: { name: 'Fold', render: () => h('span', '◁') },
-  Expand: { name: 'Expand', render: () => h('span', '▷') },
-  Edit: { name: 'Edit', render: () => h('span', '✎') },
-  Upload: { name: 'Upload', render: () => h('span', '↑') },
-  CopyDocument: { name: 'CopyDocument', render: () => h('span', '⊕') },
-  Delete: { name: 'Delete', render: () => h('span', '×') },
-  Clock: { name: 'Clock', render: () => h('span', '◷') },
-  FolderOpened: { name: 'FolderOpened', render: () => h('span', '▽') },
-  Close: { name: 'Close', render: () => h('span', '×') },
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  // 部分 mock：element-plus 自身也要从图标包取组件，整份替换会让它加载失败
+  const actual = await vi.importActual<Record<string, unknown>>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    Plus: { name: 'Plus', render: () => h('span', '+') },
+    Fold: { name: 'Fold', render: () => h('span', '◁') },
+    Expand: { name: 'Expand', render: () => h('span', '▷') },
+    Edit: { name: 'Edit', render: () => h('span', '✎') },
+    Upload: { name: 'Upload', render: () => h('span', '↑') },
+    CopyDocument: { name: 'CopyDocument', render: () => h('span', '⊕') },
+    Delete: { name: 'Delete', render: () => h('span', '×') },
+    Clock: { name: 'Clock', render: () => h('span', '◷') },
+    FolderOpened: { name: 'FolderOpened', render: () => h('span', '▽') },
+    Close: { name: 'Close', render: () => h('span', '×') },
+  }
+})
 
 const ElMessage = (await import('element-plus')).ElMessage as any
 const { processDesignApi, deployedProcessApi } = await import('@/api/processDefinition') as any

@@ -41,19 +41,24 @@ vi.mock('element-plus', async () => {
   const actual = await vi.importActual('element-plus')
   return { ...actual, ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn() } }
 })
-vi.mock('@element-plus/icons-vue', () => ({
-  Plus: { name: 'Plus', render: () => h('span', '+') },
-  Delete: { name: 'Delete', render: () => h('span', '×') },
-  Edit: { name: 'Edit', render: () => h('span', '✎') },
-  View: { name: 'View', render: () => h('span', '👁') },
-  Close: { name: 'Close', render: () => h('span', '✕') },
-  Grid: { name: 'Grid', render: () => h('span', '☰') },
-  Rank: { name: 'Rank', render: () => h('span', '⇅') },
-  CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
-  CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
-  QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
-  Lock: { name: 'Lock', render: () => h('span', '🔒') },
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  // 部分 mock：element-plus 自身也要从图标包取组件（SuccessFilled 等），整份替换会让它加载失败
+  const actual = await vi.importActual<Record<string, unknown>>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    Plus: { name: 'Plus', render: () => h('span', '+') },
+    Delete: { name: 'Delete', render: () => h('span', '×') },
+    Edit: { name: 'Edit', render: () => h('span', '✎') },
+    View: { name: 'View', render: () => h('span', '👁') },
+    Close: { name: 'Close', render: () => h('span', '✕') },
+    Grid: { name: 'Grid', render: () => h('span', '☰') },
+    Rank: { name: 'Rank', render: () => h('span', '⇅') },
+    CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
+    CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
+    QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
+    Lock: { name: 'Lock', render: () => h('span', '🔒') },
+  }
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {} }),

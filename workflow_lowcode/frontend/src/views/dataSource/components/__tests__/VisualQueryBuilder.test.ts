@@ -13,10 +13,15 @@ import VisualQueryBuilder, {
   parseJoinOn,
 } from '../VisualQueryBuilder.vue'
 
-vi.mock('@element-plus/icons-vue', () => ({
-  Plus: { name: 'Plus', render: () => h('span', '+') },
-  Delete: { name: 'Delete', render: () => h('span', '×') },
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  // 部分 mock：element-plus 自身也要从图标包取组件，整份替换会让它加载失败
+  const actual = await vi.importActual<Record<string, unknown>>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    Plus: { name: 'Plus', render: () => h('span', '+') },
+    Delete: { name: 'Delete', render: () => h('span', '×') },
+  }
+})
 
 function makeModel(overrides: Partial<VisualQueryConfig> = {}): VisualQueryConfig {
   return {

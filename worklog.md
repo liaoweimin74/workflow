@@ -9761,3 +9761,16 @@ Work Log:
 Stage Summary:
 - 事件 #126（冷启动降级亚型）单轮闭环，零 mvn 第 110 次；累计 126 次
 - 再次实证：自动 recover 的「无 jar 备份→mvn」误报仍待授权修复
+---
+Task ID: r214
+Agent: main (cron 轻量运维)
+Task: 2026-10-22 21:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4 但 auth=no such table: SYS_USER → 事件 #127（标准重供给，Node 占 8080）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → timeout 170 recover（工具 180s 杀，幸存型）
+- 复验：java pid 1442 拉起，auth 真绿；40s 全绿 200×4 + nodeProbe 200；内存 3190MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #127 单轮闭环，零 mvn 第 111 次；累计 127 次

@@ -318,6 +318,8 @@ async function handleLocalSubmit() {
   if (localFormMode.value === 'view') return
   const cfg = formConfig.value
   if (!cfg) return
+  const valid = await localFormRef.value?.validate?.()
+  if (valid === false) return
   const formData = localFormRef.value?.getFormData() || {}
   localSaving.value = true
   try {

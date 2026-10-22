@@ -656,6 +656,9 @@ async function handleDelete(row: any) {
 }
 
 async function handleDialogSubmit() {
+  const valid = await formRendererRef.value?.validate?.()
+  if (valid === false) return
+
   const formData = formRendererRef.value?.getFormData() || {}
 
   formLoading.value = true

@@ -398,6 +398,15 @@ async function handleSaveDraft() {
   }
 }
 
+/** 提交/通过前校验表单：失败时指出具体字段（form-create 已把该项标红） */
+async function validateForm(): Promise<boolean> {
+  if (!formRendererRef.value) return true
+  const valid = await formRendererRef.value.validate()
+  if (valid) return true
+  ElMessage.warning(formRendererRef.value.getValidateError() || '请检查表单中标红的必填项')
+  return false
+}
+
 /**
  * 重新提交（发起节点）：保存表单数据后完成任务，推进流程。
  * 退回到发起人修改后重新走流程的唯一入口。
@@ -407,11 +416,12 @@ async function handleResubmit() {
     ElMessage.warning('当前节点无表单')
     return
   }
+  if (!(await validateForm())) return
   actionLoading.value = 'approve'
   try {
     const ok = await formRendererRef.value.submit()
     if (!ok) {
-      ElMessage.warning('表单校验未通过，请检查必填项')
+      ElMessage.warning('表单保存失败，请重试')
       return
     }
     await taskApi.complete(taskId, {})
@@ -434,6 +444,7 @@ async function handleComplete() {
     ElMessage.warning('请完成手写签名')
     return
   }
+  if (!(await validateForm())) return
   actionLoading.value = 'approve'
   try {
     // 先保存当前表单数据 + 冻结快照，确保下一个节点能读到

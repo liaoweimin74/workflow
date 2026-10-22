@@ -46,9 +46,12 @@ function createWrapper(props: {
   })
 }
 
+/** 表单校验结果，测试可 mockResolvedValueOnce(false) 模拟校验失败 */
+const validateMock = vi.fn(async () => true)
+
 /**
  * Stub for FormRenderer component.
- * Captures props and exposes getFormData() for testing submit flow.
+ * Captures props and exposes getFormData()/validate() for testing submit flow.
  */
 const FormRendererStub = defineComponent({
   name: 'FormRenderer',
@@ -67,6 +70,7 @@ const FormRendererStub = defineComponent({
       dataSources: props.dataSources,
       getFormData: () => data.value,
       setFormData: (val: Record<string, any>) => { data.value = val },
+      validate: validateMock,
     }
   },
   render() {
@@ -590,6 +594,28 @@ describe('SearchTable — FormRenderer 集成', () => {
     // createApi 应被调用，且参数为 getFormData() 返回的数据
     expect(createApi).toHaveBeenCalled()
     expect(createApi).toHaveBeenCalledWith({ username: 'newuser' })
+  })
+
+  it('前端校验失败时不调用 createApi，也不关闭弹窗', async () => {
+    const createApi = vi.fn().mockResolvedValue({})
+    validateMock.mockResolvedValueOnce(false)
+    const wrapper = createWrapper({
+      formConfig: { rule: testRule, createApi },
+    })
+    await nextTick()
+    await nextTick()
+
+    const createBtn = wrapper.findAll('button').find(b => b.text().includes('新增'))
+    await createBtn!.trigger('click')
+    await nextTick()
+
+    const submitBtn = wrapper.findAll('.el-dialog button').find(b => b.text().includes('确定'))
+    await submitBtn!.trigger('click')
+    await flushPromises()
+
+    expect(validateMock).toHaveBeenCalled()
+    expect(createApi).not.toHaveBeenCalled()
+    expect(wrapper.find('.el-dialog').exists()).toBe(true)
   })
 
   it('编辑时将当前行数据作为 initialValues 传给 FormRenderer', async () => {

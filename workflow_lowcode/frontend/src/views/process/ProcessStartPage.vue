@@ -194,6 +194,13 @@ async function handleSaveDraft() {
 // ── 提交发起 ──
 async function handleSubmit() {
   if (!processDef.value) return
+  if (formDefId.value && formRendererRef.value) {
+    const valid = await formRendererRef.value.validate()
+    if (!valid) {
+      ElMessage.warning(formRendererRef.value.getValidateError() || '请检查表单中标红的必填项')
+      return
+    }
+  }
 
   submitting.value = true
   try {

@@ -675,6 +675,8 @@ async function openLocalForm(mode: 'create' | 'edit' | 'view', row?: any) {
 
 async function saveLocalForm() {
   if (!resolvedRefId.value) return
+  const valid = await localFormRef.value?.validate?.()
+  if (valid === false) return
   const values = localFormRef.value?.getFormData() || localFormValues.value
   // 提交生成 <key>_text 显示列（数组值组件 value → label，对齐 PageDataTable/BizDataListPage）
   const payload = withArrayLabels(values, formSchemaRule.value)

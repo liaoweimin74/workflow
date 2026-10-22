@@ -97,9 +97,16 @@ describe('MenuPage 可见性开关', () => {
 
   it('菜单类型为按钮时隐藏 status 开关', async () => {
     await createWrapper()
-    const fApi = { updateRule: vi.fn() }
-    ruleOf('menuType').update(2, {}, fApi)
+    const fApi = { updateRule: vi.fn(), hidden: vi.fn(), hiddenStatus: vi.fn(() => false) }
+    // 初始化阶段字段还没挂载，只改规则，避免在创建过程中触发重渲染
+    ruleOf('menuType').update(2, {}, fApi, { origin: 'init' })
     expect(fApi.updateRule).toHaveBeenCalledWith('status', { hidden: true })
+    expect(fApi.hidden).not.toHaveBeenCalled()
+    // 运行期切换类型必须走 hidden()，否则 updateRule 改了规则但视图不刷新
+    fApi.updateRule.mockClear()
+    ruleOf('menuType').update(2, {}, fApi, { origin: 'change' })
+    expect(fApi.hidden).toHaveBeenCalledWith(true, 'status')
+    expect(fApi.updateRule).not.toHaveBeenCalled()
   })
 
   it('新增子菜单预填启用态（status 1）', async () => {
@@ -203,5 +210,99 @@ describe('MenuPage 层级由拖动负责', () => {
     expect(sent.parentName).toBeUndefined()
     expect(sent.linkedPage).toBeUndefined()
     expect(sent.menuName).toBe('改名')
+  })
+})
+
+describe('MenuPage 表单校验', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(getMenuTree as any).mockResolvedValue({
+      data: [
+        {
+          id: 20,
+          parentId: null,
+          menuName: '系统管理',
+          menuType: 0,
+          path: '/system',
+          sortOrder: 0,
+          status: 1,
+          children: [
+            {
+              id: 10,
+              parentId: 20,
+              menuName: '用户管理',
+              menuType: 1,
+              path: '/system/user',
+              component: 'system/user/UserPage',
+              sortOrder: 0,
+              status: 1,
+              children: [],
+            },
+          ],
+        },
+      ],
+    })
+  })
+
+  /** 以指定菜单类型执行字段校验，返回错误文案 */
+  function checkField(field: string, menuType: number, value: unknown): string | undefined {
+    let error: Error | undefined
+    ruleOf(field).validate[0].validator.call(
+      { api: { getValue: () => menuType } },
+      {},
+      value,
+      (e?: Error) => { error = e },
+    )
+    return error?.message
+  }
+
+  it('菜单类型必填提示指明字段', async () => {
+    await createWrapper()
+    expect(ruleOf('menuType').validate[0]).toMatchObject({
+      required: true,
+      message: '请选择菜单类型',
+    })
+    expect(ruleOf('menuName').validate[0]).toMatchObject({
+      required: true,
+      whitespace: true,
+      message: '请输入菜单名称',
+    })
+  })
+
+  it('按菜单类型要求路由路径/组件路径/权限标识', async () => {
+    await createWrapper()
+    expect(checkField('path', 0, '')).toBe('请输入路由路径')
+    expect(checkField('path', 1, '  ')).toBe('请输入路由路径')
+    expect(checkField('path', 2, '')).toBeUndefined()
+    expect(checkField('component', 1, '')).toBe('请输入组件路径')
+    expect(checkField('component', 0, '')).toBeUndefined()
+    expect(checkField('permission', 2, '')).toBe('请输入权限标识')
+    expect(checkField('permission', 1, '')).toBeUndefined()
+  })
+
+  it('上级菜单层级校验提前指出该类型能挂在哪里', async () => {
+    await createWrapper()
+    await capturedProps.fetchApi({})
+
+    const parentValidator = ruleOf('parentId').validate[0].validator
+    const run = (menuType: number, parentId: number | null) => {
+      let error: Error | undefined
+      parentValidator.call(
+        { api: { getValue: () => menuType } },
+        {},
+        parentId,
+        (e?: Error) => { error = e },
+      )
+      return error?.message
+    }
+
+    expect(run(1, null)).toContain('菜单必须放在目录下')
+    expect(run(1, null)).toContain('请选择目录作为上级菜单')
+    expect(run(1, 20)).toBeUndefined()
+    expect(run(2, 10)).toBeUndefined()
+    expect(run(2, 20)).toContain('按钮必须放在菜单下')
+    expect(run(0, null)).toBeUndefined()
+    expect(run(0, 20)).toBeUndefined()
+    expect(run(0, 10)).toContain('目录只能放在根级或其他目录下')
   })
 })

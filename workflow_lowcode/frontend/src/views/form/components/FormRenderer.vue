@@ -94,6 +94,7 @@ import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import PageDataCards from '@/views/page/components/PageDataCards.vue'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { normalizeEchoData, withArrayLabels } from '@/views/form/arrayValueLabel'
+import { firstValidateMessage } from '@/views/form/validateError'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 import { registerAiComponent, unregisterAiComponent, type AiFieldMeta } from '@/utils/aiPageBridge'
@@ -145,9 +146,17 @@ const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
 
-/** form-create 实例 API（官方 @update:api 通道，数据落地后同步视图用） */
-const fcApi = ref<{ setValue?: (d: Record<string, unknown>) => void; reload?: () => void } | null>(null)
-function onFormApi(api: { setValue?: (d: Record<string, unknown>) => void; reload?: () => void }) {
+/** form-create 实例 API（官方 @update:api 通道，数据落地后同步视图、提交前校验用） */
+const fcApi = ref<{
+  setValue?: (d: Record<string, unknown>) => void
+  reload?: () => void
+  validate?: () => Promise<boolean> | boolean
+} | null>(null)
+function onFormApi(api: {
+  setValue?: (d: Record<string, unknown>) => void
+  reload?: () => void
+  validate?: () => Promise<boolean> | boolean
+}) {
   fcApi.value = api
 }
 
@@ -769,14 +778,26 @@ async function reloadRecord(): Promise<void> {
   props.notifyRecordChange?.()
 }
 
-/** 校验表单：通过返回 true；未注入 api 时跳过校验返回 true */
+/** 最近一次校验失败的首条字段提示（供调用方 toast，避免只提示"请检查必填项"） */
+const lastValidateError = ref('')
+
+/** 校验表单：通过返回 true；无可用 api 时跳过校验返回 true */
 async function validate(): Promise<boolean> {
-  if (!formCreateApi.value) return true
+  lastValidateError.value = ''
+  const api = fcApi.value?.validate ? fcApi.value : formCreateApi.value
+  if (!api?.validate) return true
   try {
-    return (await formCreateApi.value.validate()) !== false
-  } catch {
+    const passed = (await api.validate()) !== false
+    if (!passed) lastValidateError.value = '请检查表单中标红的必填项'
+    return passed
+  } catch (e) {
+    lastValidateError.value = firstValidateMessage(e) || '请检查表单中标红的必填项'
     return false
   }
+}
+
+function getValidateError(): string {
+  return lastValidateError.value
 }
 
 /**
@@ -810,7 +831,7 @@ function setFields(values: Record<string, unknown>): void {
   }
 }
 
-defineExpose({ submit, saveSnapshot, getFormData, validate, setFields, loadSchema, loadData, reloadRecord })
+defineExpose({ submit, saveSnapshot, getFormData, validate, getValidateError, setFields, loadSchema, loadData, reloadRecord })
 
 // ==================== AI 页面操作注册（aiPageBridge） ====================
 

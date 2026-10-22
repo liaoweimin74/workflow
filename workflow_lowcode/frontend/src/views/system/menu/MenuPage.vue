@@ -11,7 +11,16 @@ import { getMenuTree, createMenu, updateMenu, deleteMenu, moveMenu } from '@/api
 import { pageApi, type PageDefinitionDTO } from '@/api/page'
 import type { MenuTree } from '@/types/menu'
 import { useAuthStore } from '@/stores/auth'
-import { MENU_TYPE_BUTTON, defaultChildType, findNode, normalizeParentId, resolveDrop } from './menuDrop'
+import {
+  MENU_TYPE_BUTTON,
+  MENU_TYPE_DIR,
+  MENU_TYPE_MENU,
+  defaultChildType,
+  findNode,
+  normalizeParentId,
+  placementError,
+  resolveDrop,
+} from './menuDrop'
 import { useMenuTreeDrag } from './useMenuTreeDrag'
 
 const searchTableRef = ref()
@@ -110,6 +119,36 @@ function parentLabel(node: MenuTree): string {
   return findNode(list.value, parentId)?.menuName ?? '（未知）'
 }
 
+/** 按当前菜单类型决定该字段是否必填（隐藏的字段类型直接跳过校验） */
+function requiredForMenuType(types: number[], message: string) {
+  return [{
+    validator(this: any, _rule: unknown, value: unknown, callback: (error?: Error) => void) {
+      const menuType = Number(this?.api?.getValue?.('menuType'))
+      if (!types.includes(menuType)) return callback()
+      if (value === undefined || value === null || (typeof value === 'string' && !value.trim())) {
+        return callback(new Error(message))
+      }
+      callback()
+    },
+    trigger: 'blur',
+  }]
+}
+
+/** 上级菜单层级校验：与后端一致，提前指出该类型能挂在哪里 */
+function validateParentPlacement(this: any, _rule: unknown, value: unknown, callback: (error?: Error) => void) {
+  const menuType = Number(this?.api?.getValue?.('menuType'))
+  const parentId = normalizeParentId(value as number | null | undefined)
+  const parentType = parentId === null ? null : findNode(list.value, parentId)?.menuType ?? null
+  const error = placementError(menuType, parentType)
+  if (!error) return callback()
+  const hint = menuType === MENU_TYPE_DIR
+    ? '，请选择目录作为上级菜单或留空'
+    : menuType === MENU_TYPE_MENU
+      ? '，请选择目录作为上级菜单'
+      : '，请选择菜单作为上级菜单'
+  callback(new Error(error + hint))
+}
+
 // ---------- 表单配置（form-create rule） ----------
 const formConfig = computed<FormConfig<MenuTree>>(() => {
   // 编辑态：后端 update 不改 parentId，层级由拖动负责，故此处只展示不可改
@@ -122,6 +161,7 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     : {
         type: 'treeSelect', field: 'parentId', title: '上级菜单',
         props: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },
+        validate: [{ validator: validateParentPlacement, trigger: 'change' }],
       }
 
   const rule: Rule[] = [
@@ -130,22 +170,28 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
       type: 'select', field: 'menuType', title: '菜单类型', options: menuTypeOptions,
       // 顶层「新增」默认建目录：菜单必须挂在目录下，根级建菜单必被后端拒绝
       value: 0,
-      validate: [{ required: true }],
-      update: (val: number, _rule: any, fApi: any) => {
+      validate: [{ required: true, message: '请选择菜单类型', trigger: 'change' }],
+      update: (val: number, _rule: any, fApi: any, arg?: { origin?: string }) => {
         const isDir = val === 0
         const isMenu = val === 1
         const isButton = val === 2
-        fApi.updateRule('path', { hidden: isButton })
-        fApi.updateRule('icon', { hidden: isButton })
-        fApi.updateRule('status', { hidden: isButton })
-        fApi.updateRule('component', { hidden: !isMenu })
-        fApi.updateRule('permission', { hidden: isDir })
-        fApi.updateRule('linkedPage', { hidden: !isMenu })
+        // updateRule 只改规则不刷新视图：切换类型时必须走 hidden() 才会重新渲染字段
+        const setHidden = (field: string, hidden: boolean) => {
+          if (fApi.hiddenStatus?.(field) === hidden) return
+          if (arg?.origin === 'init') fApi.updateRule(field, { hidden })
+          else fApi.hidden(hidden, field)
+        }
+        setHidden('path', isButton)
+        setHidden('icon', isButton)
+        setHidden('status', isButton)
+        setHidden('component', !isMenu)
+        setHidden('permission', isDir)
+        setHidden('linkedPage', !isMenu)
       },
     },
     {
       type: 'input', field: 'menuName', title: '菜单名称',
-      validate: [{ required: true, message: '请输入菜单名称', trigger: 'blur' }],
+      validate: [{ required: true, whitespace: true, message: '请输入菜单名称', trigger: 'blur' }],
     },
     {
       // 关联已发布页面/视图：选中后自动回填 path/component/permission
@@ -170,6 +216,7 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     },
     {
       type: 'input', field: 'path', title: '路由路径',
+      validate: requiredForMenuType([MENU_TYPE_DIR, MENU_TYPE_MENU], '请输入路由路径'),
     },
     {
       type: 'input', field: 'icon', title: '图标',
@@ -186,10 +233,12 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
       },
       // 远程物料页面（remote-materials）：component 填 material:<key>、path 填 /material/<key>
       info: '远程物料页面：组件路径填 material:<物料key>，路由路径填 /material/<物料key>',
+      validate: requiredForMenuType([MENU_TYPE_MENU], '请输入组件路径'),
     },
     {
       type: 'input', field: 'permission', title: '权限标识',
       props: { placeholder: 'system:user:add' },
+      validate: requiredForMenuType([MENU_TYPE_BUTTON], '请输入权限标识'),
     },
     {
       type: 'inputNumber', field: 'sortOrder', title: '排序',

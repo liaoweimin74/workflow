@@ -3,12 +3,21 @@ import { defineComponent, h, onMounted } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const { queryData } = vi.hoisted(() => ({ queryData: vi.fn() }))
-const { getMetadata, getData } = vi.hoisted(() => ({ getMetadata: vi.fn(), getData: vi.fn() }))
+const { getMetadata, getData, createData, updateData } = vi.hoisted(() => ({
+  getMetadata: vi.fn(),
+  getData: vi.fn(),
+  createData: vi.fn(),
+  updateData: vi.fn(),
+}))
 const { elMessage, elMessageBox } = vi.hoisted(() => ({ elMessage: vi.fn(), elMessageBox: { confirm: vi.fn() } }))
 const { getFormDefinitionByKey } = vi.hoisted(() => ({ getFormDefinitionByKey: vi.fn() }))
+const { validateForm, getLocalFormData } = vi.hoisted(() => ({
+  validateForm: vi.fn(),
+  getLocalFormData: vi.fn(),
+}))
 
 vi.mock('@/api/data-source', () => ({
-  dataSourceApi: { queryData, getMetadata, getData },
+  dataSourceApi: { queryData, getMetadata, getData, createData, updateData },
 }))
 
 vi.mock('@/api/form', () => ({
@@ -23,7 +32,10 @@ vi.mock('element-plus', () => ({
 vi.mock('@/views/form/components/FormRenderer.vue', () => ({
   default: defineComponent({
     name: 'FormRendererStub',
-    template: '<div class="default-form-stub" />',
+    setup(_props, { expose }) {
+      expose({ validate: validateForm, getFormData: getLocalFormData })
+      return () => h('div', { class: 'default-form-stub' })
+    },
   }),
 }))
 
@@ -37,7 +49,7 @@ vi.mock('@/components/business/ListCards.vue', () => ({
      props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'searchFields', 'showSearch', 'pageSizes', 'showPagination', 'actions', 'toolbarButtons', 'designMode', 'groupBy'],
     setup(props: any, { expose }: any) {
       // fetchData 暴露真实函数，供 PageDataCards 通过 cardsRef 触发取数
-      expose({ fetchData: () => props.fetchApi({ page: 2, size: 10 }) })
+      expose({ fetchData: () => props.fetchApi({ page: 2, size: 10 }), refresh: vi.fn() })
       // 非设计态透传分页参数；设计态传入超大 size，验证 fetchApi 钳制到 10 条
       onMounted(() => { void props.fetchApi(props.designMode ? { page: 3, size: 100 } : { page: 2, size: 10 }) })
       return () => h('div', { class: 'list-cards-stub' })
@@ -58,6 +70,10 @@ describe('PageDataCards', () => {
     queryData.mockResolvedValue({ data: { records: [{ id: 7, data: { name: '订单' }, version: 3 }], total: 21 } })
     getMetadata.mockResolvedValue({ data: { writable: true, columns: [{ key: 'name', label: '名称', columnType: 'VARCHAR' }] } })
     getData.mockResolvedValue({ data: { data: { name: '订单详情' } } })
+    createData.mockResolvedValue({ data: { id: 8 } })
+    updateData.mockResolvedValue({ data: {} })
+    validateForm.mockResolvedValue(true)
+    getLocalFormData.mockReturnValue({ name: '新记录' })
   })
 
   it('根据页面绑定查询数据并透传分页参数', async () => {
@@ -270,6 +286,70 @@ describe('PageDataCards', () => {
     expect(wrapper.find('.default-form-dialog').exists()).toBe(true)
     expect(wrapper.find('.default-form-stub').exists()).toBe(true)
     expect(getData).toHaveBeenCalledWith('global-orders', 7)
+    wrapper.unmount()
+  })
+
+  it('本地表单校验失败时不调用创建接口，弹窗保持打开', async () => {
+    validateForm.mockResolvedValueOnce(false)
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'create', label: '新增', placement: 'toolbar' }] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': {
+            props: ['modelValue', 'title'],
+            template: '<div v-if="modelValue" class="default-form-dialog"><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('toolbar-action', { key: 'create', label: '新增' })
+    await flushPromises()
+
+    const saveBtn = wrapper.find('.default-form-dialog').findAll('el-button').find((b) => b.text().includes('保存'))
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    expect(validateForm).toHaveBeenCalled()
+    expect(createData).not.toHaveBeenCalled()
+    expect(wrapper.find('.default-form-dialog').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('本地表单校验通过后提交并关闭弹窗', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'create', label: '新增', placement: 'toolbar' }] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': {
+            props: ['modelValue', 'title'],
+            template: '<div v-if="modelValue" class="default-form-dialog"><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('toolbar-action', { key: 'create', label: '新增' })
+    await flushPromises()
+
+    const saveBtn = wrapper.find('.default-form-dialog').findAll('el-button').find((b) => b.text().includes('保存'))
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    expect(createData).toHaveBeenCalledWith('global-orders', { name: '新记录' })
+    expect(wrapper.find('.default-form-dialog').exists()).toBe(false)
     wrapper.unmount()
   })
 

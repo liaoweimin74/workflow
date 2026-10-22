@@ -28,3 +28,7 @@ test-results/
 
 # 出码真机探测产物（生成物，PROBE_PAGE=... vitest run runtime-probe 重新生成）
 src/views/page/codegen/probe/
+
+# 双渲染 e2e：登录态与报告产物
+e2e/.auth/
+playwright-report/

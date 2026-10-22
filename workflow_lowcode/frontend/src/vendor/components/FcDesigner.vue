@@ -379,6 +379,9 @@
                         <el-tab-pane :label="t('form.formMode')" name="form"></el-tab-pane>
                         <el-tab-pane :label="t('form.componentMode')" name="component"></el-tab-pane>
                         <el-tab-pane :label="t('form.htmlMode')" name="html"></el-tab-pane>
+                        <!-- 宿主应用的扩展页签（如设计器的「出码」）：排在内置三个之后，不插进产品口径的顺序里。
+                             带出 status 是因为页签内容通常很贵，只在被点亮那一刻才该生成。 -->
+                        <slot name="previewTabs" :status="previewStatus"></slot>
                     </el-tabs>
                     <div class="_fd-preview-copy" v-if="['component', 'html'].indexOf(previewStatus) > -1"
                          @click="copyCode">
@@ -396,7 +399,7 @@
                         </ViewForm>
                     </template>
                     <pre class="_fd-preview-code" ref="previewCode" v-else-if="previewStatus === 'component'"><code v-html="preview.component"></code></pre>
-                    <pre class="_fd-preview-code" ref="previewCode" v-else><code v-html="preview.html"></code></pre>
+                    <pre class="_fd-preview-code" ref="previewCode" v-else-if="previewStatus === 'html'"><code v-html="preview.html"></code></pre>
                 </el-dialog>
             </el-container>
         </el-main>

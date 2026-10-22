@@ -33,6 +33,7 @@
         <el-button v-if="formStatus === 'PUBLISHED'" :icon="Menu" @click="openMountDialog">
           {{ mountedMenus.length ? `已挂接 ${mountedMenus.length} 个菜单` : '挂接菜单' }}
         </el-button>
+        <el-button v-if="isDev" plain :loading="codegenBusy" @click="handleCodegen">出码</el-button>
         <el-button :icon="View" @click="handlePreview">预览</el-button>
         <el-button :icon="Document" @click="handleShowJson">JSON 配置</el-button>
       </div>
@@ -44,7 +45,21 @@
         ref="designerRef"
         :height="designerHeight"
         :config="designerConfig"
-      />
+      >
+        <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
+             vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
+        <template #previewTabs="{ status }">
+          <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
+            <component
+              :is="CodegenPreviewPane"
+              :active="status === 'codegen'"
+              :page-key="pageKey"
+              :page-name="pageName || pageKey"
+              :get-schema="canvasSchema"
+            />
+          </el-tab-pane>
+        </template>
+      </fc-designer>
     </div>
 
     <!-- 数据源/动作配置弹窗 -->
@@ -297,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion, View, Document, Menu, Collection } from '@element-plus/icons-vue'
@@ -398,6 +413,20 @@ const pageId = computed(() => route.query.id as string)
 const pageName = ref('')
 const pageKey = ref('')
 const formStatus = ref('')
+
+// 出码按钮只在本机 dev 里出现：写盘走 vite 中间件，产物路由也只 dev 登记
+const isDev = import.meta.env.DEV
+const codegenBusy = ref(false)
+
+/**
+ * 预览弹窗的「出码」页签同样 dev-only。必须走这个 DEV 三元的动态 import：
+ * 静态引它，generate → report → reverse（含 @vue/compiler-sfc）整条出码栈就进了设计器的
+ * 生产 chunk；而 DEV 为假时三元折叠成 null，import() 没人引用，rollup 直接把它剪掉。
+ * null 同时让模板里那个 el-tab-pane 不渲染——生产包里不会剩一张点得开却空白的页签。
+ */
+const CodegenPreviewPane = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./codegen/CodegenPreviewPane.vue'))
+  : null
 
 // ========== 挂接菜单（多挂接 + 列表管理） ==========
 const mountDialogVisible = ref(false)
@@ -566,13 +595,17 @@ watch(templateKind, (k) => {
   if (k === 'skeleton') buildSlotDraft()
 })
 
-function currentSchemaJson(): string {
-  return JSON.stringify({
+function canvasSchema() {
+  return {
     rule: designerRef.value?.getRule() || [],
     option: designerRef.value?.getOption() || {},
     dataSources: schema.dataSources,
     actions: schema.actions,
-  })
+  }
+}
+
+function currentSchemaJson(): string {
+  return JSON.stringify(canvasSchema())
 }
 
 async function openSaveTemplateDialog() {
@@ -1869,17 +1902,43 @@ function handlePreview() {
   window.open(`/page/${pageKey.value}?preview=true`, '_blank')
 }
 
+/**
+ * 出码：吃当前画布定义（与「保存」序列化的是同一份，未保存的改动照样出码），
+ * 产物落进 codegen/probe/ 后直接开全屏路由看渲染结果。
+ *
+ * 出码栈必须动态 import，且整个函数体在 `import.meta.env.DEV` 为假时被构建期剪掉：
+ * 动态 import 只保证不进首屏，不挡住 rollup 照样把带 `@vue/compiler-sfc` 的出码 chunk
+ * 产出到 dist（约 1MB 死重，生产里没有一条路径能取它）。早退一层，生产包里就没这个文件。
+ */
+async function handleCodegen() {
+  if (!import.meta.env.DEV) return
+  if (!pageKey.value) {
+    ElMessage.warning('页面标识为空，无法出码')
+    return
+  }
+  codegenBusy.value = true
+  try {
+    const { runCodegenAndWrite } = await import('./codegen/codegen-run')
+    const out = await runCodegenAndWrite({
+      pageKey: pageKey.value,
+      pageName: pageName.value || pageKey.value,
+      schema: canvasSchema(),
+    })
+    const rate = out.report.codegenRate
+    const text = `出码落盘 ${out.written.length} 个文件 · 可出码 ${rate.emittableNodes}/${rate.totalNodes}`
+    // C 桶是保真退化，Gate 恒 0：真出现就不能报成功，否则人工看着"产物渲染得挺像"读不出它不忠实
+    if (out.report.buckets.C) ElMessage.warning(`${text} · 保真退化 ${out.report.buckets.C} 处，验证台里有明细`)
+    else ElMessage.success(text)
+    window.open(out.probeHref, '_blank')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '出码失败')
+  } finally {
+    codegenBusy.value = false
+  }
+}
+
 function handleShowJson() {
-  previewJson.value = JSON.stringify(
-    {
-      rule: designerRef.value?.getRule() || [],
-      option: designerRef.value?.getOption() || {},
-      dataSources: schema.dataSources,
-      actions: schema.actions,
-    },
-    null,
-    2,
-  )
+  previewJson.value = JSON.stringify(canvasSchema(), null, 2)
   previewVisible.value = true
 }
 

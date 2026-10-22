@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
  * 【真机探测脚手架，非产品路由】出码 spike 用来把产物直接挂到浏览器上量真机表现的
  * （详见 codegen/__tests__/runtime-probe.test.ts）。只登记到 dev：生产构建里连那条
  * 懒 import 一起不进包。探测产物是生成物不进 git（.gitignore codegen/probe/），
- * 要用时跑 PROBE_PAGE=<页名> npx vitest run runtime-probe.test.ts 落盘，glob 有文件才挂路由。
+ * 要用时跑 PROBE_PAGES=<页名[,页名…]> npx vitest run runtime-probe.test.ts 落盘，glob 有文件才挂路由。
  */
 const probePages = import.meta.glob<RouteComponent>('@/views/page/codegen/probe/*.vue')
 const probeEntry = Object.keys(probePages).sort()[0]
@@ -14,13 +14,32 @@ const codegenProbeRoutes: RouteRecordRaw[] =
   import.meta.env.DEV && probeEntry
     ? [
         {
-          path: 'codegen-probe',
+          // 按页名挂产物（/codegen-probe/cardlist_test）：双渲染 e2e 要同时挂三类页面的产物，
+          // 不能再靠 glob 排序取第一个。probeEntry 只当「probe/ 目录里有产物」的开关用。
+          path: 'codegen-probe/:name?',
           name: 'CodegenProbe',
-          component: probePages[probeEntry]!,
+          component: () => import('@/views/page/codegen/CodegenProbeShell.vue'),
           meta: { title: '出码产物探测' },
         },
       ]
     : []
+
+/**
+ * 【出码验证台，非产品路由】把出码报告、宿主/产物双渲染对照、产物源码摆到同一个界面上，
+ * 供人工核对（design D6 的改向：报告不再只作为生成返回值）。同样只登记到 dev。
+ * pageKey 走路径参数：宿主侧内联渲染的 PageRendererPage 从 route.params.pageKey 取组件身份，
+ * 少了它就跟真路由 /page/<key> 不是一个口径。
+ */
+const codegenLabRoutes: RouteRecordRaw[] = import.meta.env.DEV
+  ? [
+      {
+        path: '/codegen-lab/:pageKey?',
+        name: 'CodegenLab',
+        component: () => import('@/views/page/codegen/CodegenLabPage.vue'),
+        meta: { title: '出码验证台', fullScreen: true },
+      },
+    ]
+  : []
 
 const routes: RouteRecordRaw[] = [
   {
@@ -62,6 +81,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/logicflow/LogicFlowDesigner.vue'),
     meta: { title: '逻辑流设计器', fullScreen: true }
   },
+  ...codegenLabRoutes,
   {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),

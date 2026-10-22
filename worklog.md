@@ -9691,3 +9691,17 @@ Work Log:
 Stage Summary:
 - 事件 #121 单轮闭环，零 mvn 第 105 次；累计恢复 121 次
 - 首轮 dump push FAILED 为收口 rebase 流程常规补救，已闭环
+---
+Task ID: r207
+Agent: main (cron 轻量运维)
+Task: 2026-10-22 14:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4 但 auth=no such table: SYS_USER → 事件 #122（标准重供给，Node 占 8080）
+- mariadbd 1285 已被重供给脚本拉起但首轮 dump 检测跳过（3306 检测时序敏感，已知问题⑥），recover 幂等复用
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → timeout 170 recover（工具 180s 杀，幸存型）
+- 复验：java pid 1404 拉起，auth 真绿；40s 全绿 200×4 + nodeProbe 200；内存 3161MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #122 单轮闭环，零 mvn 第 106 次；累计 122 次

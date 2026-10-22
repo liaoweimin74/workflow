@@ -9774,3 +9774,18 @@ Work Log:
 
 Stage Summary:
 - 事件 #127 单轮闭环，零 mvn 第 111 次；累计 127 次
+---
+Task ID: r218
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 01:05 例行巡检（Job 446961）
+
+Work Log:
+- r215-217 沙箱三连空窗（本窗口最长，与 r192-194 并列）后本轮自愈 ✓
+- 探活：四链路 200×4 但 auth=no such table: SYS_USER → 事件 #128（标准重供给，Node 占 8080）
+- mariadbd 1245 已被重供给脚本拉起但首轮 dump 检测跳过（3306 检测时序敏感，已知问题⑥）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → timeout 170 recover（工具 180s 杀，幸存型）
+- 复验：java pid 1408 拉起，auth 真绿；40s 全绿 200×4 + nodeProbe 200；内存 3167MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #128 单轮闭环，零 mvn 第 112 次；累计 128 次

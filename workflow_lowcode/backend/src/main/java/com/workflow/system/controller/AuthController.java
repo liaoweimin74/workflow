@@ -2,6 +2,7 @@ package com.workflow.system.controller;
 
 import com.workflow.common.domain.R;
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.system.domain.dto.ChangePasswordRequest;
 import com.workflow.system.domain.dto.LoginRequest;
 import com.workflow.system.domain.dto.MiniprogramBindRequest;
 import com.workflow.system.domain.dto.MiniprogramLoginRequest;
@@ -56,6 +57,14 @@ public class AuthController {
     @GetMapping("/userinfo")
     public R<LoginResponse> getCurrentUser(@AuthenticationPrincipal LoginUser loginUser) {
         return R.ok(authService.getCurrentUser(loginUser.getUserId()));
+    }
+
+    /** 改密对象只取 token 里的账号，不接受 userId 入参，否则任何人都能改别人的密码。 */
+    @PutMapping("/password")
+    public R<Void> changePassword(@AuthenticationPrincipal LoginUser loginUser,
+                                  @Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(loginUser.getUserId(), request);
+        return R.ok();
     }
 
     @GetMapping("/menus")

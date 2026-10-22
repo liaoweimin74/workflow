@@ -5,6 +5,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
 import com.workflow.framework.redis.RedisCache;
+import com.workflow.system.domain.dto.ChangePasswordRequest;
 import com.workflow.system.domain.dto.LoginRequest;
 import com.workflow.system.domain.entity.*;
 import com.workflow.system.domain.vo.LoginResponse;
@@ -70,6 +71,20 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(String token) {
         // No-op: Redis disabled
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        SysUser user = requireActiveUser(userId, "用户不存在");
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPassword())) {
+            throw new BusinessException(400, "旧密码不正确");
+        }
+        if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
+            throw new BusinessException(400, "新密码不能与旧密码相同");
+        }
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
     }
 
     @Override

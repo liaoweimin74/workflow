@@ -1,6 +1,7 @@
 package com.workflow.system.service;
 
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.system.domain.dto.ChangePasswordRequest;
 import com.workflow.system.domain.dto.LoginRequest;
 import com.workflow.system.domain.vo.LoginResponse;
 import com.workflow.system.domain.vo.MenuTree;
@@ -13,6 +14,12 @@ public interface AuthService {
     void logout(String token);
 
     LoginResponse refreshToken(String refreshToken);
+
+    /**
+     * 本人改密：先验旧密码，再写入新密码。
+     * 旧密码不匹配或新旧相同抛业务异常。
+     */
+    void changePassword(Long userId, ChangePasswordRequest request);
 
     LoginResponse getCurrentUser(Long userId);
 

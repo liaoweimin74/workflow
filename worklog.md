@@ -9789,3 +9789,17 @@ Work Log:
 
 Stage Summary:
 - 事件 #128 单轮闭环，零 mvn 第 112 次；累计 128 次
+---
+Task ID: r219
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 02:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4 但 auth=no such table: SYS_USER → 事件 #129（标准重供给，Node 占 8080）
+- mariadbd 1251 已起但首轮 dump 检测跳过（3306 检测时序敏感，已知问题⑥）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → timeout 170 recover（工具 180s 杀，幸存型）
+- 复验：java pid 1404 拉起，auth 真绿；40s 全绿 200×4 + nodeProbe 200；内存 3239MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #129 单轮闭环，零 mvn 第 113 次；累计 129 次

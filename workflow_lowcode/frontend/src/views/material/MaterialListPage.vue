@@ -177,9 +177,13 @@
       </template>
     </el-dialog>
 
-    <!-- 挂到菜单：按 material:<key> 约定新建入口菜单 -->
-    <el-dialog v-model="mountVisible" :title="`挂接到系统菜单 - ${mountTarget?.name || ''}`" width="520px">
-      <el-form label-width="90px" @submit.prevent>
+    <!-- 挂到菜单：新增入口 或 覆盖已有菜单指向 -->
+    <el-dialog v-model="mountVisible" :title="`挂接到系统菜单 - ${mountTarget?.name || ''}`" width="560px">
+      <el-radio-group v-model="mountMode" class="mount-mode">
+        <el-radio value="create" data-testid="mount-mode-create">新增菜单</el-radio>
+        <el-radio value="overwrite" data-testid="mount-mode-overwrite">覆盖已有菜单</el-radio>
+      </el-radio-group>
+      <el-form v-if="mountMode === 'create'" label-width="90px" @submit.prevent>
         <el-form-item label="菜单名称">
           <el-input v-model="mountForm.menuName" maxlength="100" placeholder="默认使用物料名称" />
         </el-form-item>
@@ -198,9 +202,35 @@
           <el-input :model-value="mountTarget ? `/material/${mountTarget.materialKey}` : ''" disabled />
         </el-form-item>
       </el-form>
+      <el-form v-else label-width="90px" @submit.prevent>
+        <el-form-item label="目标菜单">
+          <el-tree-select
+            v-model="overwriteMenuId"
+            :data="overwriteCandidates"
+            :props="{ label: 'menuName', children: 'children', value: 'id', disabled: 'disabled' }"
+            check-strictly
+            filterable
+            clearable
+            placeholder="选择要覆盖指向的已有菜单"
+            style="width: 100%"
+            data-testid="overwrite-tree"
+          />
+        </el-form-item>
+      </el-form>
+      <el-alert
+        v-if="mountMode === 'overwrite' && selectedOverwriteMenu"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mount-alert"
+        :title="`将覆盖菜单「${selectedOverwriteMenu.menuName}」`"
+        :description="`覆盖后该入口将指向当前物料（原指向 ${selectedOverwriteMenu.path || '空'}）；菜单名称、目录、排序与角色授权保持不变。`"
+      />
       <template #footer>
         <el-button @click="mountVisible = false">取消</el-button>
-        <el-button type="primary" :loading="mounting" data-testid="mount-submit" @click="confirmMount">挂接</el-button>
+        <el-button type="primary" :loading="mounting" data-testid="mount-submit" @click="confirmMount">
+          {{ mountMode === 'overwrite' ? '覆盖' : '挂接' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -229,10 +259,12 @@ import {
   importMaterialPackage,
   inspectMaterialPackage,
   listMaterials,
+  overwriteMaterialMenu,
   setMaterialStatus,
   uploadMaterial,
 } from '@/api/material'
-import { createMenu } from '@/api/menu'
+import { createMenu, getMenuTree } from '@/api/menu'
+import type { MenuTree } from '@/types/menu'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -547,6 +579,44 @@ const mountVisible = ref(false)
 const mounting = ref(false)
 const mountTarget = ref<MaterialItem | null>(null)
 const mountForm = reactive<{ menuName: string; parentId?: number }>({ menuName: '', parentId: undefined })
+const mountMode = ref<'create' | 'overwrite'>('create')
+const overwriteMenuId = ref<number | null>(null)
+const overwriteMenuTree = ref<MenuTree[]>([])
+
+/** 覆盖候选：全量菜单树，按钮不可作目标；已指向当前物料的菜单置灰 */
+const overwriteCandidates = computed(() =>
+  buildOverwriteTree(overwriteMenuTree.value, `/material/${mountTarget.value?.materialKey || ''}`),
+)
+const selectedOverwriteMenu = computed(() => findMenuById(overwriteMenuTree.value, overwriteMenuId.value))
+
+function buildOverwriteTree(menus: MenuTree[], currentPath: string): any[] {
+  return menus
+    .filter((m) => m.menuType !== 2)
+    .map((m) => ({
+      ...m,
+      disabled: m.menuType !== 1 || m.path === currentPath,
+      children: buildOverwriteTree(m.children || [], currentPath),
+    }))
+}
+
+function findMenuById(menus: MenuTree[], id: number | null): MenuTree | null {
+  if (id == null) return null
+  for (const menu of menus) {
+    if (menu.id === id) return menu
+    const hit = findMenuById(menu.children || [], id)
+    if (hit) return hit
+  }
+  return null
+}
+
+async function loadOverwriteMenus() {
+  try {
+    const res = await getMenuTree()
+    overwriteMenuTree.value = res.data || []
+  } catch {
+    overwriteMenuTree.value = []
+  }
+}
 
 /** 目录节点（menuType=0）供所属目录选择，与页面模板挂菜单一致 */
 const menuCategories = computed(() => filterMenuDirs(authStore.menus as any[]))
@@ -557,29 +627,53 @@ function filterMenuDirs(menus: any[]): any[] {
     .map((m: any) => ({ ...m, children: m.children ? filterMenuDirs(m.children) : [] }))
 }
 
-function openMountDialog(row: MaterialItem) {
+async function openMountDialog(row: MaterialItem) {
   mountTarget.value = row
   mountForm.menuName = row.name
   mountForm.parentId = undefined
+  mountMode.value = 'create'
+  overwriteMenuId.value = null
   mountVisible.value = true
+  await loadOverwriteMenus()
 }
 
 async function confirmMount() {
   const target = mountTarget.value
   if (!target) return
+  if (mountMode.value === 'overwrite' && overwriteMenuId.value == null) {
+    ElMessage.warning('请选择要覆盖的菜单')
+    return
+  }
+  if (mountMode.value === 'overwrite') {
+    const menu = selectedOverwriteMenu.value
+    try {
+      await ElMessageBox.confirm(
+        `确定把菜单「${menu?.menuName}」的入口改为当前物料吗？原指向 ${menu?.path || '空'} 将被替换。`,
+        '覆盖确认',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   mounting.value = true
   try {
-    await createMenu({
-      parentId: mountForm.parentId,
-      menuName: mountForm.menuName || target.name,
-      menuType: 1,
-      path: `/material/${target.materialKey}`,
-      component: `material:${target.materialKey}`,
-      icon: 'Files',
-      sortOrder: 99,
-      status: 1,
-    })
-    ElMessage.success('挂接成功，菜单已生成（角色需分配该菜单后才可见）')
+    if (mountMode.value === 'overwrite') {
+      await overwriteMaterialMenu(target.id, overwriteMenuId.value!)
+      ElMessage.success('已覆盖菜单入口')
+    } else {
+      await createMenu({
+        parentId: mountForm.parentId,
+        menuName: mountForm.menuName || target.name,
+        menuType: 1,
+        path: `/material/${target.materialKey}`,
+        component: `material:${target.materialKey}`,
+        icon: 'Files',
+        sortOrder: 99,
+        status: 1,
+      })
+      ElMessage.success('挂接成功，菜单已生成（角色需分配该菜单后才可见）')
+    }
     mountVisible.value = false
   } catch {
     // http 拦截器已提示
@@ -607,6 +701,12 @@ function formatDate(dateStr: string | null) {
 <style scoped>
 .material-list-page {
   padding: 16px;
+}
+.mount-mode {
+  margin-bottom: 14px;
+}
+.mount-alert {
+  margin-top: 12px;
 }
 .upload-tip {
   margin-bottom: 12px;

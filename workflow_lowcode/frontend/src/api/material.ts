@@ -8,6 +8,7 @@
  * - GET    /materials/by-key/{key}    运行时加载器入口（MaterialRenderer 用）
  * - GET    /materials/widgets         启用的 WIDGET 物料（设计器面板用，登录即可）
  * - PUT    /materials/{id}/status     启停（status 为 query 参数）
+ * - PUT    /materials/{id}/mount-menu/{menuId} 覆盖已有菜单指向当前物料
  * - DELETE /materials/{id}?force=     删除（被菜单引用且非 force → 业务码 409）
  * - GET    /materials/{key}/bundle    bundle 公开读（前端不消费，浏览器 import() 直取）
  * - POST   /materials/export          导出物料包（zip 流）
@@ -100,6 +101,11 @@ export function uploadMaterial(bundle: File, manifest: File) {
 
 export function setMaterialStatus(id: number, status: 0 | 1) {
   return http.put(`/materials/${id}/status`, null, { params: { status } }) as unknown as Promise<R<MaterialItem>>
+}
+
+/** 覆盖已有菜单指向当前物料：保留名称/目录/排序/角色授权，只把入口切过来。 */
+export function overwriteMaterialMenu(id: number, menuId: number) {
+  return http.put(`/materials/${id}/mount-menu/${menuId}`) as unknown as Promise<R<null>>
 }
 
 /**

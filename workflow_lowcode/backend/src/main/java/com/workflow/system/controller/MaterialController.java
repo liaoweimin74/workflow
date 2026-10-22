@@ -113,6 +113,17 @@ public class MaterialController {
     }
 
     /**
+     * 覆盖已有菜单指向当前物料（入口复用，不新增菜单）。
+     * 保留菜单名称/目录/排序/状态/角色授权，只改 path/component，清空 permission。
+     */
+    @PutMapping("/{id}/mount-menu/{menuId}")
+    public R<Void> overwriteMenu(@PathVariable Long id, @PathVariable Long menuId) {
+        requireManage();
+        materialService.overwriteMenuReference(id, menuId);
+        return R.ok();
+    }
+
+    /**
      * 删除物料。被菜单引用且 force 非 true 时返回 409，消息含引用菜单清单，
      * 前端确认后带 force=true 重发。
      */

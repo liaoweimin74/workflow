@@ -291,6 +291,35 @@ public class MaterialService {
         return "material:" + materialKey;
     }
 
+    /**
+     * 覆盖已有菜单指向当前物料：菜单行本身不动（id / 名称 / 目录 / 排序 / 状态 /
+     * 角色授权保留），只重写 path、component，并清空 permission——物料入口不需要
+     * 页面权限串，残留旧页面的 permission 会让持有该菜单的角色继续获得旧页面读权限。
+     */
+    @Transactional
+    public SysMenu overwriteMenuReference(Long materialId, Long menuId) {
+        SysMaterial material = requireById(materialId);
+        if (!SysMaterial.TYPE_PAGE.equals(material.getType())) {
+            throw new BusinessException(400, "仅页面型物料可挂接菜单");
+        }
+        SysMenu menu = menuRepository.findById(menuId)
+                .orElseThrow(() -> new BusinessException(404, "菜单不存在或已删除"));
+        if (menu.getIsDeleted() != null && menu.getIsDeleted() == 1) {
+            throw new BusinessException(404, "菜单不存在或已删除");
+        }
+        if (menu.getMenuType() == null || menu.getMenuType() != 1) {
+            throw new BusinessException(400, "仅支持覆盖菜单类型的入口");
+        }
+        String path = "/material/" + material.getMaterialKey();
+        if (path.equals(menu.getPath())) {
+            throw new BusinessException(400, "该菜单已指向当前物料");
+        }
+        menu.setPath(path);
+        menu.setComponent(menuComponentOf(material.getMaterialKey()));
+        menu.setPermission(null);
+        return menuRepository.save(menu);
+    }
+
     // ================= 启停 / 删除 =================
 
     @Transactional

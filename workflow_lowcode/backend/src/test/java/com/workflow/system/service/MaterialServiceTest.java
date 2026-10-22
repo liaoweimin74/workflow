@@ -247,6 +247,89 @@ class MaterialServiceTest {
         assertThat(m.getIsDeleted()).isEqualTo(1);
     }
 
+    // ================= 覆盖已有菜单 =================
+
+    private SysMaterial pageMaterial() {
+        SysMaterial m = new SysMaterial();
+        m.setId(9L);
+        m.setMaterialKey("demo-board");
+        m.setType(SysMaterial.TYPE_PAGE);
+        return m;
+    }
+
+    @Test
+    void 覆盖菜单只改指向并清空页面权限() {
+        when(materialRepository.findById(9L)).thenReturn(Optional.of(pageMaterial()));
+        SysMenu menu = new SysMenu();
+        menu.setId(77L);
+        menu.setMenuName("旧入口");
+        menu.setMenuType(1);
+        menu.setParentId(2L);
+        menu.setSortOrder(5);
+        menu.setPath("/page/old");
+        menu.setComponent("page/PageRenderer");
+        menu.setPermission("page:read:old");
+        menu.setIsDeleted(0);
+        when(menuRepository.findById(77L)).thenReturn(Optional.of(menu));
+        when(menuRepository.save(any(SysMenu.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        SysMenu saved = service.overwriteMenuReference(9L, 77L);
+
+        assertThat(saved.getPath()).isEqualTo("/material/demo-board");
+        assertThat(saved.getComponent()).isEqualTo("material:demo-board");
+        assertThat(saved.getPermission()).isNull();
+        // 菜单自身属性不变
+        assertThat(saved.getMenuName()).isEqualTo("旧入口");
+        assertThat(saved.getParentId()).isEqualTo(2L);
+        assertThat(saved.getSortOrder()).isEqualTo(5);
+    }
+
+    @Test
+    void 组件型物料不可覆盖菜单() {
+        SysMaterial widget = pageMaterial();
+        widget.setType(SysMaterial.TYPE_WIDGET);
+        when(materialRepository.findById(9L)).thenReturn(Optional.of(widget));
+
+        assertThatThrownBy(() -> service.overwriteMenuReference(9L, 77L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅页面型物料");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
+    void 覆盖菜单拒绝目录() {
+        when(materialRepository.findById(9L)).thenReturn(Optional.of(pageMaterial()));
+        SysMenu directory = new SysMenu();
+        directory.setId(77L);
+        directory.setMenuType(0);
+        directory.setIsDeleted(0);
+        when(menuRepository.findById(77L)).thenReturn(Optional.of(directory));
+
+        assertThatThrownBy(() -> service.overwriteMenuReference(9L, 77L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅支持覆盖菜单类型的入口");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
+    void 覆盖菜单拒绝已指向当前物料的入口() {
+        when(materialRepository.findById(9L)).thenReturn(Optional.of(pageMaterial()));
+        SysMenu menu = new SysMenu();
+        menu.setId(77L);
+        menu.setMenuType(1);
+        menu.setPath("/material/demo-board");
+        menu.setIsDeleted(0);
+        when(menuRepository.findById(77L)).thenReturn(Optional.of(menu));
+
+        assertThatThrownBy(() -> service.overwriteMenuReference(9L, 77L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已指向当前物料");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
     @Test
     void 组件物料列表只取启用的WIDGET() {
         SysMaterial widget = new SysMaterial();

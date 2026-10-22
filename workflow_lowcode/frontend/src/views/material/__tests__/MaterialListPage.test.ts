@@ -16,6 +16,7 @@ vi.mock('@/api/material', async (importActual) => {
     uploadMaterial: vi.fn(),
     setMaterialStatus: vi.fn(),
     deleteMaterial: vi.fn(),
+    overwriteMaterialMenu: vi.fn(),
     exportMaterials: vi.fn(),
     downloadScaffoldTemplate: vi.fn(),
     inspectMaterialPackage: vi.fn(),
@@ -50,10 +51,11 @@ import {
   importMaterialPackage,
   inspectMaterialPackage,
   listMaterials,
+  overwriteMaterialMenu,
   setMaterialStatus,
   uploadMaterial,
 } from '@/api/material'
-import { createMenu } from '@/api/menu'
+import { createMenu, getMenuTree } from '@/api/menu'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -233,6 +235,49 @@ describe('MaterialListPage', () => {
         component: 'material:demo-board',
       })
     )
+  })
+
+  it('覆盖已有菜单：调用覆盖接口，不新建菜单', async () => {
+    const wrapper = createWrapper()
+    await flushPromises()
+    ;(getMenuTree as any).mockResolvedValue({
+      code: 200,
+      data: [
+        {
+          id: 7,
+          parentId: 2,
+          menuName: '旧看板入口',
+          menuType: 1,
+          path: '/page/old',
+          component: 'page/PageRenderer',
+          permission: 'page:read:old',
+          icon: '',
+          sortOrder: 1,
+          status: 1,
+          children: [],
+        },
+      ],
+    })
+    ;(overwriteMaterialMenu as any).mockResolvedValue({ code: 200, data: null })
+    ElMessageBox.confirm.mockResolvedValue('确认')
+
+    await actionByLabel('挂到菜单').onClick(rows[0])
+    await nextTick()
+    await flushPromises()
+
+    await wrapper.findAll('input[type="radio"]')[1].setValue(true)
+    await nextTick()
+
+    const tree = wrapper.findComponent('[data-testid="overwrite-tree"]')
+    tree.vm.$emit('update:modelValue', 7)
+    await nextTick()
+    expect(wrapper.text()).toContain('将覆盖菜单「旧看板入口」')
+
+    await wrapper.find('[data-testid="mount-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(overwriteMaterialMenu).toHaveBeenCalledWith(1, 7)
+    expect(createMenu).not.toHaveBeenCalled()
   })
 
   it('未勾选物料时点导出不调接口', async () => {

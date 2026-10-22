@@ -9718,3 +9718,16 @@ Work Log:
 
 Stage Summary:
 - 事件 #123 单轮闭环，零 mvn 第 107 次；累计 123 次
+---
+Task ID: r209
+Agent: main (cron 轻量运维)
+Task: 2026-10-22 16:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4 但 auth=no such table: SYS_USER → 事件 #124（标准重供给，Node 占 8080）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → timeout 170 recover（工具 180s 杀，幸存型）
+- 复验：java pid 1443 拉起，auth 真绿；40s 全绿 200×4 + nodeProbe 200；内存 3228MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #124 单轮闭环，零 mvn 第 108 次；累计 124 次

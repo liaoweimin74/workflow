@@ -154,6 +154,95 @@ class PageMenuControllerTest {
         verify(menuRepository, never()).save(any(SysMenu.class));
     }
 
+    // ---------- overwriteMenu ----------
+
+    @Test
+    void overwriteMenu_retargetsMenuAndKeepsItsOwnAttributes() {
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        SysMenu menu = buildMenu(100L, "旧入口", 2L);
+        menu.setMenuType(1);
+        menu.setPath("/page/old-page");
+        menu.setPermission("page:read:old-page");
+        menu.setSortOrder(7);
+        menu.setIcon("Star");
+        when(menuRepository.findById(100L)).thenReturn(Optional.of(menu));
+        when(menuRepository.save(any(SysMenu.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        R<PageMenuResponse.MenuItem> result = controller.overwriteMenu("p1", 100L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().getMenuId()).isEqualTo(100L);
+        assertThat(result.getData().getPath()).isEqualTo("/page/leave-query");
+        assertThat(result.getData().getPermission()).isEqualTo("page:read:leave-query");
+        // 菜单自身属性保持不变：名称、目录、排序、图标
+        assertThat(menu.getMenuName()).isEqualTo("旧入口");
+        assertThat(menu.getParentId()).isEqualTo(2L);
+        assertThat(menu.getSortOrder()).isEqualTo(7);
+        assertThat(menu.getIcon()).isEqualTo("Star");
+        assertThat(menu.getComponent()).isEqualTo("page/PageRenderer");
+        // 菜单 id 未变，角色授权无需新增
+        verify(roleMenuRepository, never()).save(any(SysRoleMenu.class));
+    }
+
+    @Test
+    void overwriteMenu_rejectsDraftPage() {
+        publishedPage.setStatus("DRAFT");
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅可挂接已发布的页面");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
+    void overwriteMenu_rejectsMissingOrDeletedMenu() {
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        when(menuRepository.findById(100L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("菜单不存在或已删除");
+
+        SysMenu deleted = buildMenu(101L, "已删菜单", 1L);
+        deleted.setMenuType(1);
+        deleted.setIsDeleted(1);
+        when(menuRepository.findById(101L)).thenReturn(Optional.of(deleted));
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 101L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("菜单不存在或已删除");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
+    void overwriteMenu_rejectsNonMenuTypeTarget() {
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        SysMenu directory = buildMenu(100L, "某目录", null);
+        directory.setMenuType(0);
+        when(menuRepository.findById(100L)).thenReturn(Optional.of(directory));
+
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("仅支持覆盖菜单类型的入口");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
+    void overwriteMenu_rejectsMenuAlreadyPointingAtThisPage() {
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        SysMenu menu = buildMenu(100L, "已挂当前页", 1L);
+        menu.setMenuType(1);
+        when(menuRepository.findById(100L)).thenReturn(Optional.of(menu));
+
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 100L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已指向当前页面");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
     // ---------- getMenus ----------
 
     @Test

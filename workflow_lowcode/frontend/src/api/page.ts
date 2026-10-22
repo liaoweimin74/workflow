@@ -100,6 +100,11 @@ export const pageApi = {
     return http.post(`/v1/pages/${id}/mount-menu`, data)
   },
 
+  /** 覆盖已有菜单的指向：保留菜单名称/目录/排序/角色授权，仅把入口切到当前页面 */
+  overwriteMenu(id: string, menuId: number): Promise<R<PageMenuItem>> {
+    return http.put(`/v1/pages/${id}/mount-menu/${menuId}`)
+  },
+
   /** 查询页面全部关联菜单 */
   getMenusByKey(key: string): Promise<R<PageMenuListResponse>> {
     return http.get(`/v1/pages/${key}/menus`)

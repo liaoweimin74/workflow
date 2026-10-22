@@ -23,6 +23,7 @@ import java.util.List;
  * 页面挂接菜单 Controller。
  * 管理页面（VIEW/PAGE）与系统菜单（sys_menu）的挂接关系：
  * - mount-menu：每次调用为已发布页面创建一条新菜单（支持多挂接，不查重）
+ * - overwrite：把一条已有菜单的指向切换为当前页面（入口复用，不新增菜单）
  * - getMenus：按 key 返回该页面全部关联菜单
  * - unmountMenu：软删指定菜单，解除挂接
  * 管理员挂接时自动将新菜单授权给 ROLE_ADMIN 角色，保证挂接者立即可用。
@@ -30,6 +31,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/pages")
 public class PageMenuController {
+
+    /** sys_menu.menu_type：1 菜单（目录 0 / 按钮 2 不可作为覆盖目标）。 */
+    private static final int TYPE_MENU = 1;
 
     private final PageDefinitionService pageDefService;
     private final SysMenuRepository menuRepository;
@@ -70,6 +74,40 @@ public class PageMenuController {
         menu.setIsDeleted(0);
         SysMenu saved = menuRepository.save(menu);
         grantAdminRoleIfAdmin(saved);
+        return R.ok(toItem(saved));
+    }
+
+    /**
+     * 覆盖已有菜单：把目标菜单的入口指向改为当前页面。
+     *
+     * <p>菜单行本身不动（id / 名称 / 目录 / 排序 / 状态 / 角色授权全部保留），
+     * 只重写 path、component、permission——原先通过角色授权看到该入口的人，
+     * 覆盖后跟随新页面的权限串继续可见。仅覆盖 menuType=1 的菜单；
+     * 目标已指向当前页面 → 400，避免无意义覆盖。
+     */
+    @PutMapping("/{id}/mount-menu/{menuId}")
+    public R<PageMenuResponse.MenuItem> overwriteMenu(@PathVariable String id,
+                                                      @PathVariable Long menuId) {
+        PageDefinition page = pageDefService.getById(id);
+        if (!"PUBLISHED".equals(page.getStatus())) {
+            throw new BusinessException(400, "仅可挂接已发布的页面");
+        }
+        SysMenu menu = menuRepository.findById(menuId)
+                .orElseThrow(() -> new BusinessException(404, "菜单不存在或已删除"));
+        if (menu.getIsDeleted() != null && menu.getIsDeleted() == 1) {
+            throw new BusinessException(404, "菜单不存在或已删除");
+        }
+        if (menu.getMenuType() == null || menu.getMenuType() != TYPE_MENU) {
+            throw new BusinessException(400, "仅支持覆盖菜单类型的入口");
+        }
+        String path = "/page/" + page.getKey();
+        if (path.equals(menu.getPath())) {
+            throw new BusinessException(400, "该菜单已指向当前页面");
+        }
+        menu.setPath(path);
+        menu.setComponent("page/PageRenderer");
+        menu.setPermission("page:read:" + page.getKey());
+        SysMenu saved = menuRepository.save(menu);
         return R.ok(toItem(saved));
     }
 

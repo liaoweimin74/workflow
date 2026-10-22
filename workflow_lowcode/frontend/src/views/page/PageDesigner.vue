@@ -158,7 +158,7 @@
       </template>
     </el-dialog>
 
-    <!-- 挂接菜单弹窗：多挂接 + 已挂列表管理 -->
+    <!-- 挂接菜单弹窗：新增 / 覆盖已有菜单 + 已挂列表管理 -->
     <el-dialog v-model="mountDialogVisible" title="挂接到系统菜单" width="560px">
       <!-- 已挂列表（可解除） -->
       <div v-if="mountedMenus.length" class="mounted-menus">
@@ -173,15 +173,19 @@
           {{ m.menuName }}
         </el-tag>
       </div>
+      <el-radio-group v-model="mountMode" class="mount-mode">
+        <el-radio value="create">新增菜单</el-radio>
+        <el-radio value="overwrite">覆盖已有菜单</el-radio>
+      </el-radio-group>
       <el-alert
-        v-if="mountedMenus.length"
+        v-if="mountMode === 'create' && mountedMenus.length"
         type="warning"
         :closable="false"
         show-icon
         title="继续挂接将为该页面新增一条菜单"
         class="mount-alert"
       />
-      <el-form label-width="90px" @submit.prevent>
+      <el-form v-if="mountMode === 'create'" label-width="90px" @submit.prevent>
         <el-form-item label="菜单名称">
           <el-input v-model="mountForm.name" placeholder="默认使用页面名称" />
         </el-form-item>
@@ -197,9 +201,34 @@
           />
         </el-form-item>
       </el-form>
+      <el-form v-else label-width="90px" @submit.prevent>
+        <el-form-item label="目标菜单">
+          <el-tree-select
+            v-model="overwriteMenuId"
+            :data="overwriteCandidates"
+            :props="{ label: 'menuName', children: 'children', value: 'id', disabled: 'disabled' }"
+            check-strictly
+            filterable
+            clearable
+            placeholder="选择要覆盖指向的已有菜单"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <el-alert
+        v-if="mountMode === 'overwrite' && selectedOverwriteMenu"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mount-alert"
+        :title="`将覆盖菜单「${selectedOverwriteMenu.menuName}」`"
+        :description="`覆盖后该入口将指向当前页面（原指向 ${selectedOverwriteMenu.path || '空'}）；菜单名称、目录、排序与角色授权保持不变。`"
+      />
       <template #footer>
         <el-button @click="mountDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="mounting" @click="confirmMount">挂接</el-button>
+        <el-button type="primary" :loading="mounting" @click="confirmMount">
+          {{ mountMode === 'overwrite' ? '覆盖' : '挂接' }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -290,6 +319,8 @@ import PageSteps from './components/PageSteps.vue'
 import PageChartConfigDialog from './components/PageChartConfigDialog.vue'
 import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
+import { getMenuTree } from '@/api/menu'
+import type { MenuTree } from '@/types/menu'
 import { pageTemplateApi, type PageTemplateDTO } from '@/api/page-template'
 import { skeletonizePageSchema } from './templateSkeleton'
 import { collectDsRefs } from './templateSchema'
@@ -373,6 +404,44 @@ const mountDialogVisible = ref(false)
 const mounting = ref(false)
 const mountedMenus = ref<PageMenuItem[]>([])
 const mountForm = reactive<{ name: string; parentId: number | null }>({ name: '', parentId: null })
+const mountMode = ref<'create' | 'overwrite'>('create')
+const overwriteMenuId = ref<number | null>(null)
+const overwriteMenuTree = ref<MenuTree[]>([])
+
+/** 覆盖候选：全量菜单树，按钮不可作目标；已指向当前页面的菜单置灰 */
+const overwriteCandidates = computed(() =>
+  buildOverwriteTree(overwriteMenuTree.value, `/page/${pageKey.value || ''}`),
+)
+const selectedOverwriteMenu = computed(() => findMenuById(overwriteMenuTree.value, overwriteMenuId.value))
+
+function buildOverwriteTree(menus: MenuTree[], currentPath: string): any[] {
+  return menus
+    .filter((m) => m.menuType !== 2)
+    .map((m) => ({
+      ...m,
+      disabled: m.menuType !== 1 || m.path === currentPath,
+      children: buildOverwriteTree(m.children || [], currentPath),
+    }))
+}
+
+function findMenuById(menus: MenuTree[], id: number | null): MenuTree | null {
+  if (id == null) return null
+  for (const menu of menus) {
+    if (menu.id === id) return menu
+    const hit = findMenuById(menu.children || [], id)
+    if (hit) return hit
+  }
+  return null
+}
+
+async function loadOverwriteMenus() {
+  try {
+    const res = await getMenuTree()
+    overwriteMenuTree.value = res.data || []
+  } catch {
+    overwriteMenuTree.value = []
+  }
+}
 
 /** 所属目录候选：authStore.menus 中 menuType===0 的目录节点（递归） */
 const menuCategories = computed(() => filterMenuDirs(authStore.menus as any[]))
@@ -386,9 +455,12 @@ function filterMenuDirs(menus: any[]): any[] {
     }))
 }
 
-/** 打开挂接弹窗：加载已挂列表 */
+/** 打开挂接弹窗：加载已挂列表与覆盖候选菜单树 */
 async function openMountDialog() {
+  mountMode.value = 'create'
+  overwriteMenuId.value = null
   mountDialogVisible.value = true
+  await loadOverwriteMenus()
   if (pageKey.value) {
     await loadMountedMenus()
   }
@@ -405,15 +477,37 @@ async function loadMountedMenus() {
 
 async function confirmMount() {
   if (!pageId.value) return
+  if (mountMode.value === 'overwrite' && overwriteMenuId.value == null) {
+    ElMessage.warning('请选择要覆盖的菜单')
+    return
+  }
+  if (mountMode.value === 'overwrite') {
+    const target = selectedOverwriteMenu.value
+    try {
+      await ElMessageBox.confirm(
+        `确定把菜单「${target?.menuName}」的入口改为当前页面吗？原指向 ${target?.path || '空'} 将被替换。`,
+        '覆盖确认',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   mounting.value = true
   try {
-    await pageApi.mountMenu(pageId.value, {
-      name: mountForm.name || undefined,
-      parentId: mountForm.parentId ?? null,
-    })
-    ElMessage.success('挂接成功')
-    mountForm.name = ''
-    mountForm.parentId = null
+    if (mountMode.value === 'overwrite') {
+      await pageApi.overwriteMenu(pageId.value, overwriteMenuId.value!)
+      ElMessage.success('已覆盖菜单入口')
+      overwriteMenuId.value = null
+    } else {
+      await pageApi.mountMenu(pageId.value, {
+        name: mountForm.name || undefined,
+        parentId: mountForm.parentId ?? null,
+      })
+      ElMessage.success('挂接成功')
+      mountForm.name = ''
+      mountForm.parentId = null
+    }
     await loadMountedMenus()
   } catch {
     // http 拦截器已弹出错误消息
@@ -1904,6 +1998,9 @@ function statusLabel(status: string): string {
   margin: 0;
 }
 
+.mount-mode {
+  margin-bottom: 14px;
+}
 .mounted-menus {
   margin-bottom: 12px;
 }

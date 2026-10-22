@@ -9803,3 +9803,17 @@ Work Log:
 
 Stage Summary:
 - 事件 #129 单轮闭环，零 mvn 第 113 次；累计 129 次
+---
+Task ID: r221
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 04:05 例行巡检（Job 446961）
+
+Work Log:
+- r220 沙箱故障空窗后本轮自愈 ✓
+- 探活：3000×3=000（vite 未起）、8080=Node 假绿（bun src/index.ts 1317 占据）→ 事件 #130 冷启动降级
+- 定型流水线：pkill 五连清假绿链 → 重拼 jar md5 e369839b ✓ → recover 零 mvn 拉起 java pid 1481；vite 由幂等链路补拉（pid 1368，3000=200）
+- 复验：40s 全绿 200×4 + nodeProbe 200；内存 3176MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #130（冷启动降级亚型）单轮闭环，零 mvn 第 114 次；累计 130 次

@@ -9817,3 +9817,17 @@ Work Log:
 
 Stage Summary:
 - 事件 #130（冷启动降级亚型）单轮闭环，零 mvn 第 114 次；累计 130 次
+---
+Task ID: r224
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 07:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路全 000，无任何服务进程（无 vite/java/mariadb/node）→ 事件 #131 完整冷启动（同 r200 亚型）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → recover 全新重建 MariaDB（mariadbd pid 1188）+ 零 mvn 拉起 Java（pid 1223）真绿
+- 3000 由 start-services.sh 幂等补拉（vite pid 1334；工具 100s 杀前台但后台幂等流程走完）
+- 复验：40s 全绿 200×4 + nodeProbe 200；内存 3346MB，oom 0
+- 收口：dump + rebase + push
+
+Stage Summary:
+- 事件 #131（完整冷启动亚型，本窗口首例）单轮闭环，零 mvn 第 115 次；累计 131 次

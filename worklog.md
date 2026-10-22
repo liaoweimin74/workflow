@@ -9676,3 +9676,18 @@ Work Log:
 Stage Summary:
 - 事件 #120 单轮闭环，零 mvn 第 104 次；内存 3.16GB，oom 0
 - 收口 dump 已推送（见 git log）
+---
+Task ID: r205
+Agent: main (cron 轻量运维)
+Task: 2026-10-22 12:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4，但 8080 真伪核验 code:500 no such table: SYS_USER → 判定 Node 假绿，环境事件 #121（标准重供给）
+- 定型流水线恢复：pkill 五连拦截 → mkdir -p backups/jar /home/z/tools → checkout parts 重拼 jar md5 e369839b ✓ → 本轮 dump 20261022-040539=274K 完整态（非残缺）→ timeout 170 recover（被工具 180s 上限杀，幸存型）
+- 复验：ss 3306/3000/8080 三口归属 ✓（mariadbd 1218 / node 1290 / java 1458），auth accessToken 真绿 ✓
+- 40s 复验：全绿 200×4 + nodeProbe 200 ✓；内存 3114MB，oom_kill 0；单 vite 单 java 进程干净
+- 收口：dump 20261022-041008 → push FAILED → git pull --rebase (3/3) → push 成功 HEAD 99e74dbf
+
+Stage Summary:
+- 事件 #121 单轮闭环，零 mvn 第 105 次；累计恢复 121 次
+- 首轮 dump push FAILED 为收口 rebase 流程常规补救，已闭环

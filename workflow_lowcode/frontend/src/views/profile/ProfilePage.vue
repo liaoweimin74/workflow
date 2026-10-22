@@ -42,8 +42,8 @@ async function handleChangePassword() {
     passwordForm.newPassword = ''
     passwordForm.confirmPassword = ''
     passwordFormRef.value?.clearValidate()
-  } catch (e: any) {
-    ElMessage.error(e?.msg || '修改失败')
+  } catch {
+    // 失败原因（如「旧密码不正确」）已由 http 响应拦截器 toast，这里再提示会出现两条弹窗
   }
 }
 </script>

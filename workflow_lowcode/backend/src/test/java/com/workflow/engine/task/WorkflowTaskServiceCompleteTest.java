@@ -71,8 +71,12 @@ class WorkflowTaskServiceCompleteTest {
         when(flowableTaskService.createTaskQuery())
                 .thenReturn(taskQuery)   // first call: find current task
                 .thenReturn(nextQuery);  // second call: find next task
+        // 下一任务查询链对齐实现：并行场景（会签/或签 MI、并行网关）用
+        // orderByTaskCreateTime + listPage(0,1) 取最早创建的一个，防 Query return 2 results
         when(nextQuery.processInstanceId("pi-001")).thenReturn(nextQuery);
-        when(nextQuery.singleResult()).thenReturn(nextTask);
+        when(nextQuery.orderByTaskCreateTime()).thenReturn(nextQuery);
+        when(nextQuery.asc()).thenReturn(nextQuery);
+        when(nextQuery.listPage(0, 1)).thenReturn(List.of(nextTask));
 
         // 流程未结束
         ProcessInstance pi = mock(ProcessInstance.class);

@@ -44,15 +44,22 @@ function propLiteral(node: IrNode, name: string): unknown {
 }
 
 export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFragment {
+  const label = String((node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.label ?? node.artifact.field)
+  const vmodel = node.artifact.host.vmodel ?? `form.${node.artifact.field}`
+
+  // FormulaField（Task 4.3）：对位组件 LcFormula 在 @lc/runtime-uni，不进 component-map（见 emitFormulaField 注）
+  if (node.artifact.type === 'FormulaField' && node.artifact.field) return emitFormulaField(node, label, vmodel)
+
+  // 嵌套块容器（Task 4.3）：group/subForm（carrier props.rule）递归出码；tableForm 首版不出码落 todo；
+  // 页面级嵌套容器已在 parse 侧整节点降级（无 form 后端），这里不再出块
+  if (node.nested && node.nested.carrier === 'props.rule' && !node.degraded) return emitNestedField(node, profile, label)
+
   const mapping = profile.componentMap?.[node.artifact.type]
   if (!mapping || !node.artifact.field) {
     return {
       template: `<!-- lc:todo node=${node.artifact.id} type=${node.artifact.type} field=${node.artifact.field} 组件类型无 uniapp 出码契约，整字段未出码 -->`,
     }
   }
-
-  const label = String((node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.label ?? node.artifact.field)
-  const vmodel = node.artifact.host.vmodel ?? `form.${node.artifact.field}`
 
   // select 三形态（Task 4.2）：单选 uni-data-select / multiple 弹层 / 远程搜索弹层
   if (node.artifact.type === 'select') return emitSelectField(node, mapping, label, vmodel)
@@ -214,4 +221,148 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
 function optionsRefOf(node: IrNode): string | null {
   const cfg = node.config
   return cfg && Array.isArray(cfg.obj.options) ? `${cfg.name}.options` : null
+}
+
+/**
+ * 嵌套块容器（Task 4.3）：group（行数组）与 subForm（单对象）。
+ * 与 web renderNested 同构：lc-nested 块 + 行壳/子块 + 子节点 emitFieldNode 递归
+ * （子 v-model 由 parse 的 planNested 按作用域算好：行别名 rowVar.field / 子对象
+ * form.<容器>.<子>，本模块不重算）。uni 侧差异：
+ *  · 行壳 card 型 uni-card、其余 view；行操作 el-button → button（:disabled 语义
+ *    等价镜像，min/max 条件读 config 常量）；行头只在有真内容时出——web 侧空钩子
+ *    span 恒出（它的 golden 锁了这个字节形状），uni 侧不出空视图；
+ *  · 行函数 script 由片段携带（web 集中在页面 script 段），仅出模板真绑到的
+ *    handler（没配增删/排序不留空函数——TS6133 孤儿），新行形状 = rowKeys，
+ *    move 的边界守卫与 web 同一套；
+ *  · tableForm（carrier props.columns[].rule）首版不出码：到不了这里，落 todo。
+ */
+function emitNestedField(node: IrNode, profile: TargetProfile, label: string): UniFieldFragment {
+  const n = node.nested!
+  const cfgName = node.config?.name
+  const has = (k: string) => !!node.config && k in node.config.obj
+  const opt = (k: string, fallback: string) => (has(k) ? `${cfgName}.${k}` : fallback)
+  const rows = n.valuePath
+
+  // 子节点递归：parse 降级的子节点落 todo 行，其余走 emitFieldNode（子锚点/label/v-model 都在子节点 artifact 上）
+  const childFrag = (c: IrNode, pad: string): string[] => {
+    if (c.degraded) {
+      return [`${pad}<!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} ${c.degradeReason ?? 'parse 降级'} -->`]
+    }
+    return emitFieldNode(c, profile).template.split('\n').map((l) => `${pad}${l}`)
+  }
+
+  // —— subForm：值形态是对象，子字段直接挂 form.<容器字段>（v-model 由 parse 算好）——
+  if (n.shape === 'object') {
+    return {
+      template: [
+        `<!-- ${node.artifact.anchor} -->`,
+        `<uni-forms-item label="${label}">`,
+        `  <view class="lc-nested lc-nested--sub">`,
+        ...node.children.flatMap((c) => childFrag(c, '    ')),
+        `  </view>`,
+        `</uni-forms-item>`,
+      ].join('\n'),
+    }
+  }
+
+  // —— group：行数组 + 行壳 + 行头/操作 + 添加键 ——
+  const rowTag = node.config?.obj.type === 'card' ? 'uni-card' : 'view'
+  const base = pascal(camelField(node.artifact.field))
+  const h = { add: `add${base}Row`, remove: `remove${base}Row`, move: `move${base}Row` }
+
+  const ops: string[] = []
+  if (has('sortBtn')) {
+    ops.push(`          <button size="mini" :disabled="i === 0" @click="${h.move}(i, -1)">上移</button>`)
+    ops.push(`          <button size="mini" :disabled="i === (${rows} || []).length - 1" @click="${h.move}(i, 1)">下移</button>`)
+  }
+  if (has('button')) {
+    ops.push(`          <button size="mini" :disabled="(${rows} || []).length <= ${opt('min', '0')}" @click="${h.remove}(i)">删除</button>`)
+  }
+  const headLines: string[] = []
+  if (has('title') || ops.length) {
+    headLines.push(`      <view class="lc-nested-row-head">`)
+    if (has('title')) headLines.push(`        <text>{{ ${cfgName}.title.replace('{index}', String(i + 1)) }}</text>`)
+    if (ops.length) headLines.push(`        <view class="lc-nested-row-ops">`, ...ops, `        </view>`)
+    headLines.push(`      </view>`)
+  }
+
+  const template = [
+    `<!-- ${node.artifact.anchor} -->`,
+    `<uni-forms-item label="${label}">`,
+    `  <view class="lc-nested lc-nested--group">`,
+    `    <${rowTag} class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`,
+    ...headLines,
+    ...node.children.flatMap((c) => childFrag(c, '      ')),
+    `    </${rowTag}>`,
+    ...(has('button') ? [`    <button v-if="${condOf(node, cfgName!, rows, 'button')}" @click="${h.add}">添加</button>`] : []),
+    `  </view>`,
+    `</uni-forms-item>`,
+  ].join('\n')
+
+  const script: string[] = []
+  if (has('button') || has('sortBtn')) {
+    const keys = n.rowKeys.map((k) => `${k}: ''`).join(', ')
+    script.push(`/** ${node.artifact.anchor} 行增删（新行形状 = 子字段） */`)
+    if (has('button')) {
+      script.push(`function ${h.add}() { ${rows}.push(${keys ? `{ ${keys} }` : '{}'}) }`)
+      script.push(`function ${h.remove}(i: number) { ${rows}.splice(i, 1) }`)
+    }
+    if (has('sortBtn')) {
+      script.push(`function ${h.move}(i: number, d: number) {`)
+      script.push(`  const rows = ${rows}`)
+      script.push('  const j = i + d')
+      script.push('  if (j < 0 || j >= rows.length) return')
+      script.push('  rows.splice(j, 0, rows.splice(i, 1)[0])')
+      script.push('}')
+    }
+  }
+  return script.length ? { template, script } : { template }
+}
+
+/** 添加键显隐条件（与 web emit.condOf 同构）：max 缺省 '0' → !0 恒真 */
+function condOf(node: IrNode, cfgName: string, rows: string, toggle: string): string {
+  const max = node.config && 'max' in node.config.obj ? `${cfgName}.max` : '0'
+  return `${cfgName}.${toggle} && (!${max} || (${rows} || []).length < ${max})`
+}
+
+/**
+ * FormulaField（Task 4.3）：对位组件 LcFormula（@lc/runtime-uni/formula，formulaEval
+ * 纯函数移植 + form 数据后端）。
+ *  · v-model = vmodel：组件经 update:modelValue 回写自身字段（NaN → null 不提交脏值）；
+ *  · :form = vmodel 去末段——公式只引用同层字段（formRuleWalk 第一版口径），页级是
+ *    页面 model，嵌套时是行/子对象；
+ *  · expression/precision/prefix/suffix/placeholder/disabled 按 IR 白名单透传（契约
+ *    default 面已在 parse 侧裁掉等值缺省，IR 里没有的就不上模板）；
+ *  · 不进 component-map：映射表键即画布件（@lc/ui-mobile）清单，加映射会拖入画布
+ *    渲染与包测试涟漪——emit 特判分支（同 select 先例），画布侧 FormulaField 渲染
+ *    维持现状（后续任务补）；
+ *  · 页面装配侧对含 FormulaField 的页面出 import { LcFormula } from '@lc/runtime-uni/formula'。
+ */
+const FORMULA_PROPS: Record<string, string | true> = {
+  expression: true,
+  precision: true,
+  prefix: true,
+  suffix: true,
+  placeholder: true,
+  disabled: true,
+}
+
+function emitFormulaField(node: IrNode, label: string, vmodel: string): UniFieldFragment {
+  const backend = vmodel.slice(0, vmodel.lastIndexOf('.'))
+  const attrs: string[] = [`v-model="${vmodel}"`, `:form="${backend}"`]
+  for (const [schemaName, tagName] of Object.entries(FORMULA_PROPS)) {
+    const text = propText(schemaName, node)
+    if (text !== null) {
+      const bind = text.startsWith(':') ? ':' : ''
+      attrs.push(tagName === true ? text : `${bind}${tagName}${text.slice(text.indexOf('='))}`)
+    }
+  }
+  return {
+    template: [
+      `<!-- ${node.artifact.anchor} -->`,
+      `<uni-forms-item label="${label}">`,
+      `  <LcFormula ${attrs.join(' ')} />`,
+      `</uni-forms-item>`,
+    ].join('\n'),
+  }
 }

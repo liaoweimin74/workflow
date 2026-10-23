@@ -16,6 +16,7 @@ export default defineConfig({
         form: 'src/form.ts',
         actions: 'src/actions.ts',
         charts: 'src/charts.ts',
+        formula: 'src/formula.ts',
       },
       formats: ['es'],
       fileName: (_format, entryName) => `${entryName}.js`,

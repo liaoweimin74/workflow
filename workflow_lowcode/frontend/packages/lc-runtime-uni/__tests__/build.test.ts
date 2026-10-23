@@ -15,6 +15,10 @@ import { uniRequest } from '../src/http'
 import { useUniForm } from '../src/form'
 import { runAction } from '../src/actions'
 import { buildChartOption } from '../src/charts'
+import { parseFormula, FormulaParseError } from '../src/formula-eval'
+import { LcFormula } from '../src/formula'
+import { mount } from '@vue/test-utils'
+import { nextTick, reactive } from 'vue'
 
 const ROOT = process.cwd()
 const PKG_DIR = resolve(ROOT, 'packages/lc-runtime-uni')
@@ -143,15 +147,71 @@ describe('@lc/runtime-uni — 四入口骨架行为（Task 3.2/3.3）', () => {
   })
 })
 
+describe('@lc/runtime-uni — formula 移植（Task 4.3，formulaEval 纯函数求值断言）', () => {
+  it('依赖收集与四则：${price} * ${count} → 30，deps=[price, count]', () => {
+    const f = parseFormula('${price} * ${count}')
+    expect(f.deps).toEqual(['price', 'count'])
+    expect(f.evaluate({ price: 10, count: 3 })).toBe(30)
+  })
+
+  it('空值传播与除零：缺失依赖 → NaN、除以 0 → NaN（结果恒有限数值或 NaN）', () => {
+    expect(Number.isNaN(parseFormula('${price} * ${count}').evaluate({ price: 10 }))).toBe(true)
+    expect(Number.isNaN(parseFormula('${a} / ${b}').evaluate({ a: 1, b: 0 }))).toBe(true)
+  })
+
+  it('内置函数语义：ROUND half-up（1.25, 1 → 1.3）、MIN', () => {
+    expect(parseFormula('ROUND(${v}, 1)').evaluate({ v: 1.25 })).toBe(1.3)
+    expect(parseFormula('MIN(${a}, ${b})').evaluate({ a: 3, b: 2 })).toBe(2)
+  })
+
+  it('非法表达式抛 FormulaParseError（安全实现无 eval）', () => {
+    expect(() => parseFormula('${a} +* 1')).toThrow(FormulaParseError)
+  })
+})
+
+describe('@lc/runtime-uni — LcFormula 组件（Task 4.3，form 数据后端 + v-model 回写）', () => {
+  it('求值 display（固定小数）并经 update:modelValue 回写自身字段；依赖变化重算', async () => {
+    const form = reactive({ price: 10, count: 3 })
+    const wrapper = mount(LcFormula, { props: { form, expression: '${price} * ${count}', modelValue: 0 } })
+    await nextTick()
+    expect(wrapper.text()).toContain('30.00')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe(30)
+    form.price = 7
+    await nextTick()
+    expect(wrapper.text()).toContain('21.00')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe(21)
+  })
+
+  it('依赖缺失 → NaN 显示占位符并回写 null（不提交脏值）；空表达式 → 请配置表达式；解析错误 → 表达式错误', async () => {
+    const miss = mount(LcFormula, { props: { form: reactive({ a: 1 }), expression: '${a} + ${missing}', modelValue: 0 } })
+    await nextTick()
+    expect(miss.text()).toContain('—')
+    expect(miss.emitted('update:modelValue')?.at(-1)?.[0]).toBeNull()
+    const empty = mount(LcFormula, { props: { form: reactive({}), expression: '  ', modelValue: 0 } })
+    expect(empty.text()).toContain('请配置表达式')
+    const bad = mount(LcFormula, { props: { form: reactive({}), expression: '${a} +* 1', modelValue: 0 } })
+    expect(bad.text()).toContain('表达式错误')
+  })
+
+  it('precision 舍入 + prefix/suffix 拼接', async () => {
+    const w = mount(LcFormula, {
+      props: { form: reactive({ v: 1.25 }), expression: '${v}', precision: 1, prefix: '￥', suffix: '元', modelValue: 0 },
+    })
+    await nextTick()
+    expect(w.text()).toContain('￥1.3元')
+    expect(w.emitted('update:modelValue')?.at(-1)?.[0]).toBe(1.3)
+  })
+})
+
 describe('@lc/runtime-uni — 独立编译 Gate', () => {
-  it('vite build 产出四入口，vue 保持 external 不被内联', () => {
+  it('vite build 产出五入口（含 formula），vue 保持 external 不被内联', () => {
     execFileSync(process.execPath, [viteBin, 'build', '--logLevel', 'silent'], {
       cwd: PKG_DIR,
       stdio: 'pipe',
       timeout: 120_000,
     })
     const files = readdirSync(DIST).filter((f) => f.endsWith('.js'))
-    expect(files.sort()).toEqual(['actions.js', 'charts.js', 'form.js', 'http.js'])
+    expect(files.sort()).toEqual(['actions.js', 'charts.js', 'form.js', 'formula.js', 'http.js'])
     const form = readFileSync(join(DIST, 'form.js'), 'utf8')
     expect(form).toMatch(/from\s+["']vue["']/)
   }, 120_000)

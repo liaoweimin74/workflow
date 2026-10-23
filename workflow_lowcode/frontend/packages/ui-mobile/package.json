@@ -1,0 +1,19 @@
+{
+  "name": "@lc/ui-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "设计器契约渲染画布的移动端组件包：props/事件/插槽与 component-map 中 uni-ui 目标一一对应，皮肤克隆 uni-ui 主题 token（版本锁定）",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./theme": "./src/theme.ts"
+  },
+  "scripts": {
+    "build": "vite build"
+  },
+  "peerDependencies": {
+    "element-plus": "^2.14.3",
+    "vue": "^3.5.40"
+  }
+}

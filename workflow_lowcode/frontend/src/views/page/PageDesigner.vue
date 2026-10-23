@@ -51,27 +51,35 @@
       </div>
     </div>
 
-    <!-- 设计器主体：FcDesigner 画布 -->
+    <!-- 设计器主体：FcDesigner 画布（uniapp 页面套 375×667 设备壳，契约渲染见 Task 2.2） -->
     <div class="designer-body" v-loading="loading">
-      <fc-designer
-        ref="designerRef"
-        :height="designerHeight"
-        :config="designerConfig"
-      >
-        <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
-             vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
-        <template #previewTabs="{ status }">
-          <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
-            <component
-              :is="CodegenPreviewPane"
-              :active="status === 'codegen'"
-              :page-key="pageKey"
-              :page-name="pageName || pageKey"
-              :get-schema="canvasSchema"
-            />
-          </el-tab-pane>
-        </template>
-      </fc-designer>
+      <DeviceFrame :design-type="pageDesignType">
+        <div
+          class="lc-canvas"
+          :class="pageDesignType === 'uniapp' ? 'lc-canvas--uniapp' : ''"
+          :style="pageDesignType === 'uniapp' ? uniCssVars : undefined"
+        >
+          <fc-designer
+            ref="designerRef"
+            :height="designerHeight"
+            :config="designerConfig"
+          >
+            <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
+                 vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
+            <template #previewTabs="{ status }">
+              <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
+                <component
+                  :is="CodegenPreviewPane"
+                  :active="status === 'codegen'"
+                  :page-key="pageKey"
+                  :page-name="pageName || pageKey"
+                  :get-schema="canvasSchema"
+                />
+              </el-tab-pane>
+            </template>
+          </fc-designer>
+        </div>
+      </DeviceFrame>
     </div>
 
     <!-- 数据源/动作配置弹窗 -->
@@ -358,6 +366,9 @@ import { useAuthStore } from '@/stores/auth'
 import { storeToRefs } from 'pinia'
 import { useDesignerStore } from '@/stores/designerStore'
 import { appsApi, type AppDTO } from '@/api/apps'
+import DeviceFrame from './components/DeviceFrame.vue'
+import { resolveComponent, UNIAPP_COMPONENT_MAP, type CanvasDesignType } from './codegen/component-map'
+import { UNI_CSS_VARS } from '@lc/ui-mobile'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
@@ -434,6 +445,8 @@ const pageDesignType = ref<'web' | 'uniapp'>('web')
 const apps = ref<AppDTO[]>([])
 const designerStore = useDesignerStore()
 const { currentAppId } = storeToRefs(designerStore)
+/** uniapp 画布皮肤令牌（theme.ts 克隆的 uni-ui token，DeviceFrame/--ds-* 消费） */
+const uniCssVars = UNI_CSS_VARS
 
 // 出码按钮只在本机 dev 里出现：写盘走 vite 中间件，产物路由也只 dev 登记
 const isDev = import.meta.env.DEV
@@ -1789,9 +1802,32 @@ async function registerMaterialWidgets(schemaRules: unknown) {
   }
 }
 
+  /**
+   * uniapp 契约画布（Task 2.2）：按 component-map 把 @lc/ui-mobile 契约组件注册到 FcDesigner。
+   * rule.type 仍为共享 schema 的字段类型（design_type 不改 schema），这里以
+   * 「契约名 + 类型名」双注册覆盖画布渲染；注册发生在本设计器挂载内，web 页面
+   * 的设计器不受影响（页面切换必然重建设计器）。
+   */
+  async function registerUniAppCanvasComponents() {
+    if (pageDesignType.value !== 'uniapp') return
+    const uiMobile = (await import('@lc/ui-mobile')) as Record<string, unknown>
+    for (const [type, mapping] of Object.entries(UNIAPP_COMPONENT_MAP)) {
+      const renderName = resolveComponent(type, pageDesignType.value as CanvasDesignType)
+      if (!renderName) continue
+      const comp = uiMobile[renderName]
+      if (!comp) continue
+      FcDesigner.component(renderName, comp as any)
+      // 类型名注册：画布渲染 rule.type 时解析到契约组件（结构/API 100% 对齐 component-map）
+      FcDesigner.component(type, comp as any)
+    }
+  }
+
 onMounted(async () => {
   // 注册页面数据组件到 FcDesigner 拖拽面板（数据源配置入口在表单配置页签底部）
   registerPageComponents()
+
+  // uniapp 页面：契约渲染组件注册（Task 2.2；失败不阻塞设计器，回落宿主渲染）
+  void registerUniAppCanvasComponents().catch(() => {})
 
   // 应用上下文下拉数据源（Task 2.1；拉取失败不阻塞设计器）
   appsApi.getApps().then((res) => { apps.value = res.data || [] }).catch(() => {})

@@ -473,6 +473,45 @@ class PageDefinitionPublishIntegrationTest {
         }
 
         @Override
+        public Optional<PageDefinition> findFirstByTenantIdAndAppIdAndKeyOrderByVersionDesc(
+                String tenantId, String appId, String key) {
+            return store.values().stream()
+                    .filter(p -> p.getTenantId().equals(tenantId)
+                            && p.getAppId() != null && p.getAppId().equals(appId)
+                            && p.getKey().equals(key)
+                            && !"ARCHIVED".equals(p.getStatus()))
+                    .max(Comparator.comparing(PageDefinition::getVersion));
+        }
+
+        @Override
+        public boolean existsByTenantIdAndAppIdAndKey(String tenantId, String appId, String key) {
+            return store.values().stream()
+                    .anyMatch(p -> p.getTenantId().equals(tenantId)
+                            && p.getAppId() != null && p.getAppId().equals(appId)
+                            && p.getKey().equals(key)
+                            && !"ARCHIVED".equals(p.getStatus()));
+        }
+
+        @Override
+        public Optional<PageDefinition> findFirstByTenantIdAndAppIdAndKeyAndStatusOrderByVersionDesc(
+                String tenantId, String appId, String key, String status) {
+            return store.values().stream()
+                    .filter(p -> p.getTenantId().equals(tenantId)
+                            && p.getAppId() != null && p.getAppId().equals(appId)
+                            && p.getKey().equals(key) && status.equals(p.getStatus()))
+                    .max(Comparator.comparing(PageDefinition::getVersion));
+        }
+
+        @Override
+        public Page<PageDefinition> findByTenantIdAndAppIdOrderByUpdatedAtDesc(
+                String tenantId, String appId, Pageable pageable) {
+            return page(all().stream()
+                    .filter(p -> p.getTenantId().equals(tenantId)
+                            && p.getAppId() != null && p.getAppId().equals(appId))
+                    .toList(), pageable);
+        }
+
+        @Override
         public Page<PageDefinition> findByTenantIdOrderByUpdatedAtDesc(String tenantId, Pageable pageable) {
             return page(all().stream().filter(p -> p.getTenantId().equals(tenantId)).toList(), pageable);
         }

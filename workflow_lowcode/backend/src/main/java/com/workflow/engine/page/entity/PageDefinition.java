@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "wf_page_def",
-       uniqueConstraints = @UniqueConstraint(name = "uk_page_def_tenant_key_version", columnNames = {"tenant_id", "`key`", "version"}),
+       uniqueConstraints = @UniqueConstraint(name = "uk_page_def_tenant_app_key_version", columnNames = {"tenant_id", "app_id", "`key`", "version"}),
        indexes = {
                @Index(name = "idx_page_def_tenant_form", columnList = "tenant_id, form_key"),
                @Index(name = "idx_page_def_tenant_status", columnList = "tenant_id, status")
@@ -23,6 +23,13 @@ public class PageDefinition {
 
     @Column(name = "tenant_id", length = 64, nullable = false)
     private String tenantId;
+
+    /**
+     * 归属应用 ID（wf_app.id）。页面创建时确定；存量数据由 V68 迁移回填默认应用。
+     * key 唯一性在 (tenant_id, app_id, key, version) 维度——同租户不同应用允许同 key 页面。
+     */
+    @Column(name = "app_id", length = 80)
+    private String appId;
 
     @Column(name = "name", length = 255, nullable = false)
     private String name;
@@ -89,6 +96,9 @@ public class PageDefinition {
 
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+
+    public String getAppId() { return appId; }
+    public void setAppId(String appId) { this.appId = appId; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

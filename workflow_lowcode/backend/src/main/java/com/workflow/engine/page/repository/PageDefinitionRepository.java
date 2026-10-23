@@ -35,6 +35,19 @@ public interface PageDefinitionRepository extends JpaRepository<PageDefinition, 
 
     Optional<PageDefinition> findByTenantIdAndKeyAndVersion(String tenantId, String key, Integer version);
 
+    // ---------------- 按 app 维度（V68 起页面归属应用，key 唯一性在 app 维度） ----------------
+
+    /** key 唯一性判定口径：同 app 内同 key 的最新版本。 */
+    Optional<PageDefinition> findFirstByTenantIdAndAppIdAndKeyOrderByVersionDesc(String tenantId, String appId, String key);
+
+    boolean existsByTenantIdAndAppIdAndKey(String tenantId, String appId, String key);
+
+    /** 同 app 内同 key 的最新已发布版本（发布链路用）。 */
+    Optional<PageDefinition> findFirstByTenantIdAndAppIdAndKeyAndStatusOrderByVersionDesc(
+            String tenantId, String appId, String key, String status);
+
+    Page<PageDefinition> findByTenantIdAndAppIdOrderByUpdatedAtDesc(String tenantId, String appId, Pageable pageable);
+
     /**
      * 悲观锁查询（用于发布等需要串行化状态流转的场景）。
      */

@@ -9879,3 +9879,19 @@ Work Log:
 
 Stage Summary:
 - 事件 #133 单轮闭环，零 mvn 第 117 次；累计 133 次
+
+---
+Task ID: r230
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 完整冷启动（事件 #133）：四链路 000×4、3306 离线、无业务进程
+- pkill 五连拦截 mvn → 重拼 jar md5 e369839b 校验通过 → timeout 170 recover-dplus.sh（被工具 180s 杀，幸存型）
+- 复验：Java 拉起 8080 auth 真绿 accessToken、mariadbd 3306 在线、workflow 103 表完整（workflow_v6 历来空库）
+- start-services.sh 补拉 vite → 3000 200
+- 40s 四链路复验 200×4 + nodeProbe 200
+
+Stage Summary:
+- 事件 #133 完整冷启动单轮恢复成功，零 mvn 第 117 次
+- mariadb 客户端需 sysroot LD_LIBRARY_PATH（libncurses.so.6）

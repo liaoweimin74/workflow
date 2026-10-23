@@ -27,7 +27,7 @@
 ### Superpowers 路径
 
 ```
-{{SUPERPOWERS_BASE_PATH}}
+C:\Users\foxwe\.cache\opencode\packages\superpowers@obra\node_modules\superpowers\skills\
 ```
 
 ### skill() 不可用时
@@ -41,7 +41,7 @@
 
 | 任务类型    | 调用方式                                                                                                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 实现任务    | `task(category="deep", load_skills=[], ...)` — prompt 中嵌入 TDD 指令（Read {{SUPERPOWERS_BASE_PATH}}test-driven-development/SKILL.md） |
+| 实现任务    | `task(category="deep", load_skills=[], ...)` — prompt 中嵌入 TDD 指令（Read C:\Users\foxwe\.cache\opencode\packages\superpowers@obra\node_modules\superpowers\skills\test-driven-development/SKILL.md） |
 | 代码搜索    | `task(subagent_type="explore", ...)`                                                                                                    |
 | 查文档      | `task(subagent_type="librarian", ...)`                                                                                                  |
 | 架构决策    | `task(subagent_type="oracle", ...)`                                                                                                     |

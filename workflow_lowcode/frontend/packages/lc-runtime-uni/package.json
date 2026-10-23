@@ -10,7 +10,8 @@
     "./form": "./src/form.ts",
     "./actions": "./src/actions.ts",
     "./charts": "./src/charts.ts",
-    "./formula": "./src/formula.ts"
+    "./formula": "./src/formula.ts",
+    "./list": "./src/list.ts"
   },
   "scripts": {
     "build": "vite build"

@@ -10,8 +10,8 @@ import type { ChainNeed, IrChain, IrChainStep, IrTemplatePart } from './ir'
 
 const lit = (v: unknown): string => (typeof v === 'string' ? `'${v.replace(/'/g, "\\'")}'` : JSON.stringify(v))
 
-/** 对象/属性键：蛇形与短横线字段要加引号，裸写会成非法标识符 */
-const keyText = (k: string): string => (/^\w+$/.test(k) ? k : lit(k))
+/** 对象/属性键：蛇形与短横线字段要加引号，裸写会成非法标识符（uni 出口表共用） */
+export const keyText = (k: string): string => (/^\w+$/.test(k) ? k : lit(k))
 
 /** 行字段取值：业务字段大量带短横线，不是合法标识符就走下标 */
 const rowAccess = (field: string): string =>
@@ -34,10 +34,11 @@ export function exprOf(parts: IrTemplatePart[]): string {
     .join(' + ')
 }
 
-const argOf = (step: IrChainStep, name: string): IrTemplatePart[] => step.args.find((a) => a.name === name)?.parts ?? []
+/** 取步骤某名下参数；uni 出口表（uni/emit-list.ts）与 web 出口共用这份归一化结果 */
+export const argOf = (step: IrChainStep, name: string): IrTemplatePart[] => step.args.find((a) => a.name === name)?.parts ?? []
 
 /** 只有字面量段时取出来，混了取值段就得留到运行期表达式 */
-const literalOf = (parts: IrTemplatePart[]): string | undefined =>
+export const literalOf = (parts: IrTemplatePart[]): string | undefined =>
   parts.length === 1 && parts[0].kind === 'text' ? parts[0].text : undefined
 
 /** 容器动作的打开语义：按钮 key 带的模式优先（edit→edit、view→只读），否则按有没有记录 id */

@@ -11,12 +11,26 @@ export interface UniAppComponentMapping {
   tag: string
   /** @lc/ui-mobile 契约渲染组件导出名（画布侧 resolve 用） */
   render: string
+  /**
+   * 出码属性白名单（Task 4.1）：schema prop 名（与契约 props 面同名）→ uni 标签属性名
+   * （同名传 true，改名传目标名）。未登记的 IR prop 不上模板——白名单即 uni 侧的
+   * 丢弃登记，golden 快照锁定落法（textarea 的 rows、datePicker 的 valueFormat 是例证）。
+   */
+  props?: Record<string, string | true>
+  /** 固定属性（对位 web 契约 constAttrs）：恒以字面量出的产物侧接线（textarea 的 type=textarea） */
+  staticProps?: Record<string, string | number | boolean>
 }
 
 /** uniapp 侧组件映射（@lc/ui-mobile 组件清单的单一事实源） */
 export const UNIAPP_COMPONENT_MAP: Record<string, UniAppComponentMapping> = {
-  input: { tag: 'uni-easyinput', render: 'LcInput' },
-  inputNumber: { tag: 'uni-number-box', render: 'LcInputNumber' },
+  input: { tag: 'uni-easyinput', render: 'LcInput', props: { placeholder: true } },
+  textarea: {
+    tag: 'uni-easyinput',
+    render: 'LcTextarea',
+    props: { placeholder: true },
+    staticProps: { type: 'textarea' },
+  },
+  inputNumber: { tag: 'uni-number-box', render: 'LcInputNumber', props: { min: true, max: true } },
   radio: { tag: 'uni-radio-group', render: 'LcRadio' },
   checkbox: { tag: 'uni-checkbox-group', render: 'LcCheckbox' },
   select: { tag: 'uni-data-select', render: 'LcSelect' },
@@ -24,7 +38,7 @@ export const UNIAPP_COMPONENT_MAP: Record<string, UniAppComponentMapping> = {
   rate: { tag: 'uni-rate', render: 'LcRate' },
   slider: { tag: 'uni-slider', render: 'LcSlider' },
   timePicker: { tag: 'uni-datetime-picker', render: 'LcTimePicker' },
-  datePicker: { tag: 'uni-datetime-picker', render: 'LcDatePicker' },
+  datePicker: { tag: 'uni-datetime-picker', render: 'LcDatePicker', props: { type: true, placeholder: true } },
   dateRange: { tag: 'uni-datetime-picker', render: 'LcDateRange' },
   cascader: { tag: 'uni-data-picker', render: 'LcCascader' },
   colorPicker: { tag: 'uni-easyinput', render: 'LcColorPicker' },

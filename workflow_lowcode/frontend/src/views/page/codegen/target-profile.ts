@@ -51,7 +51,6 @@ export const KNOWN_TYPES: readonly string[] = [
   'page-calendar', 'page-timeline', 'page-steps',
   'FormulaField', 'SystemUserPicker', 'SystemDeptPicker', 'SystemAttachment', 'SystemImage',
   'dash-kpi-trend',
-  'textarea',
 ]
 
 /** 三区判定：硬清单命中即对应分区，其余（含未知类型）一律 universal */

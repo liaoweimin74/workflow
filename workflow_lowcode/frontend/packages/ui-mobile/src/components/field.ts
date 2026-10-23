@@ -52,6 +52,11 @@ export const LcInput = defineComponent({
   },
 })
 
+/** uni-easyinput(type=textarea) 契约：v-model + placeholder；静态 type=textarea（契约固定接线） */
+export const LcTextarea = thin('LcTextarea', ElInput, {
+  placeholder: { type: String, default: '请输入' },
+}, { type: 'textarea' })
+
 /** uni-number-box 契约：v-model + min/max/step */
 export const LcInputNumber = thin('LcInputNumber', ElInputNumber, {
   min: { type: Number, default: 0 },

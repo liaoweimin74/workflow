@@ -9866,3 +9866,16 @@ Work Log:
 Stage Summary:
 - 事件 #132 单轮闭环，零 mvn 第 116 次；累计 132 次
 - r224 的 git add -f 兜底已被重供给实证有效（dump 随 git 幸存）
+---
+Task ID: r228
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 11:05 例行巡检（Job 446961）
+
+Work Log:
+- 探活：四链路 200×4 但 auth=no such table → 事件 #133（标准重供给，Node 占 8080）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → recover 零 mvn 拉起 java pid 1456
+- 复验：40s 全绿 200×4 + nodeProbe 200；内存 3192MB，oom 0
+- 收口：dump + add -f 强制入库 + push
+
+Stage Summary:
+- 事件 #133 单轮闭环，零 mvn 第 117 次；累计 133 次

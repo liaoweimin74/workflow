@@ -20,7 +20,7 @@
 
 ### Requirement: 组件映射保真口径
 
-TargetProfile SHALL 声明组件映射与端能力矩阵，emit SHALL 按映射出码：
+TargetProfile SHALL 声明组件映射与端能力矩阵，emit SHALL 按映射出码；`componentMap` SHALL 同时作为设计器契约渲染画布（`@lc/ui-mobile`）与 emit 的组件解析依据（单一事实源）：
 - 字段族：input/textarea→uni-easyinput、inputNumber→uni-number-box、datePicker→uni-datetime-picker、group/subForm→块容器、select→picker/uni-data-select（multiple 与远程搜索自绘弹层）
 - 列表与详情：page-list-cards→uni-card 列表 + 触底加载、page-detail→堆叠详情、page-steps→uni-steps、page-data-container→uni-popup 弹层
 - **page-table SHALL 出 uni-table 简表（横向滚动），操作列 SHALL 收进「···」弹层**（用户决策）

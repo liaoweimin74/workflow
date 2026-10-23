@@ -40,11 +40,22 @@
 ### Requirement: 客户端页面启用清单
 
 Client 的交付内容 SHALL 由 `wf_app_client_page` 启用清单决定：每个条目 SHALL 引用所属 App 的一个页面并携带导航顺序 `sort` 与导航配置；未分配给某 Client 的页面 MUST NOT 出现在该 Client 的导航、预览与构建产物中。
+页面分配时系统 SHALL 校验页面设计类型与 Client 端类型兼容（web→WEB，uniapp→MP_WEIXIN/H5/APP），不兼容 SHALL 返回 400；同一 uniapp 页面 SHALL 允许同时分配给同一 App 下的小程序与 H5 客户端（同池跨端复用，Client 层的核心价值）。
 
 #### Scenario: 页面分配与导航顺序
 - **WHEN** 管理员将应用「商户端」的页面 A、B 分配给小程序客户端并设置 sort=1、2
 - **THEN** 该客户端的导航（tabBar/页面清单）按 sort 展示 A、B
 - **AND** 同应用未分配的页面 C 不出现在该客户端的任何入口与产物中
+
+#### Scenario: 同一 uniapp 页面池跨小程序与 H5 复用
+- **WHEN** 应用「商户端」下同一 uniapp 页面分别分配给小程序客户端与 H5 客户端
+- **THEN** 两端各自按启用清单与构建配置出码交付，互不影响
+- **AND** 页面更新发布后两端各自通过新建 Release 表达
+
+#### Scenario: 设计类型不兼容分配被拒绝
+- **WHEN** 将 design_type=web 的页面分配给小程序客户端
+- **THEN** 系统返回 400
+- **AND** 不产生分配记录
 
 ---
 

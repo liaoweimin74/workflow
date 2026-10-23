@@ -28,25 +28,30 @@
 
 ## ADDED Requirements
 
-### Requirement: 设计器端维度与设备框画布
+### Requirement: 页面设计类型与契约渲染画布
 
-页面设计器 SHALL 增加「端」维度：
-- 顶部 SHALL 提供应用切换与端 Tab（WEB / MP_WEIXIN / H5 / APP），页面保存/发布 SHALL 携带当前应用上下文；
-- 画布 SHALL 按端呈现设备框：WEB 为桌面宽度，移动端为 375×667 手机壳；
-- 组件面板 SHALL 按 TargetProfile 端能力矩阵过滤：移动端不支持的组件（如 PageIframe、Excel 导入导出、树/树表族）SHALL 置灰并提示原因，MUST NOT 允许拖入后出码时静默丢弃；
-- 端维度 SHALL NOT 引入第二套 schema 格式：移动端页面与 Web 页面 SHALL 使用同一 schema 存储结构。
+页面设计器 SHALL 为页面提供设计类型 `design_type`（web | uniapp）：
+- 页面创建时 SHALL 确定设计类型，创建后 MUST NOT 变更（设计器不提供类型切换入口，更新接口 SHALL 拒绝变更 design_type）；选错类型以新建页面替代；
+- 设计器 SHALL 使用同一渲染机按 design_type 解析组件注册表：web→宿主组件包（现状），uniapp→`@lc/ui-mobile`（uni-ui 契约对齐的 web 封装组件，与出码共用同一 component-map）；两类页面 SHALL 使用同一 schema 存储结构，design_type MUST NOT 改变 schema 格式；
+- 画布 SHALL 按类型呈现设备框：web 为桌面宽度，uniapp 为 375×667 手机壳；
+- 组件面板 SHALL 按当前页面类型的三区能力矩阵（Web 专属 / 双端共享 / 移动专属）过滤：当前类型不支持的组件 SHALL 置灰并提示原因，MUST NOT 允许拖入后出码时静默丢弃；
+- 页面保存/发布 SHALL 携带应用上下文；小程序/H5/APP 在设计期 SHALL 呈现同一 uniapp 画布（差异收敛于交付层）。
 
-#### Scenario: 切换端后面板能力过滤
-- **WHEN** 用户将端切换为「小程序」
-- **THEN** 组件面板中移动端不支持的能力矩阵项（如 iframe、Excel）置灰并显示原因提示
-- **AND** 受支持组件（字段族、卡片列表、图表等）保持可拖入
+#### Scenario: 移动类型页面的画布与面板
+- **WHEN** 用户打开 design_type=uniapp 的页面
+- **THEN** 画布呈现 375×667 手机壳并以 @lc/ui-mobile（uni-ui 契约对齐）渲染页面定义
+- **AND** 面板中 Web 专属组件（iframe、Excel 导入导出、树/树表族）置灰并提示「仅 Web 端可设计」
+
+#### Scenario: 设计类型创建后不可变更
+- **WHEN** 用户尝试变更已创建页面的设计类型
+- **THEN** 设计器不提供切换入口，更新接口拒绝变更 design_type
 
 #### Scenario: 页面保存携带应用上下文
-- **WHEN** 用户在「商户端」+「小程序」上下文中保存页面
+- **WHEN** 用户在「商户端」应用上下文中保存页面
 - **THEN** 页面归属「商户端」应用且 schema 与 Web 页面同构存储
-- **AND** 端信息记录在 Client 维度的启用清单中而非页面 schema
+- **AND** 交付归属记录在 Client 维度的启用清单中而非页面 schema
 
-#### Scenario: 同一页面在设计器内跨端复用为独立定义
-- **WHEN** 商户端 Web 与小程序需要不同的列表布局
-- **THEN** 用户在应用下分别创建两个页面并各自分配给对应 Client
-- **AND** 两个页面在各自端画布中独立设计与预览
+#### Scenario: 双端共享页面复用经分配实现
+- **WHEN** 仅使用双端共享组件的 uniapp 页面被同时分配给小程序客户端与 H5 客户端
+- **THEN** 两端从同一页面定义各自出码交付
+- **AND** 画布始终按页面创建时的设计类型渲染，无需任何切换

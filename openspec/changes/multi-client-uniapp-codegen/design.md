@@ -22,9 +22,9 @@
 **Goals:**
 
 - G1 数据模型与 API：`wf_app` / `wf_app_client` / `wf_app_client_page` / `wf_app_release` 四表 + `wf_page_def` 加 `app_id`，App/Client/发布 CRUD 与查询接口。
-- G2 设计器「端」维度：页面归属应用；App 切换 + 端 Tab；画布设备框（Web 桌面 / 375 手机壳）；组件面板按端能力矩阵过滤（web-only 置灰）。
+- G2 设计器「端」维度：页面归属应用；页面携带设计类型（web/uniapp，创建时定、不可变更）；同一渲染机按类型解析组件注册表；画布设备框（Web 桌面 / 375 手机壳契约渲染）；三区能力矩阵过滤（Web 专属/共享/移动专属，双向置灰）；页面分配校验设计类型与 Client 端类型兼容。
 - G3 出码第二目标：`emitUniApp(IR, TargetProfile)` + `@lc/runtime-uni` 仓库内包，产物工程独立可编译（pages.json / manifest.json / 页面 SFC / uni 侧适配层）。
-- G4 双层预览：设计器内布局级即时预览（375 宿主组件模拟）；产物级预览（uni-app H5 构建 iframe 手机壳；小程序预览二维码）。
+- G4 预览分层：日常所见即所得由设计器契约渲染画布承担（@lc/ui-mobile，与出码同一 component-map）；产物级预览（uni-app H5 构建 iframe 手机壳 + 小程序预览二维码）降为发布前核对手段。
 - G5 V1 组件面：能力矩阵 §4.2 + 三项决策（page-table 出 uni-table 简表；fcTable/tableForm 降级实现；chart 族进 V1 用 Uni ECharts）。
 - G6 构建发布链路：页面发布 → AppRelease 快照 → 按 Client 构建（mp-weixin / H5）→ 产物归档 + miniprogram-ci 体验版上传。
 
@@ -49,6 +49,7 @@
 - `Client` = App 的一个交付实例：端类型（WEB/MP_WEIXIN/H5/APP）+ 构建配置（appid/域名/包名）+ 导航（tabBar/菜单）+ 页面启用清单 + 发布记录。
 - 同一端类型可有 N 个 Client，同一 App 可有 N 个端；页面属 App 级，经 `wf_app_client_page` 分配给各 Client。需要不同移动布局时建独立页面分配给移动 Client（V1 不做页面级变体）。
 - 备选「扁平应用（App=端实例）」否决：同一业务多端会裂成互不相干的应用，页面/主题无法共享；备选「页面级多端变体」否决：设计器/版本/发布全链路复杂度最高，V1 需求可被覆盖。
+- 两层保留的决策依据（2026-10-23 与用户复核）：页面按设计类型（web/uniapp）分离后，「同一 uniapp 页面池跨小程序 + H5 交付」成为 Client 层不可替代的职责（用户确认该场景会出现）；扁平「应用=端实例」会迫使 MP/H5 整池复制页面。
 
 ### D3：数据模型与迁移
 
@@ -70,13 +71,19 @@ wf_page_def       + app_id 列；唯一键改 (tenant_id, app_id, `key`, version
 
 Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效，不强制走出码），MP_WEIXIN/H5/APP=CODEGEN。字段留 Client 上是刻意留口：未来 H5 也可 RUNTIME 直跑（快速移动 Web 场景），或某小程序客户要求动态化时再评估。
 
-### D5：设计器「端」维度 = 加维度，不建第二设计器
+### D5：设计器「端」维度 = 页面设计类型 + 契约渲染，不建第二设计器
 
-设计器本质 schema 驱动：画布 → rule+lc 元数据 → 存储。移动端设计复用同一设计器、同一 schema 格式（反目标：出现第二套 schema）：顶部 App 切换 + 端 Tab；画布按端给设备框（桌面 / 375×667 手机壳）；组件面板按 TargetProfile 能力矩阵过滤，web-only 组件置灰并提示原因；出码报告按端分桶（复用现有 A/B/C 桶机制）。
+设计器本质 schema 驱动：画布 → rule+lc 元数据 → 存储。移动端设计复用同一设计器、同一渲染机、同一 schema 格式（反目标：出现第二套 schema）：
+
+- **页面设计类型**：页面携带 `design_type`（web | uniapp），创建时确定、不可变更（设计器不提供切换入口，选错 = 新建页面；「复制为另一类型」留 V1.1 评估）。类型只决定画布与组件注册表，MUST NOT 改变 schema 结构；页面交付归属仍由 Client 启用清单决定，两者正交。
+- **画布 = 契约渲染**：同一渲染机按 design_type 解析组件注册表——web→宿主 el-* 包（现状不动），uniapp→`@lc/ui-mobile`（uni-ui 契约对齐的 web 封装组件包：props/事件/插槽与 emit 产物中的 uni-ui 标签一一对应，视觉克隆 uni-ui 主题 token 并锁定其版本）。画布与出码共用同一份 component-map（单一事实源）。画布按类型给设备框（桌面 / 375×667 手机壳）。
+- **三区能力矩阵（双向）**：组件 × 端支持关系分三区——Web 专属（PageIframe/Excel/树族）、双端共享（主体）、移动专属（V1 仅机制预留不落组件，V1.1 按需启用）。面板按当前页面类型过滤，不支持项置灰并提示原因。
+- **分配类型校验**：页面分配给 Client 时校验 design_type 与 Client 端类型兼容（web→WEB，uniapp→MP_WEIXIN/H5/APP），不兼容 400；组件级能力由面板过滤在创建侧保证，分配侧无需逐组件校验。
+- 小程序/H5/APP 在设计期零差别（同一 uniapp 注册表与画布），差异全部收敛在交付层（Client 的构建配置/凭证/清单）；出码报告按端分桶（复用现有 A/B/C 桶机制）。
 
 ### D6：出码架构 = TargetProfile 驱动的第二 emit 后端
 
-- `parse → IR` 完全复用；新增 `emitUniApp(IR, profile)`。
+- `parse → IR` 完全复用；新增 `emitUniApp(IR, profile)`；`componentMap` 同时作为设计器契约渲染画布（@lc/ui-mobile）与 emit 的组件解析依据（单一事实源，D5）。
 - `TargetProfile = { platform: 'web'|'uniapp', componentMap, styleRules, apiAdapter, routerAdapter, capabilities }`：组件映射（el-*/page-* → uni-ui 对位）、px→rpx 换算（375 画布基准）、API 适配（uni.request + token + 租户头）、路由适配（uni.navigateTo）。
 - 产物工程文件集：`pages.json`（按 Client 页面启用清单与导航生成）、`manifest.json`（appid/名称等 build_config）、`App.vue`、`pages/<key>.vue`、`@lc/runtime-uni`（仓库内 file 依赖包，产物独立可编译，沿用 P2 D3 纪律）。
 - 脚本零新成本：动作链/事件脚本在生成期已是普通函数（P2 D4），产物上下文（form/row/page/message/http）在 uni 侧提供同名适配；白名单越界标识符照旧登记 unsupported。
@@ -101,10 +108,11 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 
 `ACTION_OPS` 14 项逐项适配：`open-link→uni.navigateTo`、`message→uni.showToast`、list-ref 族→ref 调用、container 族→产物容器段函数、`export/delete` 按端语义核对（export 移动端登记 unsupported）。生成期展开 `$row`/`$param` 的既有机制不变；表外 op 一律不接线（登记），沿用「不许假挂点」纪律。
 
-### D9：双层预览
+### D9：预览分层（画布即契约渲染，产物预览降为发布前核对）
 
-- **布局级（设计器内，即时）**：宿主组件在 375 设备框内渲染当前页面。明确承诺只保真**布局**不保真观感（el-* ≠ uni-ui），UI 上标注「布局预览」。
-- **产物级（真机感）**：`emitUniApp` → uni-app H5 构建 → iframe 手机壳加载（复用 codegen-lab「宿主 vs 产物」双渲染骨架）；小程序目标出预览二维码引导进微信开发者工具。构建按需触发（预览按钮），不常驻 watch。
+- **日常所见即所得 = 设计器画布**：@lc/ui-mobile 契约渲染（D5），免构建、交互与 Web 画布一致（真 DOM 拖拽/选中）。保真口径：结构/API 100%（同一 component-map）、皮肤 ~95%（克隆 uni-ui token + 版本锁定）、rpx 换算同源；小程序原生层（canvas 2d/键盘/胶囊）任何网页画布不可及，以真机二维码兜底。
+- **产物级预览（发布前核对）**：`emitUniApp` → uni-app H5 构建 → iframe 手机壳加载（复用 codegen-lab「宿主 vs 产物」双渲染骨架）；小程序目标出预览二维码引导进微信开发者工具。构建按需触发（预览按钮），不常驻 watch。
+- 备选「iframe 挂 uni dev server + HMR 实时产物画布」否决：postMessage 桥接拖拽/选中与 dev server 生命周期管理成本高且交互割裂；契约渲染以同源映射达到等效保真且交互不打折扣。
 
 ### D10：构建发布链路
 
@@ -123,7 +131,8 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 - [「Web 能配、移动不支持」的隐形坑] → 双 Gate：设计器能力矩阵硬过滤 + 出码报告 per-target 分桶，不支持项必须显式登记而非静默丢弃
 - [并行开发期间 Flyway 版本号冲突] → 迁移号取合并时 main 最新 +1；rebase 按 AGENTS.md lockfile 规则处理
 - [lime-echart 在 mp-weixin canvas 2d 的兼容性未知] → 列入首日 spike；fallback uCharts
-- [布局级即时预览误导用户调样式] → UI 明确标注「布局预览」；观感调优以产物预览为准
+- [@lc/ui-mobile 皮肤克隆与真实 uni-ui 漂移] → 锁定 uni-ui 版本、主题 token 单一来源；产物级预览 + 真机二维码作发布前核对
+- [页面设计类型选错返工] → 创建入口按进入上下文给默认值；「复制为另一类型」留 V1.1 评估
 - [V1 体量 6–8 人周] → 里程碑分批：M1 数据模型+设计器端维度（可演示）；M2 字段族+列表/详情出码闭环（H5 产物可跑）；M3 图表+uni-table/降级件+发布链路
 - [AppRelease 快照与持续发布的语义混淆] → 快照只引用 published_version；「重新发布」= 新建 Release，不做原地变更
 
@@ -140,5 +149,5 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 2. lime-echart 按需注册与分包落点（图表页 subpackage 切分规则）。
 3. rpx 换算基准：设计器 375 画布 ↔ 小程序 750 设计稿的映射细则。
 4. `WechatMiniprogramClient` 从单 appId Bean 改按 Client 配置多实例的方式（配置表驱动 vs Bean 工厂）。
-5. 布局级即时预览的实现边界：哪些视觉差异可接受需在实现期与用户对齐样例。
+5. @lc/ui-mobile 组件清单与 uni-ui 版本锁定（按 component-map uniapp 侧范围在实现期定）。
 6. 触底分页与 `pageSize/pageSizes` 语义映射（load-more vs 分页条口径）。

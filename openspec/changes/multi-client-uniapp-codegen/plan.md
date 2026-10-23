@@ -26,6 +26,7 @@
 3. **未分配页面泄漏进产物**：pages.json/导航出现未分配页面 → 数据暴露面。测试钉住：`__tests__/uni/pages-json.test.ts` 断言产物页清单 === 启用清单（Task 1.3/3.3）。
 4. **迁移后存量页面不可见**：`app_id` 回填遗漏 → 全站页面丢失。测试钉住：迁移测试断言每租户默认应用存在且旧页归属（Task 1.1/1.5）。
 5. **跨应用分配/跨租户越权**：错乱导航与数据越权。测试钉住：分配 API 跨应用 400、CRUD 跨租户 404（Task 1.2/1.3）。
+6. **跨端错配**：web 页面分配给移动 Client（或反之）→ 交付面错乱。测试钉住：分配 API 设计类型兼容校验 400（Task 1.3）。
 
 ---
 
@@ -45,10 +46,11 @@ workflow_lowcode/frontend/
   src/views/page/codegen/uni/{emit-uni,component-map,project-files,action-emit-uni}.ts
   src/views/page/codegen/__tests__/uni/*.test.ts                   # uni 目标测试
   src/views/page/codegen/generate.ts                               # 不改（web 入口保持）
-  src/stores/designerStore.ts                                      # +currentAppId/currentClientType
+  src/stores/designerStore.ts                                      # +currentAppId；页面 design_type（web|uniapp，创建后不可变）
   src/views/page/PageDesigner.vue / PageListPage.vue               # 端 Tab/设备框/能力过滤/应用过滤
   src/views/page/components/DeviceFrame.vue                        # 手机壳
   packages/lc-runtime-uni/{package.json,src/{http,form,actions,charts}.ts}
+  packages/ui-mobile/{package.json,src/theme.ts,src/components/*}    # @lc/ui-mobile 契约渲染画布组件包
   uni-shell/{package.json,vite.config.ts,src/{pages.json,manifest.json,App.vue}}
   uni-shell/src/pages/gen/<key>.vue                                # 生成产物落点
   uni-shell/src/uni-api/{request.ts,glue.ts}
@@ -84,9 +86,9 @@ workflow_lowcode/mini-services/app-builder/
 **Files:** Create `engine/app/AppModelService` 分配方法 + Controller 端点；Test 追加 `AppAdminControllerTest`
 **Interfaces:** Produces `PUT /api/v1/apps/{appId}/clients/{clientId}/pages`（body: `[{pageId, sort, navConfig}]` 全量替换）、`GET .../pages`
 
-- [ ] **Step 1（RED）:** 测试：分配本 app 页面 200；分配其它 app 页面 400；分配不存在页面 400；全量替换后 GET 返回按 sort 排序清单
+- [ ] **Step 1（RED）:** 测试：分配本 app 页面 200；分配其它 app 页面 400；分配不存在页面 400；web 页面分配给 MP_WEIXIN client → 400；uniapp 页面同时分配 MP_WEIXIN + H5 client → 200；全量替换后 GET 返回按 sort 排序清单
 - [ ] **Step 2:** 运行 → FAIL
-- [ ] **Step 3:** 实现：校验 pageId ∈ 本 app 页面；事务内 delete+insert 全量替换
+- [ ] **Step 3:** 实现：校验 pageId ∈ 本 app 页面；校验 page design_type ↔ client_type 兼容（后端维护最小枚举映射，与前端 target-profile 测试对账防漂移）；事务内 delete+insert 全量替换
 - [ ] **Step 4:** → PASS；提交 `feat(app): 客户端页面启用清单 API`
 
 ## Task 1.4: 页面服务层 app 维度（M1）
@@ -104,31 +106,31 @@ workflow_lowcode/mini-services/app-builder/
 - [ ] **Step 1:** 跑后端全量 `mvn -o test` 与前端 `npx vitest run` → 全绿（重点：page-menu、query-view-definition 相关既有用例）
 - [ ] **Step 2:** 浏览器冒烟（终端窗口起前后端）：存量页面列表/设计器/渲染不变；提交（如有修复）`fix(page): 存量页面默认应用归入回归修复`
 
-## Task 2.1: 设计器应用/端上下文（M1）
+## Task 2.1: 设计器应用上下文与页面设计类型（M1）
 
-**Files:** Modify `src/stores/designerStore.ts`、`src/views/page/PageDesigner.vue`、`src/api/`（新增 apps.ts）；Test `src/stores/__tests__/designerStore.test.ts` 追加
-**Interfaces:** Produces `designerStore.currentAppId/currentClientType`（'WEB'|'MP_WEIXIN'|'H5'|'APP'）与 `setClientContext(appId, clientType)`；保存/发布 payload 附 `appId`
+**Files:** Modify `src/stores/designerStore.ts`、`src/views/page/PageDesigner.vue`、`src/api/`（新增 apps.ts）、页面创建/更新接口（design_type 参数）；Test `src/stores/__tests__/designerStore.test.ts` 追加
+**Interfaces:** Produces `designerStore.currentAppId` 与 `setAppContext(appId)`；页面实体新增 `designType: 'web'|'uniapp'`（创建时确定，更新接口 MUST 拒绝变更）；保存/发布 payload 附 `appId`
 
-- [ ] **Step 1（RED）:** store 测试：setClientContext 后保存 payload 携带 appId；端枚举校验
+- [ ] **Step 1（RED）:** store 测试：setAppContext 后保存 payload 携带 appId；创建默认 design_type 跟随进入上下文；更新接口改 design_type → 400
 - [ ] **Step 2:** `npx vitest run src/stores/__tests__/designerStore.test.ts` → FAIL
-- [ ] **Step 3:** 实现 store 字段与持久化；PageDesigner 顶部加应用下拉 + 端 Tab（UI 按 DESIGN.md 令牌）
-- [ ] **Step 4:** → PASS；提交 `feat(designer): 应用与端上下文`
+- [ ] **Step 3:** 实现 store 字段与持久化；PageDesigner 顶部加应用下拉 + 设计类型徽标（无切换入口）
+- [ ] **Step 4:** → PASS；提交 `feat(designer): 应用上下文与页面设计类型`
 
-## Task 2.2: 设备框画布（M1）
+## Task 2.2: @lc/ui-mobile 契约渲染画布（M1）
 
-**Files:** Create `src/views/page/components/DeviceFrame.vue`；Modify `PageDesigner.vue` 画布容器
-**Interfaces:** Produces `<DeviceFrame :client-type="...">` slot 画布（WEB=桌面宽，移动端 375×667 圆角壳）
+**Files:** Create `packages/ui-mobile/{package.json,src/theme.ts,src/components/*}`、`src/views/page/components/DeviceFrame.vue`；Modify `PageDesigner.vue` 画布容器与渲染机组件解析
+**Interfaces:** Produces `@lc/ui-mobile` 组件包（props/事件/插槽与 component-map 中 uni-ui 目标一一对应；theme.ts 克隆 uni-ui token 并锁定版本；独立编译测试对位 P2 runtime-package-build Gate）；`<DeviceFrame :design-type>`（web=桌面宽，uniapp=375×667 壳）；渲染机 `resolveComponent(type, designType)`
 
-- [ ] **Step 1（RED）:** 组件测试：client-type=MP_WEIXIN 渲染 375 宽壳；WEB 渲染桌面宽
-- [ ] **Step 2:** → FAIL；**Step 3:** 实现（样式用 `--ds-*` 令牌）；**Step 4:** → PASS；提交 `feat(designer): 端设备框画布`
+- [ ] **Step 1（RED）:** 包测试：@lc/ui-mobile 按 component-map uniapp 侧清单导出全部组件（约 18–20 个薄组件）且独立编译；渲染机 designType=uniapp 解析到 ui-mobile 实现、web 解析到宿主包
+- [ ] **Step 2:** → FAIL；**Step 3:** 实现组件包骨架 + DeviceFrame（`--ds-*` 令牌）；**Step 4:** → PASS；提交 `feat(designer): @lc/ui-mobile 契约渲染画布`
 
-## Task 2.3: 端能力矩阵与面板过滤（M1）
+## Task 2.3: 三区能力矩阵与面板过滤（M1）
 
 **Files:** Create `src/views/page/codegen/target-profile.ts`；Modify 组件面板（PageDesigner 面板数据源）；Test `src/views/page/codegen/__tests__/target-profile.test.ts`
-**Interfaces:** Produces `PROFILES: Record<'web'|'uniapp', TargetProfile>`、`type TargetProfile { platform, componentMap, styleRules, apiAdapter, routerAdapter, capabilities: Set<string> }`、`supports(profile, type): boolean`（uniapp capabilities 排除 PageIframe/ExcelActions/PageDataTree/PageTreeTable）
+**Interfaces:** Produces `PROFILES: Record<'web'|'uniapp', TargetProfile>`、`type TargetProfile { platform, componentMap, styleRules, apiAdapter, routerAdapter, capabilities: Set<string> }`、`supports(profile, type): boolean`、`capabilityZone(type): 'web-only'|'universal'|'mobile-only'`（web-only: PageIframe/ExcelActions/PageDataTree/PageTreeTable；mobile-only V1 空集、仅机制预留）
 
-- [ ] **Step 1（RED）:** 测试：`supports(PROFILES.uniapp,'PageIframe')===false`；`supports(PROFILES.uniapp,'page-list-cards')===true`；面板数据源按 capabilities 过滤且置灰项带原因文案
-- [ ] **Step 2:** → FAIL；**Step 3:** 实现矩阵（依据能力矩阵文档 §2）；**Step 4:** → PASS；提交 `feat(codegen): 端能力矩阵与设计器过滤`
+- [ ] **Step 1（RED）:** 测试：`supports(PROFILES.uniapp,'PageIframe')===false` 且 `supports(PROFILES.web,'PageIframe')===true`；`capabilityZone('PageIframe')==='web-only'`；面板数据源按当前页面类型过滤且置灰项带原因文案
+- [ ] **Step 2:** → FAIL；**Step 3:** 实现矩阵（依据能力矩阵文档 §2）；**Step 4:** → PASS；提交 `feat(codegen): 三区能力矩阵与设计器过滤`
 
 ## Task 2.4: 出码报告 per-target（M1）
 
@@ -211,14 +213,14 @@ workflow_lowcode/mini-services/app-builder/
 - [ ] **Step 2（RED）:** 7.3 测试：语义 config（{type, dimension, measures}）+ rows → option 断言（series 聚合与 Web 一致）；7.2 kpi/notice/todo 模板快照；分包断言：图表页路径在 `src/pages/chart-sub/`（pages.json subPackages）
 - [ ] **Step 3:** → FAIL → 实现（dataset 抽离 + chart-sub 分包）→ PASS；提交 `feat(codegen): uni 图表族出码（分包）`
 
-## Task 8.1–8.3: 预览（M2/M3）
+## Task 8.1–8.3: 产物级预览（M2/M3，发布前核对）
 
-**Files:** Modify `PageDesigner.vue` 预览弹窗（新增「移动端预览」页签）；Create uni-shell 预览构建入口（`scripts/build-preview.mjs`：调 generatePageUni 落盘 uni-shell + uni build h5）；Test `__tests__/PageDesigner.mobile-preview-tab.test.ts`、e2e `e2e/codegen/uni-preview.spec.ts`
-**Interfaces:** Produces 预览弹窗 iframe 指向 uni-shell H5 构建产物（本地静态服务端口固定 5301）；「布局预览」标注常量；8.3 小程序二维码入口复用 Task 9 upload 返回的 qrUrl（UI 在预览弹窗展示）
+**Files:** Modify `PageDesigner.vue` 预览弹窗（产物预览：H5 手机壳 iframe + 出码报告/源码/二维码页签 + 双渲染对照）；Create uni-shell 预览构建入口（`scripts/build-preview.mjs`：调 generatePageUni 落盘 uni-shell + uni build h5 + 本地静态服务端口 5301）；Test `__tests__/PageDesigner.artifact-preview.test.ts`、e2e `e2e/codegen/uni-preview.spec.ts`
+**Interfaces:** Consumes generatePageUni（Task 3.1）；Produces 版本令牌重挂（preview=true 口径）；8.3 小程序二维码入口复用 Task 9 upload 返回的 qrUrl
 
-- [ ] **Step 1（RED）:** 弹窗测试：端=移动端时显示「布局预览」+「产物预览」两个页签；布局页签内嵌 DeviceFrame 渲染当前定义
-- [ ] **Step 2:** → FAIL → 实现 → PASS
-- [ ] **Step 3:** 产物预览 e2e：语料页 → 生成+构建 → iframe 加载后核心文本断言（复用双渲染定位口径）；提交 `feat(designer): 移动端双层预览`
+- [ ] **Step 1（RED）:** 弹窗测试：uniapp 类型页面显示「产物预览」入口；构建完成后 iframe 加载产物页面；重复打开以版本令牌强制重挂不展示陈旧产物
+- [ ] **Step 2:** → FAIL → 实现（build-preview 脚本 + 弹窗）→ PASS
+- [ ] **Step 3:** e2e：语料页 → 生成+构建 → iframe 加载后核心文本断言（复用双渲染定位口径）；提交 `feat(designer): 产物级预览（发布前核对）`
 
 ## Task 9.1–9.4: 构建发布（M3）
 

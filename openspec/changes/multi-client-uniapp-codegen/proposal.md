@@ -13,10 +13,10 @@
 - Impact: 非破坏升级，存量用户零感知；后端表结构 + API + 设计器上下文
 
 **页面设计器端维度**
-- From: 单一 Web 画布，组件面板全量可用
-- To: App 切换 + 端 Tab（WEB/MP_WEIXIN/H5/APP）+ 设备框画布（桌面 / 375 手机壳）+ 按 TargetProfile 能力矩阵过滤面板（web-only 置灰并提示）
-- Reason: 移动端页面必须在同一设计器、同一 schema 格式下设计（反目标：第二套设计器/schema）
-- Impact: 设计器 UI 与保存/发布链路改造；schema 格式不变
+- From: 单一 Web 画布，组件面板全量可用；页面无类型概念
+- To: 页面携带设计类型（web | uniapp，创建时确定、不可变更）；同一渲染机按类型解析组件注册表（web→宿主 el-* 包，uniapp→@lc/ui-mobile uni-ui 契约对齐包）+ 设备框画布（桌面 / 375 手机壳）+ 三区能力矩阵过滤（Web 专属/双端共享/移动专属）；页面分配校验设计类型与 Client 端类型兼容
+- Reason: 移动端页面必须在同一设计器、同一 schema 格式下设计且所见即所得（反目标：第二套设计器/schema）；小程序/H5/APP 是交付层概念，设计期收敛为「移动」一种画布
+- Impact: 设计器 UI 与保存/发布链路改造；新增 @lc/ui-mobile 组件包；schema 格式不变
 
 **移动端出码**
 - From: 出码仅 web 单目标（Element Plus 产物）
@@ -26,7 +26,7 @@
 
 **预览与发布**
 - From: 无移动端预览能力；发布只有页面级 status/published_version
-- To: 双层预览（布局级即时预览 + 产物级 uni-app H5 iframe / 小程序预览二维码）；页面发布 → AppRelease 快照 → 按 Client 构建（mp-weixin / H5）→ 产物归档 + miniprogram-ci 体验版上传
+- To: 设计器契约渲染画布所见即所得（@lc/ui-mobile，免构建）+ 产物级预览（uni-app H5 iframe / 小程序预览二维码，发布前核对）；页面发布 → AppRelease 快照 → 按 Client 构建（mp-weixin / H5）→ 产物归档 + miniprogram-ci 体验版上传
 - Reason: 补齐「设计→预览→交付」移动端闭环，匹配「每次改动重新生成+重新发布」的既定模型
 - Impact: 设计器预览入口、构建链路（uni build）、后端发布接口
 
@@ -36,12 +36,12 @@
 
 - `app-client-model`: 应用（App）/ 客户端实例（Client）/ 页面分配 / 发布快照的数据模型与 API，含 `wf_page_def` 应用维度扩展与存量迁移
 - `uniapp-codegen-target`: uni-app 出码目标——TargetProfile、组件映射、产物工程（pages.json/manifest/页面 SFC）与 `@lc/runtime-uni`
-- `mobile-preview`: 双层预览——设计器内布局级即时预览、产物级 H5 iframe 与小程序二维码
+- `mobile-preview`: 产物级预览——uni-app H5 iframe 与小程序预览二维码（发布前核对）；日常所见即所得由设计器契约渲染画布承担（归 custom-page-designer）
 - `app-release-pipeline`: 按 Client 的构建发布链路——AppRelease 快照、uni 构建、产物归档、体验版上传
 
 ### Modified Capabilities
 
-- `custom-page-designer`: 页面归属应用（key 唯一性加 app 维度）；设计器增加「端」维度——App/端切换、设备框画布、组件能力过滤；页面保存/发布携带应用上下文
+- `custom-page-designer`: 页面归属应用（key 唯一性加 app 维度）；设计器增加页面设计类型（web/uniapp，创建时定不可改）——契约渲染画布、设备框、三区能力过滤；页面保存/发布携带应用上下文
 
 ## Impact
 

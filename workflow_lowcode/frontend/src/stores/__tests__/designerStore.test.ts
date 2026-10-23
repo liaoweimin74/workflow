@@ -103,3 +103,30 @@ describe('DEFAULT_PROCESS_CONFIG — 流程级操作权限', () => {
     expect(config.approvalPolicy.allowRecall).toBeUndefined()
   })
 })
+
+describe('designerStore — 应用上下文（Task 2.1）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('setAppContext 设置 currentAppId（设计器工作区应用上下文）', () => {
+    const store = useDesignerStore()
+    expect(store.currentAppId).toBeNull()
+    store.setAppContext('app-merchant')
+    expect(store.currentAppId).toBe('app-merchant')
+  })
+
+  it('setAppContext(null) 清除上下文（保存时省略 appId，后端回落租户默认应用）', () => {
+    const store = useDesignerStore()
+    store.setAppContext('app-merchant')
+    store.setAppContext(null)
+    expect(store.currentAppId).toBeNull()
+  })
+
+  it('clearConfigs 重置应用上下文', () => {
+    const store = useDesignerStore()
+    store.setAppContext('app-merchant')
+    store.clearConfigs()
+    expect(store.currentAppId).toBeNull()
+  })
+})

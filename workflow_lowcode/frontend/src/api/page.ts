@@ -4,6 +4,10 @@ import type { R, PageResponse } from '@/types/common'
 /** 页面定义 DTO（对齐后端 PageDefinitionDTO） */
 export interface PageDefinitionDTO {
   id: string
+  /** 归属应用 ID（多端模型，Task 1.4/2.1） */
+  appId?: string | null
+  /** 页面设计类型 web|uniapp（创建时确定、不可变更，Task 2.1） */
+  designType?: string | null
   name: string
   key: string
   type: string
@@ -24,6 +28,10 @@ export interface PageDefinitionDetailDTO extends PageDefinitionDTO {
 
 /** 页面保存请求 */
 export interface PageDefinitionSaveRequest {
+  /** 归属应用 ID（保存携带应用上下文；缺省后端落租户默认应用） */
+  appId?: string | null
+  /** 页面设计类型 web|uniapp（创建时确定；更新传其它值 → 400，空白/缺省保持不变） */
+  designType?: string | null
   name: string
   key: string
   type: string

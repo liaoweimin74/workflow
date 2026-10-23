@@ -13,7 +13,7 @@
 
 ## 2. 设计器端维度（M1）
 
-- [ ] 2.1 设计器应用上下文与页面设计类型：App 切换 + 页面 design_type（web|uniapp，创建时确定、不可变更），保存/发布携带应用上下文（spec: custom-page-designer ADDED「页面设计类型与契约渲染画布」）
+- [x] 2.1 设计器应用上下文与页面设计类型：App 切换 + 页面 design_type（web|uniapp，创建时确定、不可变更），保存/发布携带应用上下文（spec: custom-page-designer ADDED「页面设计类型与契约渲染画布」）
 - [ ] 2.2 @lc/ui-mobile 契约渲染画布：渲染机按 design_type 解析组件注册表；uni-ui 契约对齐组件包（props/事件/插槽对齐 component-map）+ 主题 token 克隆与 uni-ui 版本锁定 + 独立编译 Gate；375×667 设备框（spec: custom-page-designer ADDED「页面设计类型与契约渲染画布」）
 - [ ] 2.3 三区能力矩阵：组件 × 端支持数据（Web 专属/双端共享/移动专属，移动专属 V1 仅机制预留）+ capabilityZone 判定 + 面板按页面类型过滤（不支持置灰并提示原因）（spec: custom-page-designer ADDED「页面设计类型与契约渲染画布」）
 - [ ] 2.4 出码报告 per-target 分桶：`generatePage` 报告扩展 web/uniapp 两套 A/B/C 桶与 unsupported 明细（spec: uniapp-codegen-target「per-target 可出码率 Gate」）

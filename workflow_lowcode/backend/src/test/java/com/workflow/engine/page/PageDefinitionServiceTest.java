@@ -68,7 +68,7 @@ class PageDefinitionServiceTest {
         when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "a1", "order-list")).thenReturn(false);
         when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PageDefinition result = service.create("a1", "订单列表", "order-list", "PAGE", null, null, null);
+        PageDefinition result = service.create("a1", "订单列表", "order-list", "PAGE", null, null, null, null);
 
         assertThat(result.getAppId()).isEqualTo("a1");
         // key 唯一性走 app 维度判定口径
@@ -82,7 +82,7 @@ class PageDefinitionServiceTest {
         when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "a2", "order-list")).thenReturn(false);
         when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PageDefinition result = service.create("a2", "订单列表", "order-list", "PAGE", null, null, null);
+        PageDefinition result = service.create("a2", "订单列表", "order-list", "PAGE", null, null, null, null);
 
         assertThat(result.getAppId()).isEqualTo("a2");
     }
@@ -92,7 +92,7 @@ class PageDefinitionServiceTest {
         when(appRepo.findByIdAndTenantId("a1", TENANT)).thenReturn(Optional.of(app("a1")));
         when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "a1", "order-list")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create("a1", "订单列表", "order-list", "PAGE", null, null, null))
+        assertThatThrownBy(() -> service.create("a1", "订单列表", "order-list", "PAGE", null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
                 .hasMessageContaining("页面 key 已存在");
@@ -102,7 +102,7 @@ class PageDefinitionServiceTest {
     void create_unknownApp_rejected400() {
         when(appRepo.findByIdAndTenantId("a-ghost", TENANT)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.create("a-ghost", "订单列表", "order-list", "PAGE", null, null, null))
+        assertThatThrownBy(() -> service.create("a-ghost", "订单列表", "order-list", "PAGE", null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
                 .hasMessageContaining("应用不存在");
@@ -116,7 +116,7 @@ class PageDefinitionServiceTest {
         when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "default-app-1", "p1")).thenReturn(false);
         when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PageDefinition result = service.create(null, "页面", "p1", "PAGE", null, null, null);
+        PageDefinition result = service.create(null, "页面", "p1", "PAGE", null, null, null, null);
 
         assertThat(result.getAppId()).isEqualTo("default-app-1");
     }
@@ -128,7 +128,7 @@ class PageDefinitionServiceTest {
         when(pageDefRepo.existsByTenantIdAndAppIdAndKey(eq(TENANT), anyString(), eq("p1"))).thenReturn(false);
         when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PageDefinition result = service.create(null, "页面", "p1", "PAGE", null, null, null);
+        PageDefinition result = service.create(null, "页面", "p1", "PAGE", null, null, null, null);
 
         ArgumentCaptor<AppDefinition> appCaptor = ArgumentCaptor.forClass(AppDefinition.class);
         verify(appRepo).save(appCaptor.capture());
@@ -136,6 +136,61 @@ class PageDefinitionServiceTest {
         assertThat(appCaptor.getValue().getName()).isEqualTo("默认应用");
         assertThat(appCaptor.getValue().getTenantId()).isEqualTo(TENANT);
         assertThat(result.getAppId()).isEqualTo(appCaptor.getValue().getId());
+    }
+
+    // ---------- 设计类型（Task 2.1：design_type 创建时确定、不可变更） ----------
+
+    @Test
+    void create_withUniappDesignType_landsDesignType() {
+        when(appRepo.findByIdAndTenantId("a1", TENANT)).thenReturn(Optional.of(app("a1")));
+        when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "a1", "p-u")).thenReturn(false);
+        when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PageDefinition result = service.create("a1", "移动页", "p-u", "PAGE", null, null, null, "uniapp");
+
+        assertThat(result.getDesignType()).isEqualTo("uniapp");
+    }
+
+    @Test
+    void create_withBlankDesignType_defaultsWeb() {
+        when(appRepo.findByTenantIdAndCode(TENANT, "default")).thenReturn(Optional.of(app("default-app-1")));
+        when(pageDefRepo.existsByTenantIdAndAppIdAndKey(TENANT, "default-app-1", "p-w")).thenReturn(false);
+        when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PageDefinition result = service.create(null, "Web 页", "p-w", "PAGE", null, null, null, null);
+
+        assertThat(result.getDesignType()).isEqualTo("web");
+    }
+
+    @Test
+    void create_withUnknownDesignType_rejected400() {
+        when(appRepo.findByIdAndTenantId("a1", TENANT)).thenReturn(Optional.of(app("a1")));
+
+        assertThatThrownBy(() -> service.create("a1", "页", "p-x", "PAGE", null, null, null, "flutter"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("不支持的设计类型");
+    }
+
+    @Test
+    void update_withChangedDesignType_rejected400() {
+        when(pageDefRepo.findByIdAndTenantId("p1", TENANT)).thenReturn(Optional.of(page("p1", "a1", "web")));
+
+        assertThatThrownBy(() -> service.update("p1", null, null, null, null, null, "uniapp"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("不可变更");
+    }
+
+    @Test
+    void update_withSameDesignType_kept() {
+        when(pageDefRepo.findByIdAndTenantId("p1", TENANT)).thenReturn(Optional.of(page("p1", "a1", "uniapp")));
+        when(pageDefRepo.save(any(PageDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PageDefinition result = service.update("p1", "新名", null, null, null, null, "uniapp");
+
+        assertThat(result.getDesignType()).isEqualTo("uniapp");
+        assertThat(result.getName()).isEqualTo("新名");
     }
 
     // ---------- 列表按 app 过滤 ----------
@@ -180,6 +235,18 @@ class PageDefinitionServiceTest {
         entity.setTenantId(TENANT);
         entity.setCode(id.equals("default-app-1") ? "default" : "code-" + id);
         entity.setName(id.equals("default-app-1") ? "默认应用" : "应用-" + id);
+        return entity;
+    }
+
+    private PageDefinition page(String id, String appId, String designType) {
+        PageDefinition entity = new PageDefinition();
+        entity.setId(id);
+        entity.setTenantId(TENANT);
+        entity.setAppId(appId);
+        entity.setDesignType(designType);
+        entity.setName("页面-" + id);
+        entity.setKey("key-" + id);
+        entity.setStatus("DRAFT");
         return entity;
     }
 }

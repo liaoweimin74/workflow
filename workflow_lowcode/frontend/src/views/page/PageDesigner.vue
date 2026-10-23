@@ -21,6 +21,18 @@
       <el-tag v-if="formStatus" :type="statusTagType(formStatus)" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
+      <el-select
+        v-model="currentAppId"
+        class="app-context-select"
+        placeholder="应用上下文"
+        clearable
+        style="width: 150px; margin-left: 8px"
+      >
+        <el-option v-for="app in apps" :key="app.id" :label="app.name" :value="app.id" />
+      </el-select>
+      <el-tag :type="pageDesignType === 'uniapp' ? 'warning' : 'info'" style="margin-left: 8px">
+        {{ pageDesignType === 'uniapp' ? '移动端 (UniApp)' : 'Web 端' }}
+      </el-tag>
       <div class="toolbar-right">
         <el-button plain @click="dsDialogVisible = true">
           数据源配置（{{ schema.dataSources.length }}）
@@ -343,6 +355,9 @@ import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import { listEnabledWidgets } from '@/api/material'
 import { registerMaterialWidgetsToDesigner } from '@/platform/designerMaterialWidgets'
 import { useAuthStore } from '@/stores/auth'
+import { storeToRefs } from 'pinia'
+import { useDesignerStore } from '@/stores/designerStore'
+import { appsApi, type AppDTO } from '@/api/apps'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
@@ -413,6 +428,12 @@ const pageId = computed(() => route.query.id as string)
 const pageName = ref('')
 const pageKey = ref('')
 const formStatus = ref('')
+// 应用上下文与设计类型（Task 2.1）：页面归属/类型创建时定，保存原样回传；设计类型无切换入口
+const pageAppId = ref<string | null>(null)
+const pageDesignType = ref<'web' | 'uniapp'>('web')
+const apps = ref<AppDTO[]>([])
+const designerStore = useDesignerStore()
+const { currentAppId } = storeToRefs(designerStore)
 
 // 出码按钮只在本机 dev 里出现：写盘走 vite 中间件，产物路由也只 dev 登记
 const isDev = import.meta.env.DEV
@@ -1772,6 +1793,9 @@ onMounted(async () => {
   // 注册页面数据组件到 FcDesigner 拖拽面板（数据源配置入口在表单配置页签底部）
   registerPageComponents()
 
+  // 应用上下文下拉数据源（Task 2.1；拉取失败不阻塞设计器）
+  appsApi.getApps().then((res) => { apps.value = res.data || [] }).catch(() => {})
+
   if (!pageId.value) {
     ElMessage.error('缺少页面 ID')
     router.push('/page')
@@ -1789,6 +1813,9 @@ onMounted(async () => {
     pageName.value = def.name
     pageKey.value = def.key
     formStatus.value = def.status || 'DRAFT'
+    pageAppId.value = def.appId || null
+    pageDesignType.value = def.designType === 'uniapp' ? 'uniapp' : 'web'
+    designerStore.setAppContext(pageAppId.value)
     let parsedRule: any[] = []
     let parsedOption: Record<string, unknown> = {}
     if (def.schema) {
@@ -1856,6 +1883,8 @@ async function handleSave() {
       key: pageKey.value,
       type: 'PAGE',
       formKey: null,
+      appId: pageAppId.value,
+      designType: pageDesignType.value,
       schema: JSON.stringify({
         rule: designerRef.value?.getRule() || [],
         option: designerRef.value?.getOption() || {},

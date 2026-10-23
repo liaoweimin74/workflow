@@ -37,6 +37,10 @@ public class PageDefinitionService {
     /** 默认应用 code（创建未指定应用时的归属兜底；V68 迁移回填，运行时缺失则自动创建）。 */
     private static final String DEFAULT_APP_CODE = "default";
 
+    /** 页面设计类型（spec: uniapp-codegen / custom-page-designer）：web = Web 设计器，uniapp = UniApp 设计器。 */
+    private static final String DESIGN_TYPE_WEB = "web";
+    private static final String DESIGN_TYPE_UNIAPP = "uniapp";
+
     private final PageDefinitionRepository pageDefRepository;
     private final AppDefinitionRepository appRepository;
     private final TenantProvider tenantProvider;
@@ -71,13 +75,15 @@ public class PageDefinitionService {
      * @param formKey 绑定的业务表单 key（VIEW 用，可空，遗留字段）
      * @param dataSourceId 绑定的数据源 ID（新协议，可空）
      * @param schema  页面 schema（模板实例化可直接带入；空则待设计器保存）
+     * @param designType 页面设计类型 web/uniapp（可空默认 web；创建时确定、不可变更）
      * @return 创建的页面定义
-     * @throws BusinessException 如果 app 内 key 已存在，或指定的应用不存在
+     * @throws BusinessException 如果 app 内 key 已存在、指定的应用不存在或设计类型非法
      */
     @Transactional
-    public PageDefinition create(String appId, String name, String key, String type, String formKey, String dataSourceId, String schema) {
+    public PageDefinition create(String appId, String name, String key, String type, String formKey, String dataSourceId, String schema, String designType) {
         String tenantId = tenantProvider.getTenantId();
         String resolvedAppId = resolveAppId(tenantId, appId);
+        String resolvedDesignType = normalizeDesignType(designType);
 
         if (pageDefRepository.existsByTenantIdAndAppIdAndKey(tenantId, resolvedAppId, key)) {
             throw new BusinessException(400, "页面 key 已存在: " + key);
@@ -87,6 +93,7 @@ public class PageDefinitionService {
         pageDef.setId(UUID.randomUUID().toString().replace("-", ""));
         pageDef.setTenantId(tenantId);
         pageDef.setAppId(resolvedAppId);
+        pageDef.setDesignType(resolvedDesignType);
         pageDef.setName(name);
         pageDef.setKey(key);
         pageDef.setType(type == null || type.isBlank() ? "PAGE" : type);
@@ -122,6 +129,18 @@ public class PageDefinitionService {
                     app.setName("默认应用");
                     return appRepository.save(app);
                 });
+    }
+
+    /**
+     * 设计类型归一化（创建口径）：空白默认 web；仅允许 web/uniapp，
+     * 未知值 400。设计类型创建时确定、更新不可变更。
+     */
+    private String normalizeDesignType(String designType) {
+        String value = designType == null || designType.isBlank() ? DESIGN_TYPE_WEB : designType.trim();
+        if (!DESIGN_TYPE_WEB.equals(value) && !DESIGN_TYPE_UNIAPP.equals(value)) {
+            throw new BusinessException(400, "不支持的设计类型: " + value);
+        }
+        return value;
     }
 
     /**
@@ -200,13 +219,23 @@ public class PageDefinitionService {
      * @param schema  页面 schema JSON（null 表示不更新）
      * @param formKey 绑定表单 key（null 表示不更新）
      * @param dataSourceId 绑定数据源 ID（null 表示不更新）
+     * @param designType 页面设计类型（web/uniapp；仅允许传与当前一致的值或 null/空白，试图变更将 400）
      * @return 更新后的页面定义
      */
     @Transactional
-    public PageDefinition update(String id, String name, String key, String schema, String formKey, String dataSourceId) {
+    public PageDefinition update(String id, String name, String key, String schema, String formKey, String dataSourceId, String designType) {
         String tenantId = tenantProvider.getTenantId();
         PageDefinition current = pageDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new BusinessException(404, "页面不存在: " + id));
+
+        // 设计类型创建时确定、不可变更（spec: custom-page-designer MODIFIED）；空白视为未指定，允许通过。
+        if (designType != null && !designType.isBlank()) {
+            String requested = designType.trim();
+            if (!requested.equals(current.getDesignType())) {
+                throw new BusinessException(400,
+                        "页面设计类型创建时确定、不可变更: " + current.getDesignType() + " → " + requested);
+            }
+        }
 
         if (name != null) {
             current.setName(name);

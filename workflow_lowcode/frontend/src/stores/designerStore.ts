@@ -412,6 +412,8 @@ export const useDesignerStore = defineStore('designer', () => {
   const draftKey = ref<string | null>(null)
   const draftCategoryId = ref<string | null>(null)
   const draftDescription = ref<string>('')
+  /** 当前设计器应用上下文（Task 2.1）：页面创建/保存 payload 携带；null=未进入应用上下文（后端落租户默认应用） */
+  const currentAppId = ref<string | null>(null)
   const isDirty = ref(false)
 
   // 保存快照：记录上次加载/保存时的 XML 和 nodeConfigs，用于判断是否有实际变更
@@ -579,6 +581,11 @@ export const useDesignerStore = defineStore('designer', () => {
     draftKey.value = key
   }
 
+  /** 设置设计器应用上下文（Task 2.1）：页面创建/保存 payload 携带；null 清除（后端回落租户默认应用） */
+  function setAppContext(appId: string | null) {
+    currentAppId.value = appId
+  }
+
   /** 流程基本属性入 store（Task 74：名称/分类/说明均可由设计器「基本属性」分组维护） */
   function setDraftBasicInfo(data: { name?: string; categoryId?: string | null; description?: string }) {
     if (data.name !== undefined) draftName.value = data.name
@@ -610,6 +617,7 @@ export const useDesignerStore = defineStore('designer', () => {
     draftKey.value = null
     draftCategoryId.value = null
     draftDescription.value = ''
+    currentAppId.value = null
     isDirty.value = false
     lastSavedXml.value = ''
     lastSavedNodeConfigs.value = ''
@@ -630,6 +638,7 @@ export const useDesignerStore = defineStore('designer', () => {
     draftKey,
     draftCategoryId,
     draftDescription,
+    currentAppId,
     isDirty,
     selectedNodeConfig,
     setBpmnXml,
@@ -642,6 +651,7 @@ export const useDesignerStore = defineStore('designer', () => {
     deleteNodeConfig,
     selectNode,
     setDraft,
+    setAppContext,
     setDraftBasicInfo,
     setSavedSnapshot,
     isUnchanged,

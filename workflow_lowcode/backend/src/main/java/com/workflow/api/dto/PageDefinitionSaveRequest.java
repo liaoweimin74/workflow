@@ -12,6 +12,7 @@ public class PageDefinitionSaveRequest {
     private String formKey;
     private String dataSourceId;
     private String schema;
+    private String designType;
 
     public String getAppId() { return appId; }
     public void setAppId(String appId) { this.appId = appId; }
@@ -33,4 +34,7 @@ public class PageDefinitionSaveRequest {
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }
+
+    public String getDesignType() { return designType; }
+    public void setDesignType(String designType) { this.designType = designType; }
 }

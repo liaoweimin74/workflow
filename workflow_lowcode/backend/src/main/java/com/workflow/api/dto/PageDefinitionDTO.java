@@ -9,6 +9,7 @@ public class PageDefinitionDTO {
 
     private String id;
     private String appId;
+    private String designType;
     private String name;
     private String key;
     private String type;
@@ -28,6 +29,9 @@ public class PageDefinitionDTO {
 
     public String getAppId() { return appId; }
     public void setAppId(String appId) { this.appId = appId; }
+
+    public String getDesignType() { return designType; }
+    public void setDesignType(String designType) { this.designType = designType; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

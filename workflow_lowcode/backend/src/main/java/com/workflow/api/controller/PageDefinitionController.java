@@ -50,7 +50,7 @@ public class PageDefinitionController {
     public R<PageDefinition> create(@RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.create(
                 request.getAppId(), request.getName(), request.getKey(), request.getType(), request.getFormKey(),
-                request.getDataSourceId(), request.getSchema());
+                request.getDataSourceId(), request.getSchema(), request.getDesignType());
         return R.ok(pageDef);
     }
 
@@ -129,7 +129,7 @@ public class PageDefinitionController {
                                     @RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.update(
                 id, request.getName(), request.getKey(), request.getSchema(), request.getFormKey(),
-                request.getDataSourceId());
+                request.getDataSourceId(), request.getDesignType());
         return R.ok(pageDef);
     }
 
@@ -160,6 +160,7 @@ public class PageDefinitionController {
         dto.setFormKey(pageDef.getFormKey());
         dto.setDataSourceId(pageDef.getDataSourceId());
         dto.setAppId(pageDef.getAppId());
+        dto.setDesignType(pageDef.getDesignType());
         dto.setVersion(pageDef.getVersion());
         dto.setStatus(pageDef.getStatus());
         dto.setPublishedVersion(pageDef.getPublishedVersion());
@@ -184,6 +185,7 @@ public class PageDefinitionController {
         dto.setCreatedAt(pageDef.getCreatedAt());
         dto.setUpdatedAt(pageDef.getUpdatedAt());
         dto.setAppId(pageDef.getAppId());
+        dto.setDesignType(pageDef.getDesignType());
         dto.setSchema(pageDef.getSchema());
         return dto;
     }

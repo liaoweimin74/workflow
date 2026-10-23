@@ -135,9 +135,11 @@ import { getMenuTree } from '@/api/menu'
 import type { MenuTree } from '@/types/menu'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import { useAuthStore } from '@/stores/auth'
+import { useDesignerStore } from '@/stores/designerStore'
 import PageTemplateTab from './PageTemplateTab.vue'
 
 const router = useRouter()
+const designerStore = useDesignerStore()
 const authStore = useAuthStore()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
@@ -361,6 +363,17 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
         { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字、下划线，且以字母开头', trigger: 'blur' },
       ],
     },
+    {
+      type: 'radio',
+      field: 'designType',
+      title: '设计类型',
+      value: 'web',
+      options: [
+        { label: 'Web 端', value: 'web' },
+        { label: '移动端 (UniApp)', value: 'uniapp' },
+      ],
+      props: { placeholder: '创建时确定，不可变更' },
+    },
   ],
   dialogTitle: { create: '新建页面' },
   createPermission: 'page:create',
@@ -370,6 +383,8 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
       key: data.key,
       type: 'PAGE',
       formKey: data.formKey || null,
+      designType: data.designType || 'web',
+      appId: designerStore.currentAppId || undefined,
     })
     router.push({ path: '/page/designer', query: { id: res.data.id } })
     return res

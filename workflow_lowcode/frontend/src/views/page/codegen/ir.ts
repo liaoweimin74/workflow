@@ -141,7 +141,11 @@ export interface GenerateReport {
     /** 无组件节点的页面记 1（没有债可出），避免 0/0 */
     rate: number
   }
+  /** per-target 可出码率（spec: per-target 可出码率 Gate）：web 恒等于顶层 codegenRate；uniapp 分母排除 web-only 组件 */
+  codegenRateByTarget: Record<'web' | 'uniapp', { totalNodes: number; emittableNodes: number; rate: number }>
   buckets: { A: number; B: number; C: number }
+  /** per-target 空洞分桶：web=现行为；uniapp 不把 web-only 子树空洞记成 uniapp 的债（组件已显式登记 unsupported） */
+  bucketsByTarget: Record<'web' | 'uniapp', { A: number; B: number; C: number }>
   holes: ReportHole[]
   renameFailures: ReportRenameFailure[]
   unsupported: Unsupported[]

@@ -39,7 +39,9 @@ describe('IR 目标无关性', () => {
   })
 
   it('报告层只依赖契约表与回读器：不回头 import 生成入口', () => {
-    expect([...new Set(importsOf(reportSource))].sort()).toEqual(['./contract', './ir', './reverse'])
+    // Task 2.4 起报告层读 target-profile（per-target 分桶的判定真值表，与 contract.ts
+    // 同为单向依赖，不构成环）；仍然不许回头 import 生成入口
+    expect([...new Set(importsOf(reportSource))].sort()).toEqual(['./contract', './ir', './reverse', './target-profile'])
     // generatePage 现在会调 report，回读器反指回生成入口就是运行时成环（type import 也会被改成值导入）
     expect(importsOf(reverseSource)).not.toContain('./generate')
   })

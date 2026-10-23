@@ -31,10 +31,10 @@ export type {
 
 export function generatePage(
   schema: { rule: any[]; option: any; dataSources: any[]; actions: any[] },
-  meta: { pageKey: string; pageName: string; exportedAt: string },
+  meta: { pageKey: string; pageName: string; exportedAt: string; target?: 'web' | 'uniapp' },
 ): GenerateResult {
   const ir = parseIr(schema, meta)
   const files = emitFiles(ir)
   const manifest = emitManifest(ir)
-  return { files, manifest, report: buildReport(schema, meta.pageKey, manifest, files) }
+  return { files, manifest, report: buildReport(schema, meta.pageKey, manifest, files, meta.target ?? 'web') }
 }

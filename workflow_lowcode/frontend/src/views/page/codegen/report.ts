@@ -18,8 +18,10 @@ import type {
   ReportHole,
   ReportNode,
   ReportRenameFailure,
+  Unsupported,
 } from './ir'
 import { reverseToSchema } from './reverse'
+import { PROFILES, supports } from './target-profile'
 
 /**
  * 组件节点遍历：走 schema 里真实存在的四处 rule 载体
@@ -97,6 +99,7 @@ export function buildReport(
   pageKey: string,
   manifest: GeneratedManifest,
   files: Record<string, string>,
+  target: 'web' | 'uniapp' = 'web',
 ): GenerateReport {
   const nodes = collectNodes(schema.rule || [])
   const holes: ReportHole[] = []
@@ -126,8 +129,44 @@ export function buildReport(
   const buckets = { A: 0, B: 0, C: 0 }
   for (const h of holes) buckets[h.bucket] += 1
 
+  // per-target 空洞分桶（spec: uniapp-codegen-target「per-target 可出码率 Gate」）：
+  // web = 现行为；uniapp 不把 web-only 子树上的空洞记成 uniapp 的债——该组件在
+  // uniapp 目标已显式登记 unsupported（见下），不是静默丢弃，空洞随组件一起不交付。
+  const uniUnsupported = (type: string) => !supports(PROFILES.uniapp, type)
+  const bucketsUniapp = { A: 0, B: 0, C: 0 }
+  for (const h of holes) {
+    const owner = ownerOf(String(h.path), nodes)
+    if (owner && uniUnsupported(owner.type)) continue
+    bucketsUniapp[h.bucket] += 1
+  }
+
+  // target=uniapp：三区能力矩阵判定的不支持组件登记 unsupported（spec: 含路径与原因）。
+  // 只登记子树根（祖先已登记的不再重复，整棵子树在 uniapp 交付中不产出）；与 manifest
+  // 已有的同节点登记（如同类型无出码契约）合并原因、不产生重复条目；web 目标全支持。
+  const capabilityUnsupported: Unsupported[] = []
+  if (target === 'uniapp') {
+    for (const n of nodes) {
+      if (!uniUnsupported(n.type)) continue
+      if (nodes.some((o) => o !== n && uniUnsupported(o.type) && under(n.path, o.path))) continue
+      capabilityUnsupported.push({
+        path: n.path,
+        type: n.type,
+        key: '',
+        message: '三区能力矩阵：仅 Web 端可设计，uniapp 目标不交付该组件',
+      })
+    }
+  }
+  const unsupported = manifest.unsupported.map((u) => {
+    const cap = capabilityUnsupported.find((c) => c.path === u.path && c.type === u.type)
+    return cap ? { ...u, message: `${u.message}；${cap.message}` } : u
+  })
+  for (const cap of capabilityUnsupported) {
+    if (!manifest.unsupported.some((u) => u.path === cap.path && u.type === cap.type)) unsupported.push(cap)
+  }
+
   const totalNodes = nodes.length
   const emittableNodes = nodes.filter((n) => !n.blocked).length
+  const uniEmittableNodes = nodes.filter((n) => !n.blocked && supports(PROFILES.uniapp, n.type)).length
 
   return {
     reportVersion: 1,
@@ -139,10 +178,16 @@ export function buildReport(
       // 空页面记 1：一个组件节点都没有就没有债可出，不该报 0/0
       rate: totalNodes ? emittableNodes / totalNodes : 1,
     },
+    // per-target 可出码率：web 恒等于顶层；uniapp 分母排除 web-only 组件（能力过滤与契约阻断正交）
+    codegenRateByTarget: {
+      web: { totalNodes, emittableNodes, rate: totalNodes ? emittableNodes / totalNodes : 1 },
+      uniapp: { totalNodes, emittableNodes: uniEmittableNodes, rate: totalNodes ? uniEmittableNodes / totalNodes : 1 },
+    },
     buckets,
+    bucketsByTarget: { web: { ...buckets }, uniapp: bucketsUniapp },
     holes,
     renameFailures,
-    unsupported: manifest.unsupported,
+    unsupported,
     registryCounts: countRegisters(manifest),
     nodes,
   }

@@ -102,3 +102,65 @@ describe('GenerateReport', () => {
     expect(JSON.stringify(gen.files)).not.toContain('"reportVersion"')
   })
 })
+
+// ----- Task 2.4: per-target 分桶（spec: uniapp-codegen-target「per-target 可出码率 Gate」）-----
+// 「出码报告 SHALL 按 target（web/uniapp）分桶统计可出码率与 unsupported 明细」；
+// web-only 组件（PageIframe、树/树表族）登记 unsupported 含路径与原因，MUST NOT 静默丢弃。
+// 判定读 target-profile（Task 2.3 矩阵），与契约阻断（blocked）正交：前者是端能力，
+// 后者是编译广度。web 目标（默认）行为与现状逐字节一致。
+const mixedSchema = {
+  rule: [
+    { type: 'page-iframe', field: 'frame1', props: { url: 'https://example.com' } },
+    { type: 'page-tree', field: 'tree1', props: {} },
+    { type: 'page-tree-table', field: 'tt1', props: {} },
+    { type: 'input', field: 'name', props: {} },
+  ],
+  option: {},
+  dataSources: [],
+  actions: [],
+}
+
+describe('GenerateReport — per-target（Task 2.4）', () => {
+  it('target=uniapp：web-only 组件登记 unsupported（含路径与原因），双端共享组件不登记', () => {
+    const gen = generatePage(mixedSchema as any, { ...META('uniapp_target'), target: 'uniapp' })
+    const byType = new Map(gen.report.unsupported.map((u) => [u.type, u]))
+    for (const [i, t] of ['page-iframe', 'page-tree', 'page-tree-table'].entries()) {
+      const u = byType.get(t)
+      expect(u, `${t} 应登记 unsupported`).toBeTruthy()
+      expect(u!.path, `${t} 登记要带路径`).toBe(`rule[${i}]`)
+      expect(u!.message, `${t} 登记要带原因`).toContain('仅 Web')
+    }
+    expect(byType.has('input'), '双端共享组件不进 unsupported').toBe(false)
+  })
+
+  it('target=web（默认）：能力登记不参与，unsupported 与 manifest 同源（行为与现状一致）', () => {
+    const gen = generatePage(mixedSchema as any, META('web_target'))
+    expect(gen.report.unsupported).toEqual(gen.manifest.unsupported)
+    // page-iframe 等未登记类型在 web 目标也有登记（parse 侧契约缺失，既有行为），
+    // 但不得追加「三区能力矩阵」能力原因——那是 uniapp 目标的登记维度
+    expect(gen.report.unsupported.every((u) => !u.message.includes('三区能力矩阵'))).toBe(true)
+  })
+
+  it('bucketsByTarget：web 键 = 现行为（与顶层 buckets 一致）；uniapp 键不把 web-only 子树空洞记成 uniapp 的债', () => {
+    const web = generatePage(testPage as any, META('test_page'))
+    const uni = generatePage(testPage as any, { ...META('test_page'), target: 'uniapp' })
+    expect(Object.keys(uni.report.bucketsByTarget).sort()).toEqual(['uniapp', 'web'])
+    expect(uni.report.bucketsByTarget.web).toEqual(web.report.buckets)
+    const sum = (b: { A: number; B: number; C: number }) => b.A + b.B + b.C
+    expect(sum(uni.report.bucketsByTarget.uniapp), 'uniapp 桶 ⊆ web 桶').toBeLessThanOrEqual(sum(uni.report.bucketsByTarget.web))
+    // 桶计数仍与回读空洞自洽（web 键）
+    expect(sum(uni.report.bucketsByTarget.web)).toBe(uni.report.holes.length)
+  })
+
+  it('codegenRateByTarget：web 与顶层 codegenRate 一致；uniapp 分母排除 web-only（能力过滤与契约阻断正交）', () => {
+    const gen = generatePage(mixedSchema as any, { ...META('uniapp_rate'), target: 'uniapp' })
+    expect(gen.report.codegenRateByTarget.web).toEqual({
+      totalNodes: gen.report.codegenRate.totalNodes,
+      emittableNodes: gen.report.codegenRate.emittableNodes,
+      rate: gen.report.codegenRate.rate,
+    })
+    expect(gen.report.codegenRateByTarget.uniapp.totalNodes).toBe(4)
+    expect(gen.report.codegenRateByTarget.uniapp.emittableNodes, '仅 input 双端可出').toBe(1)
+    expect(gen.report.codegenRateByTarget.uniapp.rate).toBeCloseTo(0.25, 10)
+  })
+})

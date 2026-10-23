@@ -64,6 +64,25 @@ public class AiConfigService {
                 "数据库配置");
     }
 
+    /**
+     * 全平台统一的「生效配置」解析：DB 行优先；无行/读库异常回退静态快照。
+     *
+     * <p>调用方（助手对话、表单生成、用量记录）一律用它判定 AI 可用性并回填模型名，
+     * 不再直接读静态 {@link AiProperties}——静态开关只描述「内置网关默认」，
+     * 不得拦掉页面里已保存的模型配置。
+     */
+    public EffectiveLlmConfig resolve() {
+        try {
+            EffectiveLlmConfig db = effective();
+            if (db != null) {
+                return db;
+            }
+        } catch (Exception e) {
+            log.warn("读取动态模型配置失败，回退静态配置: {}", e.getMessage());
+        }
+        return staticSnapshot();
+    }
+
     /** GET VO：DB 行或静态默认合成；apiKey 一律脱敏。 */
     public AiConfigVO get() {
         EffectiveLlmConfig staticCfg = staticSnapshot();

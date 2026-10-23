@@ -1,7 +1,8 @@
 package com.workflow.ai.formgen;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
+import com.workflow.ai.aiconfig.EffectiveLlmConfig;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
@@ -17,6 +18,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,16 +42,21 @@ class AiFormGenerationServiceTest {
     @Mock
     private AiUsageRecorder recorder;
 
-    private AiProperties properties;
+    @Mock
+    private AiConfigService configService;
+
     private AiFormGenerationService service;
+
+    private static EffectiveLlmConfig effective(String model) {
+        return new EffectiveLlmConfig(true, "https://example.test/v1", "test-key", model,
+                0.7, 4096, 5000, 120000, Map.of(), "数据库配置");
+    }
 
     @BeforeEach
     void setUp() {
-        properties = new AiProperties();
-        properties.setEnabled(true);
-        properties.setApiKey("test-key");
-        properties.setModel("test-model");
-        service = new AiFormGenerationService(chatModelProvider, properties,
+        // 生效配置的模型名（DB 优先）决定用量记录，服务侧不再读静态 properties
+        lenient().when(configService.resolve()).thenReturn(effective("test-model"));
+        service = new AiFormGenerationService(chatModelProvider, configService,
                 new FormSchemaPromptBuilder(), new FormSchemaValidator(new ObjectMapper()), recorder);
     }
 
@@ -101,8 +109,8 @@ class AiFormGenerationServiceTest {
     }
 
     @Test
-    void notConfigured_throwsConfigMissing() {
-        properties.setEnabled(false);
+    void missingChatModelBean_throwsConfigMissing() {
+        when(chatModelProvider.getIfAvailable()).thenReturn(null);
 
         assertThatThrownBy(() -> service.generateSync("x"))
                 .isInstanceOf(AiException.class)

@@ -2,7 +2,8 @@ package com.workflow.ai.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
+import com.workflow.ai.aiconfig.EffectiveLlmConfig;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
@@ -24,12 +25,14 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,18 +48,19 @@ class AiAgentServiceTest {
     @Mock
     private AiUsageRecorder recorder;
 
-    private AiProperties properties;
+    @Mock
+    private AiConfigService configService;
 
     @BeforeEach
     void setUp() {
-        properties = new AiProperties();
-        properties.setEnabled(true);
-        properties.setApiKey("k");
-        properties.setModel("m");
+        // 用量记录取「生效配置」的模型名（DB 优先），不再读静态 properties
+        lenient().when(configService.resolve()).thenReturn(new EffectiveLlmConfig(
+                true, "https://example.test/v1", "k", "m",
+                0.7, 4096, 5000, 120000, Map.of(), "数据库配置"));
     }
 
     private AiAgentService service(AiToolRegistry registry) {
-        return new AiAgentService(chatModelProvider, properties, registry, recorder,
+        return new AiAgentService(chatModelProvider, configService, registry, recorder,
                 new AiAgentSessionStore(), new ObjectMapper());
     }
 
@@ -187,8 +191,8 @@ class AiAgentServiceTest {
     }
 
     @Test
-    void notConfigured_throws() {
-        properties.setEnabled(false);
+    void missingChatModelBean_throws() {
+        when(chatModelProvider.getIfAvailable()).thenReturn(null);
         Recorder rec = new Recorder();
 
         assertThatThrownBy(() -> service(new AiToolRegistry(List.of())).chat(List.of(), "x", List.of(), null, rec))

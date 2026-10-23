@@ -2,7 +2,9 @@ package com.workflow.ai.chat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.ai.agent.AiAgentService;
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
+import com.workflow.ai.aiconfig.EffectiveLlmConfig;
+import com.workflow.ai.exception.AiException;
 import com.workflow.framework.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,7 +14,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,14 +35,21 @@ class AiChatControllerTest {
     private static final String URL = "/api/v1/ai/chat";
 
     private AiAgentService agentService;
-    private AiProperties properties;
+    private AiConfigService configService;
     private MockMvc mvc;
+
+    private static EffectiveLlmConfig effective(String model) {
+        return new EffectiveLlmConfig(true, "https://example.test/v1", "test-key", model,
+                0.7, 4096, 5000, 120000, Map.of(), "数据库配置");
+    }
 
     @BeforeEach
     void setUp() {
         agentService = mock(AiAgentService.class);
-        properties = mock(AiProperties.class);
-        mvc = MockMvcBuilders.standaloneSetup(new AiChatController(agentService, properties, new ObjectMapper()))
+        configService = mock(AiConfigService.class);
+        // 可用性判定不在 Controller：它只按「生效配置」回填 meta，异常由 agent/模型侧抛出
+        when(configService.resolve()).thenReturn(effective("db-model"));
+        mvc = MockMvcBuilders.standaloneSetup(new AiChatController(agentService, configService, new ObjectMapper()))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -54,19 +65,7 @@ class AiChatControllerTest {
     }
 
     @Test
-    void notConfigured_returnsErrorEvent() throws Exception {
-        when(properties.isConfigured()).thenReturn(false);
-
-        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body("你好")))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("event:error")))
-                .andExpect(content().string(containsString("AI 服务未配置")));
-    }
-
-    @Test
     void success_returnsMetaMessageDone() throws Exception {
-        when(properties.isConfigured()).thenReturn(true);
-        when(properties.getModel()).thenReturn("test-model");
         doAnswer(inv -> {
             AiAgentService.Events events = inv.getArgument(4);
             events.message("已为你生成表单", List.of());
@@ -81,10 +80,38 @@ class AiChatControllerTest {
                 .andExpect(content().string(containsString("已为你生成表单")));
     }
 
+    /** meta 的模型名必须是生效配置里的，而不是 yml/环境变量的静态默认。 */
+    @Test
+    void metaReportsEffectiveModel_notStaticDefault() throws Exception {
+        when(configService.resolve()).thenReturn(effective("deepseek-chat"));
+        doAnswer(inv -> {
+            AiAgentService.Events events = inv.getArgument(4);
+            events.message("ok", List.of());
+            return null;
+        }).when(agentService).chat(any(), anyString(), any(), any(), any());
+
+        String text = mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body("你好")))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(text).contains("event:meta").contains("\"model\":\"deepseek-chat\"");
+    }
+
+    /** 模型不可用（停用/未填密钥）时按 CONFIG_MISSING 报错，而不是静默或超时。 */
+    @Test
+    void configMissingFromModel_returnsErrorEvent() throws Exception {
+        doAnswer(inv -> {
+            throw new AiException(AiException.Code.CONFIG_MISSING, "大模型服务已停用，请在 系统管理 → 模型配置 中启用");
+        }).when(agentService).chat(any(), anyString(), any(), any(), any());
+
+        mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body("你好")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("event:error")))
+                .andExpect(content().string(containsString("CONFIG_MISSING")))
+                .andExpect(content().string(containsString("模型配置")));
+    }
+
     @Test
     void emitsNavigationsInMessageEvent() throws Exception {
-        when(properties.isConfigured()).thenReturn(true);
-        when(properties.getModel()).thenReturn("test-model");
         doAnswer(inv -> {
             AiAgentService.Events events = inv.getArgument(4);
             events.message("去用户管理", List.of(
@@ -95,7 +122,7 @@ class AiChatControllerTest {
         String text = mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body("怎么添加用户")))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
 
-        org.assertj.core.api.Assertions.assertThat(text)
+        assertThat(text)
                 .contains("\"/system/user\"")
                 .contains("用户管理");
     }

@@ -35,6 +35,9 @@ public class PageMenuController {
     /** sys_menu.menu_type：1 菜单（目录 0 / 按钮 2 不可作为覆盖目标）。 */
     private static final int TYPE_MENU = 1;
 
+    /** 内置首页菜单名：侧栏固定渲染 /dashboard，覆盖该入口会出现两个「首页」。 */
+    private static final String BUILTIN_HOME_MENU = "首页";
+
     private final PageDefinitionService pageDefService;
     private final SysMenuRepository menuRepository;
     private final SysRoleRepository roleRepository;
@@ -99,6 +102,9 @@ public class PageMenuController {
         }
         if (menu.getMenuType() == null || menu.getMenuType() != TYPE_MENU) {
             throw new BusinessException(400, "仅支持覆盖菜单类型的入口");
+        }
+        if (BUILTIN_HOME_MENU.equals(menu.getMenuName())) {
+            throw new BusinessException(400, "首页为内置固定入口，不支持覆盖；如需替换首页内容请使用 key=dashboard 的页面");
         }
         String path = "/page/" + page.getKey();
         if (path.equals(menu.getPath())) {

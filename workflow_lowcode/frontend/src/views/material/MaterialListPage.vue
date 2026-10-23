@@ -583,18 +583,19 @@ const mountMode = ref<'create' | 'overwrite'>('create')
 const overwriteMenuId = ref<number | null>(null)
 const overwriteMenuTree = ref<MenuTree[]>([])
 
-/** 覆盖候选：全量菜单树，按钮不可作目标；已指向当前物料的菜单置灰 */
+/** 覆盖候选：全量菜单树，按钮与内置首页不可作目标；已指向当前物料的菜单置灰 */
 const overwriteCandidates = computed(() =>
   buildOverwriteTree(overwriteMenuTree.value, `/material/${mountTarget.value?.materialKey || ''}`),
 )
 const selectedOverwriteMenu = computed(() => findMenuById(overwriteMenuTree.value, overwriteMenuId.value))
 
+// 首页固定渲染在侧栏（/dashboard），覆盖它会出现两个「首页」
 function buildOverwriteTree(menus: MenuTree[], currentPath: string): any[] {
   return menus
     .filter((m) => m.menuType !== 2)
     .map((m) => ({
       ...m,
-      disabled: m.menuType !== 1 || m.path === currentPath,
+      disabled: m.menuType !== 1 || m.path === currentPath || m.menuName === '首页',
       children: buildOverwriteTree(m.children || [], currentPath),
     }))
 }

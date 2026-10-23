@@ -13,6 +13,17 @@
             :default-page-size="20"
             :max-visible-buttons="4"
           >
+            <template #name="{ row }">
+              <span>{{ row.name }}</span>
+              <el-tag
+                v-if="row.key === homePageKey && row.status === 'PUBLISHED'"
+                size="small"
+                type="success"
+                class="home-tag"
+              >
+                首页
+              </el-tag>
+            </template>
             <template #status="{ row }">
               <el-tag :type="statusTagType(row.status)">
                 {{ statusLabel(row.status) }}
@@ -116,7 +127,7 @@ defineOptions({ name: 'PageList' })
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { EditPen, Promotion, Menu, Delete } from '@element-plus/icons-vue'
+import { EditPen, Promotion, Menu, Delete, HomeFilled } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { pageApi, type PageDefinitionDTO, type PageMenuItem } from '@/api/page'
@@ -136,6 +147,18 @@ const activeTab = ref<'pages' | 'templates'>('pages')
 /** 已发布业务表单（创建弹窗 formKey 下拉候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
 
+/** 当前租户的首页页面 key（后端未配置或配置失效时返回 dashboard） */
+const homePageKey = ref('dashboard')
+
+async function loadHomePageKey() {
+  try {
+    const res = await pageApi.getHomePage()
+    if (res.data) homePageKey.value = res.data
+  } catch {
+    // 读取失败时保留默认 dashboard，不阻断列表
+  }
+}
+
 // ========== 挂接菜单（多挂接 + 列表管理） ==========
 const mountDialogVisible = ref(false)
 const mounting = ref(false)
@@ -146,18 +169,19 @@ const mountMode = ref<'create' | 'overwrite'>('create')
 const overwriteMenuId = ref<number | null>(null)
 const overwriteMenuTree = ref<MenuTree[]>([])
 
-/** 覆盖候选：全量菜单树，按钮不可作目标；已指向当前页面的菜单置灰 */
+/** 覆盖候选：全量菜单树，按钮与内置首页不可作目标；已指向当前页面的菜单置灰 */
 const overwriteCandidates = computed(() =>
   buildOverwriteTree(overwriteMenuTree.value, `/page/${mountTarget.value?.key || ''}`),
 )
 const selectedOverwriteMenu = computed(() => findMenuById(overwriteMenuTree.value, overwriteMenuId.value))
 
+// 首页固定渲染在侧栏（/dashboard），覆盖它会出现两个「首页」
 function buildOverwriteTree(menus: MenuTree[], currentPath: string): any[] {
   return menus
     .filter((m) => m.menuType !== 2)
     .map((m) => ({
       ...m,
-      disabled: m.menuType !== 1 || m.path === currentPath,
+      disabled: m.menuType !== 1 || m.path === currentPath || m.menuName === '首页',
       children: buildOverwriteTree(m.children || [], currentPath),
     }))
 }
@@ -292,7 +316,7 @@ const searchFields = computed<SearchField[]>(() => [
 
 // ========== 列 ==========
 const columns: TableColumn[] = [
-  { prop: 'name', label: '页面名称', minWidth: 180 },
+  { prop: 'name', label: '页面名称', minWidth: 180, slotName: 'name' },
   { prop: 'key', label: '页面标识', width: 180 },
   { prop: 'formKey', label: '绑定表单', width: 150, slotName: 'formKey' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
@@ -393,6 +417,31 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '设为首页',
+    icon: HomeFilled,
+    permission: 'page:publish',
+    show: (row: any) =>
+      row.status === 'PUBLISHED' && row.type === 'PAGE' && row.key !== homePageKey.value,
+    onClick: async (row: any) => {
+      try {
+        await ElMessageBox.confirm(
+          `确定将页面「${row.name}」设为系统首页吗？登录后将优先展示该页面，无访问权限的用户回退默认首页。`,
+          '设为首页',
+          { type: 'warning' },
+        )
+      } catch {
+        return
+      }
+      try {
+        await pageApi.setHomePage(row.id)
+        homePageKey.value = row.key
+        ElMessage.success('已设为首页')
+      } catch {
+        // http 拦截器已提示
+      }
+    },
+  },
+  {
     label: '删除',
     icon: Delete,
     type: 'danger',
@@ -454,6 +503,7 @@ onMounted(async () => {
   } catch {
     // 表单加载失败不阻断列表
   }
+  await loadHomePageKey()
 })
 </script>
 
@@ -507,5 +557,8 @@ onMounted(async () => {
 }
 .mount-alert {
   margin-bottom: 12px;
+}
+.home-tag {
+  margin-left: 6px;
 }
 </style>

@@ -331,6 +331,24 @@ class MaterialServiceTest {
     }
 
     @Test
+    void 覆盖菜单拒绝内置首页() {
+        when(materialRepository.findById(9L)).thenReturn(Optional.of(pageMaterial()));
+        SysMenu home = new SysMenu();
+        home.setId(7L);
+        home.setMenuName("首页");
+        home.setMenuType(1);
+        home.setPath("/page/cardlist_test");
+        home.setIsDeleted(0);
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(home));
+
+        assertThatThrownBy(() -> service.overwriteMenuReference(9L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("首页为内置固定入口");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
     void 组件物料列表只取启用的WIDGET() {
         SysMaterial widget = new SysMaterial();
         widget.setMaterialKey("stock-chart");

@@ -3,7 +3,7 @@ package com.workflow.ai.chat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.ai.agent.AiAgentService;
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.PageRef;
@@ -38,12 +38,13 @@ public class AiChatController {
     private static final Logger log = LoggerFactory.getLogger(AiChatController.class);
 
     private final AiAgentService agentService;
-    private final AiProperties properties;
+    private final AiConfigService configService;
     private final ObjectMapper objectMapper;
 
-    public AiChatController(AiAgentService agentService, AiProperties properties, ObjectMapper objectMapper) {
+    public AiChatController(AiAgentService agentService, AiConfigService configService,
+                            ObjectMapper objectMapper) {
         this.agentService = agentService;
-        this.properties = properties;
+        this.configService = configService;
         this.objectMapper = objectMapper;
     }
 
@@ -95,12 +96,9 @@ public class AiChatController {
 
     /** 公共执行骨架：meta → agent 事件 → done/error（统一 SSE 组装与异常处理）。 */
     private String runChat(java.util.function.Consumer<AiAgentService.Events> runner, ObjectMapper mapper) {
-        if (!properties.isConfigured()) {
-            return sse("error", Map.of("code", AiException.Code.CONFIG_MISSING.name(), "msg", "AI 服务未配置"));
-        }
-
         StringBuilder body = new StringBuilder();
-        body.append(sse("meta", Map.of("model", properties.getModel())));
+        String model = configService.resolve().model();
+        body.append(sse("meta", Map.of("model", model == null ? "" : model)));
         try {
             runner.accept(new AiAgentService.Events() {
                 @Override

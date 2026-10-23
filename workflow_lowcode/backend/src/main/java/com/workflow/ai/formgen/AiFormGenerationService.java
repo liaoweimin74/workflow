@@ -1,6 +1,6 @@
 package com.workflow.ai.formgen;
 
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
@@ -24,18 +24,18 @@ public class AiFormGenerationService {
     private static final double FORM_TEMPERATURE = 0.3;
 
     private final ObjectProvider<ChatModel> chatModelProvider;
-    private final AiProperties properties;
+    private final AiConfigService configService;
     private final FormSchemaPromptBuilder promptBuilder;
     private final FormSchemaValidator validator;
     private final AiUsageRecorder recorder;
 
     public AiFormGenerationService(ObjectProvider<ChatModel> chatModelProvider,
-                                   AiProperties properties,
+                                   AiConfigService configService,
                                    FormSchemaPromptBuilder promptBuilder,
                                    FormSchemaValidator validator,
                                    AiUsageRecorder recorder) {
         this.chatModelProvider = chatModelProvider;
-        this.properties = properties;
+        this.configService = configService;
         this.promptBuilder = promptBuilder;
         this.validator = validator;
         this.recorder = recorder;
@@ -50,8 +50,10 @@ public class AiFormGenerationService {
      */
     public StreamGenerateResult generateStream(String description, Consumer<String> onDelta) {
         ChatModel model = requireModel();
+        String effectiveModel = configService.resolve().model();
         List<ChatMessage> messages = promptBuilder.buildMessages(description);
-        ChatOptions options = new ChatOptions(FORM_TEMPERATURE, properties.getMaxTokens(), true, "json_object");
+        // maxTokens 传 null = 由生效配置（provider 侧快照）兜底
+        ChatOptions options = new ChatOptions(FORM_TEMPERATURE, null, true, "json_object");
 
         StringBuilder buffer = new StringBuilder();
         AiException[] failure = new AiException[1];
@@ -67,12 +69,12 @@ public class AiFormGenerationService {
 
         long elapsed = System.currentTimeMillis() - start;
         if (failure[0] != null) {
-            recorder.recordFailure(MODULE, properties.getModel(), failure[0].getMessage(), elapsed);
+            recorder.recordFailure(MODULE, effectiveModel, failure[0].getMessage(), elapsed);
             throw failure[0];
         }
 
         AiFormGenerateResult result = validator.validate(buffer.toString());
-        recorder.recordSuccess(MODULE, properties.getModel(), 0, 0, elapsed);
+        recorder.recordSuccess(MODULE, effectiveModel, 0, 0, elapsed);
         return new StreamGenerateResult(result, buffer.toString());
     }
 
@@ -84,12 +86,9 @@ public class AiFormGenerationService {
     }
 
     private ChatModel requireModel() {
-        if (!properties.isConfigured()) {
-            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 服务未配置");
-        }
         ChatModel model = chatModelProvider.getIfAvailable();
         if (model == null) {
-            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 服务未配置");
+            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 能力未装配，请查看后端启动日志");
         }
         return model;
     }

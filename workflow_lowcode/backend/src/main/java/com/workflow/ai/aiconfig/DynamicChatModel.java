@@ -18,27 +18,27 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 动态大模型代理：每次调用前解析「生效配置」（DB 动态配置优先，回退静态
- * {@code workflow.ai.*}），配置指纹变化时自动重建底层
+ * 动态大模型代理：每次调用前经 {@link AiConfigService#resolve()} 解析「生效配置」
+ * （DB 动态配置优先，回退静态 {@code workflow.ai.*}），配置指纹变化时自动重建底层
  * {@link OpenAiCompatibleChatModel}（含超时/端点/密钥），保存即生效、无需重启。
  *
  * <p>被 {@link com.workflow.ai.config.AiAutoConfiguration} 装配为平台唯一
  * {@link ChatModel} bean——逻辑流 LLM 节点、AI 对话、Agent、表单生成等
- * 全部消费方自动获得动态配置能力。
+ * 全部消费方自动获得动态配置能力。本 bean <b>恒装配</b>：静态
+ * {@code workflow.ai.enabled=false} 只表示「不带内置网关默认」，不可用时在调用点
+ * 即刻报「已停用/未填密钥」，不联网、不占用启动。
  */
 public class DynamicChatModel implements ChatModel {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicChatModel.class);
 
-    private final AiProperties defaults;
     private final AiConfigService configService;
     private final ObjectMapper objectMapper;
 
     private volatile String fingerprint;
     private volatile OpenAiCompatibleChatModel delegate;
 
-    public DynamicChatModel(AiProperties defaults, AiConfigService configService, ObjectMapper objectMapper) {
-        this.defaults = defaults;
+    public DynamicChatModel(AiConfigService configService, ObjectMapper objectMapper) {
         this.configService = configService;
         this.objectMapper = objectMapper;
     }
@@ -84,17 +84,9 @@ public class DynamicChatModel implements ChatModel {
         return delegate;
     }
 
-    /** 当前生效配置：DB 优先；DB 不可用/为空时用静态默认快照。 */
+    /** 解析当前生效配置（DB 优先，回退静态快照）。 */
     private EffectiveLlmConfig currentConfig() {
-        try {
-            EffectiveLlmConfig db = configService.effective();
-            if (db != null) {
-                return db;
-            }
-        } catch (Exception e) {
-            log.warn("读取动态模型配置失败，回退静态配置: {}", e.getMessage());
-        }
-        return fromProperties(defaults, "环境与默认配置");
+        return configService.resolve();
     }
 
     /** 从静态 AiProperties（已含沙箱桥接结果）构造生效配置快照。 */

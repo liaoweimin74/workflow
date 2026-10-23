@@ -66,6 +66,9 @@ public class MaterialService {
     /** 物料包文件名（导出下载用），带时间戳便于多次导出区分。 */
     private static final DateTimeFormatter FILE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
+    /** 内置首页菜单名：侧栏固定渲染 /dashboard，覆盖该入口会出现两个「首页」。 */
+    private static final String BUILTIN_HOME_MENU = "首页";
+
     /** 包清单里的人类可读导出时间。 */
     private static final DateTimeFormatter HUMAN_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -309,6 +312,9 @@ public class MaterialService {
         }
         if (menu.getMenuType() == null || menu.getMenuType() != 1) {
             throw new BusinessException(400, "仅支持覆盖菜单类型的入口");
+        }
+        if (BUILTIN_HOME_MENU.equals(menu.getMenuName())) {
+            throw new BusinessException(400, "首页为内置固定入口，不支持覆盖");
         }
         String path = "/material/" + material.getMaterialKey();
         if (path.equals(menu.getPath())) {

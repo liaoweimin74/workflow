@@ -14,6 +14,8 @@ vi.mock('@/api/page', () => ({
     createPage: vi.fn(),
     publishPage: vi.fn(),
     deletePage: vi.fn(),
+    getHomePage: vi.fn(),
+    setHomePage: vi.fn(),
   },
 }))
 
@@ -40,6 +42,7 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  ;(pageApi.getHomePage as any).mockResolvedValue({ data: 'dashboard' })
 })
 
 /** SearchTable 桩：透传 actionButtons/formConfig，供测试触发操作按钮 */
@@ -169,6 +172,44 @@ describe('PageListPage — 发布/删除交互', () => {
     await flushPromises()
     expect(pageApi.deletePage).toHaveBeenCalledWith('p1')
     expect(ElMessage.success).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('设为首页：仅已发布自定义页面可操作，当前首页行不再显示入口', async () => {
+    ;(pageApi.getPages as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const homeBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '设为首页')
+
+    expect(homeBtn.show({ status: 'PUBLISHED', type: 'PAGE', key: 'leave_board' })).toBe(true)
+    expect(homeBtn.show({ status: 'PUBLISHED', type: 'PAGE', key: 'dashboard' })).toBe(false)
+    expect(homeBtn.show({ status: 'DRAFT', type: 'PAGE', key: 'draft_page' })).toBe(false)
+    expect(homeBtn.show({ status: 'PUBLISHED', type: 'VIEW', key: 'legacy_view' })).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('设为首页：确认后调用接口并更新当前首页标记', async () => {
+    ;(pageApi.getPages as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    ;(ElMessageBox.confirm as any).mockResolvedValue(undefined)
+    ;(pageApi.setHomePage as any).mockResolvedValue({ data: 'leave_board' })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const homeBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '设为首页')
+    const row = { id: 'p9', name: '请假看板', key: 'leave_board', status: 'PUBLISHED', type: 'PAGE' }
+
+    await homeBtn.onClick(row)
+    await flushPromises()
+
+    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(pageApi.setHomePage).toHaveBeenCalledWith('p9')
+    expect(ElMessage.success).toHaveBeenCalledWith('已设为首页')
+    expect(homeBtn.show(row)).toBe(false)
     wrapper.unmount()
   })
 })

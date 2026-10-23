@@ -280,6 +280,29 @@ describe('MaterialListPage', () => {
     expect(createMenu).not.toHaveBeenCalled()
   })
 
+  it('覆盖候选：内置首页置灰，普通菜单可选', async () => {
+    ;(getMenuTree as any).mockResolvedValue({
+      code: 200,
+      data: [
+        { id: 7, menuName: '首页', menuType: 1, path: '/dashboard', status: 1, children: [] },
+        { id: 8, menuName: '旧看板入口', menuType: 1, path: '/page/old', status: 1, children: [] },
+      ],
+    })
+    const wrapper = createWrapper()
+    await flushPromises()
+
+    await actionByLabel('挂到菜单').onClick(rows[0])
+    await nextTick()
+    await flushPromises()
+
+    await wrapper.findAll('input[type="radio"]')[1].setValue(true)
+    await nextTick()
+
+    const data = wrapper.findComponent('[data-testid="overwrite-tree"]').props('data') as any[]
+    expect(data.find((n) => n.menuName === '首页').disabled).toBe(true)
+    expect(data.find((n) => n.menuName === '旧看板入口').disabled).toBe(false)
+  })
+
   it('未勾选物料时点导出不调接口', async () => {
     const wrapper = createWrapper()
     await flushPromises()

@@ -1,7 +1,6 @@
 package com.workflow.ai.chat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.workflow.ai.config.AiProperties;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
@@ -49,14 +48,11 @@ public class AiTestGenController {
             """;
 
     private final ObjectProvider<ChatModel> chatModelProvider;
-    private final AiProperties properties;
     private final ObjectMapper objectMapper;
 
     public AiTestGenController(ObjectProvider<ChatModel> chatModelProvider,
-                               AiProperties properties,
                                ObjectMapper objectMapper) {
         this.chatModelProvider = chatModelProvider;
-        this.properties = properties;
         this.objectMapper = objectMapper;
     }
 
@@ -68,12 +64,9 @@ public class AiTestGenController {
         if (request == null || request.records() == null || request.records().isEmpty()) {
             return R.fail("录制记录为空，请先录制页面操作");
         }
-        if (!properties.isConfigured()) {
-            return R.fail("AI 服务未配置");
-        }
         ChatModel model = chatModelProvider.getIfAvailable();
         if (model == null) {
-            return R.fail("AI 服务未配置");
+            return R.fail("AI 能力未装配，请查看后端启动日志");
         }
         try {
             String recordsJson = objectMapper.writeValueAsString(request.records());

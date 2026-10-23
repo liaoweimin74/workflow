@@ -5,9 +5,12 @@ import com.workflow.api.dto.PageDefinitionDetailDTO;
 import com.workflow.api.dto.PageDefinitionSaveRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
+import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.page.HomePageSettingService;
 import com.workflow.engine.page.PageAccessGuard;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
+import com.workflow.framework.security.permission.PermissionEvaluator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
@@ -23,13 +26,21 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/pages")
 public class PageDefinitionController {
 
+    private static final String PERMISSION_PUBLISH = "page:publish";
+
     private final PageDefinitionService pageDefService;
     private final PageAccessGuard pageAccessGuard;
+    private final HomePageSettingService homePageSettingService;
+    private final PermissionEvaluator permissionEvaluator;
 
     public PageDefinitionController(PageDefinitionService pageDefService,
-                                    PageAccessGuard pageAccessGuard) {
+                                    PageAccessGuard pageAccessGuard,
+                                    HomePageSettingService homePageSettingService,
+                                    PermissionEvaluator permissionEvaluator) {
         this.pageDefService = pageDefService;
         this.pageAccessGuard = pageAccessGuard;
+        this.homePageSettingService = homePageSettingService;
+        this.permissionEvaluator = permissionEvaluator;
     }
 
     /**
@@ -64,6 +75,25 @@ public class PageDefinitionController {
         PageResponse<PageDefinitionDTO> response = new PageResponse<>(
                 dtos, result.getNumber() + 1, result.getSize(), result.getTotalElements());
         return R.ok(response);
+    }
+
+    /**
+     * 当前系统首页的页面 key（未配置或配置失效时为 dashboard）。
+     */
+    @GetMapping("/home")
+    public R<String> getHomePage() {
+        return R.ok(homePageSettingService.getHomePageKey());
+    }
+
+    /**
+     * 把已发布的自定义页面设为系统首页（租户级）。
+     */
+    @PutMapping("/{id}/home")
+    public R<String> setHomePage(@PathVariable String id) {
+        if (!permissionEvaluator.hasPermission(PERMISSION_PUBLISH)) {
+            throw new BusinessException(403, "需要页面发布权限（" + PERMISSION_PUBLISH + "）");
+        }
+        return R.ok(homePageSettingService.setHomePage(id));
     }
 
     /**

@@ -216,6 +216,21 @@ class PageMenuControllerTest {
     }
 
     @Test
+    void overwriteMenu_rejectsBuiltinHomeMenu() {
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        SysMenu home = buildMenu(7L, "首页", null);
+        home.setMenuType(1);
+        home.setPath("/page/cardlist_test");
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(home));
+
+        assertThatThrownBy(() -> controller.overwriteMenu("p1", 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("首页为内置固定入口");
+
+        verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    @Test
     void overwriteMenu_rejectsNonMenuTypeTarget() {
         when(pageDefService.getById("p1")).thenReturn(publishedPage);
         SysMenu directory = buildMenu(100L, "某目录", null);

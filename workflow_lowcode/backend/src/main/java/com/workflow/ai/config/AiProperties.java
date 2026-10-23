@@ -15,7 +15,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "workflow.ai")
 public class AiProperties {
 
-    /** AI 服务开关，默认启用（平台内置模型开箱即用）。 */
+    /**
+     * 静态默认值的启用开关（对应 {@code workflow.ai.enabled} / {@code WORKFLOW_AI_ENABLED}）。
+     *
+     * <p>只描述「内置网关默认可不可用」，<b>不是</b> AI 功能的总闸：页面「系统管理 →
+     * 模型配置」保存的 DB 行优先且能独立启用 AI（见
+     * {@link com.workflow.ai.aiconfig.AiConfigService#resolve()}）。设为 false 时既不
+     * 拆 {@code ChatModel} bean，也不影响启动，仅在真正调用时报「已停用」。
+     */
     private boolean enabled = true;
 
     /** OpenAI 兼容端点基础地址，默认指向平台内部 LLM 网关（NestJS）。 */
@@ -72,12 +79,5 @@ public class AiProperties {
     public java.util.Map<String, String> getExtraHeaders() { return extraHeaders; }
     public void setExtraHeaders(java.util.Map<String, String> extraHeaders) {
         this.extraHeaders = extraHeaders == null ? new java.util.LinkedHashMap<>() : extraHeaders;
-    }
-
-    /**
-     * 是否具备可用配置（开关打开且 api-key 非空）。
-     */
-    public boolean isConfigured() {
-        return enabled && apiKey != null && !apiKey.isBlank();
     }
 }

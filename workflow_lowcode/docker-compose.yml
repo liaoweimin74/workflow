@@ -5,6 +5,10 @@
 #   docker compose up -d --build
 #   docker compose logs -f backend
 #
+# 打包并推送到阿里云镜像仓库（build → tag → push 一条命令）：
+#   bash scripts/image-release.sh            # 两个镜像；加 backend / frontend 只打一个
+#   凭据只从环境变量 DOCKER_REPO_KEY 读，不要写进本文件引用的 .env
+#
 # 变量插值（${WEB_PORT} 等）与 backend 的 env_file 共用同一个 .env。
 
 services:

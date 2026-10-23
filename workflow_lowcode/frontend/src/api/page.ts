@@ -95,6 +95,16 @@ export const pageApi = {
     return http.post(`/v1/pages/${id}/publish`)
   },
 
+  /** 当前系统首页的页面 key（未配置或配置失效时为 dashboard） */
+  getHomePage(): Promise<R<string>> {
+    return http.get('/v1/pages/home')
+  },
+
+  /** 把已发布的自定义页面设为系统首页（租户级） */
+  setHomePage(id: string): Promise<R<string>> {
+    return http.put(`/v1/pages/${id}/home`)
+  },
+
   /** 挂接菜单（每次调用为已发布页面创建一条新菜单，支持多挂接） */
   mountMenu(id: string, data: MountMenuRequest): Promise<R<PageMenuItem>> {
     return http.post(`/v1/pages/${id}/mount-menu`, data)

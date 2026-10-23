@@ -108,3 +108,18 @@ Superpowers 技能（TDD、brainstorming 等）是文件系统上的 `.md` 文�
 
 <!-- openspec-superpowers-opencode_instructions -->
 <!-- ⛔ 上方 openspec-superpowers-opencode_instructions 区块为自动生成，禁止修改 ⛔ -->
+
+## Git 提交与推送纪律（人工追加，位于自动生成区块之外）
+
+以下四条都是 2026-10 出码 P2 合并推送时实测踩出来的，违反任一条都会造成返工或丢工作。
+
+- **新文件与对它的第一处引用必须落在同一笔提交**。按主题 `git add` 拆分时，若把 `import`／注册代码归给前一笔、把被引用的新文件归给后一笔，前一笔单独检出就跑不起来（`vite dev` 解析失败），bisect 也会断在这一笔。拆完用 `git show <提交> -- <新文件路径>` 确认成对出现。
+- **cherry-pick 重放必须按拓扑序，不能按提交日期序**。定序只用
+  `git rev-list --reverse --topo-order --no-merges main --not origin/main`；
+  `git log --no-walk --stdin` 会按日期重排（`--no-walk` 不看祖先关系），兄弟提交与隔代提交会错位，撞出"文件 deleted in HEAD"这类假冲突。核对顺序用 `head`/`tail` 看文件本身，别再套一层 `git log`。
+- **推前 Gate 是"树内容等价"，不是 sha 相等**。跑
+  `git diff --name-only main <重放分支> -- . ':(exclude)backups' ':(exclude)worklog.md'`，
+  输出必须为空——`origin/main` 上的 cron 机器人只往 `backups/*.sql` 与 `worklog.md` 追加提交，这两条路径之外的差异才是真问题。为空即代码逐字节一致，不必在临时 worktree 里重跑测试。
+  同理，判断"分支内容是否已全部进 main"要看**文件级**差异：`git cherry` 报 `+1` 可能只是冲突解决导致 patch-id 不同。
+- **推完必须对齐本地 main，否则本地长期是一堆重复 hash**。顺序：先确认 `git status --short -- backups worklog.md` 为空且暂存区为空，再 `git reset --mixed <远端新 SHA>`（不动工作区，他人/其他会话的在途改动原样保留），最后 `git checkout -- backups worklog.md`。
+  漏掉最后一步，`git status` 会把"旧 dump 内容"显示成待提交的修改，任何一次 `git add -A` 都会把远端的 dump 轮转 revert 掉。

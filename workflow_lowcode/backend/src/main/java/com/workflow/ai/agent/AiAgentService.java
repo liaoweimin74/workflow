@@ -2,7 +2,7 @@ package com.workflow.ai.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.workflow.ai.config.AiProperties;
+import com.workflow.ai.aiconfig.AiConfigService;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
@@ -95,20 +95,20 @@ public class AiAgentService {
             """;
 
     private final ObjectProvider<ChatModel> chatModelProvider;
-    private final AiProperties properties;
+    private final AiConfigService configService;
     private final AiToolRegistry toolRegistry;
     private final AiUsageRecorder recorder;
     private final AiAgentSessionStore sessionStore;
     private final ObjectMapper objectMapper;
 
     public AiAgentService(ObjectProvider<ChatModel> chatModelProvider,
-                          AiProperties properties,
+                          AiConfigService configService,
                           AiToolRegistry toolRegistry,
                           AiUsageRecorder recorder,
                           AiAgentSessionStore sessionStore,
                           ObjectMapper objectMapper) {
         this.chatModelProvider = chatModelProvider;
-        this.properties = properties;
+        this.configService = configService;
         this.toolRegistry = toolRegistry;
         this.recorder = recorder;
         this.sessionStore = sessionStore;
@@ -236,10 +236,11 @@ public class AiAgentService {
         events.message(text, new ArrayList<>(session.navigations.values()));
         sessionStore.remove(session.id);
         long elapsed = System.currentTimeMillis() - session.startMs;
+        String model = configService.resolve().model();
         if (failure) {
-            recorder.recordFailure(MODULE, properties.getModel(), "max steps exceeded", elapsed);
+            recorder.recordFailure(MODULE, model, "max steps exceeded", elapsed);
         } else {
-            recorder.recordSuccess(MODULE, properties.getModel(), 0, 0, elapsed);
+            recorder.recordSuccess(MODULE, model, 0, 0, elapsed);
         }
     }
 
@@ -333,13 +334,14 @@ public class AiAgentService {
         return sb.toString();
     }
 
+    /**
+     * 取 {@link ChatModel} bean。可用性（是否启用、有无密钥）不在这里判：
+     * 由 {@link com.workflow.ai.aiconfig.DynamicChatModel} 按生效配置判定并给出可操作提示。
+     */
     private ChatModel requireModel() {
-        if (!properties.isConfigured()) {
-            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 服务未配置");
-        }
         ChatModel model = chatModelProvider.getIfAvailable();
         if (model == null) {
-            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 服务未配置");
+            throw new AiException(AiException.Code.CONFIG_MISSING, "AI 能力未装配，请查看后端启动日志");
         }
         return model;
     }

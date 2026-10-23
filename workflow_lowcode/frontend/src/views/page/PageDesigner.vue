@@ -1823,12 +1823,6 @@ async function registerMaterialWidgets(schemaRules: unknown) {
   }
 
 onMounted(async () => {
-  // 注册页面数据组件到 FcDesigner 拖拽面板（数据源配置入口在表单配置页签底部）
-  registerPageComponents()
-
-  // uniapp 页面：契约渲染组件注册（Task 2.2；失败不阻塞设计器，回落宿主渲染）
-  void registerUniAppCanvasComponents().catch(() => {})
-
   // 应用上下文下拉数据源（Task 2.1；拉取失败不阻塞设计器）
   appsApi.getApps().then((res) => { apps.value = res.data || [] }).catch(() => {})
 
@@ -1852,6 +1846,13 @@ onMounted(async () => {
     pageAppId.value = def.appId || null
     pageDesignType.value = def.designType === 'uniapp' ? 'uniapp' : 'web'
     designerStore.setAppContext(pageAppId.value)
+
+    // Task 2.3：面板注册依赖页面类型（三区能力过滤），必须等 designType 就绪。
+    // 顺带修 Task 2.2 race——原在 onMounted 顶部调用，designType 尚为初始值 'web'，
+    // uniapp 页面的契约组件注册必命中 early-return，从未注册。
+    registerPageComponents()
+    // 契约组件注册先于 setRule：画布节点按注册表解析，await 保证时序；失败回落宿主渲染
+    await registerUniAppCanvasComponents().catch(() => {})
     let parsedRule: any[] = []
     let parsedOption: Record<string, unknown> = {}
     if (def.schema) {
@@ -2066,6 +2067,27 @@ function statusLabel(status: string): string {
 .designer-body :deep(.el-container._fc-designer) {
   flex: 1 !important;
   min-width: 0;
+}
+/* Task 2.3：面板能力过滤——uniapp 页面将 Web 专属组件置灰并提示原因（spec 场景：
+   「iframe、Excel 导入导出、树/树表族置灰并提示『仅 Web 端可设计』」；Excel 导入导出
+   无独立面板项，随 page-table 特性级处理）。
+   vendor 事实（@form-create/designer 3.5.0 版本锁定）：DragRule 无 disabled 字段，
+   面板项渲染为 ._fc-l-item + element.icon 图标类，vendor 原生只有 hiddenItem（隐藏），
+   故以 icon 类 hook 置灰 + pointer-events:none 阻断拖拽/点击添加。
+   icon 占用约定：page-tree/page-tree-table 共用 icon-tree（两者均 web-only，合并选择器
+   无误伤），page-iframe 用 icon-application；其余组件不得复用这两个类，
+   改动拖拽规则 icon 前先改这里。CSS 失效兜底：Task 2.4 出码报告按
+   target-profile.supports 显式分桶，不存在静默丢弃。 */
+.lc-canvas--uniapp :deep(._fc-l-item:has(.icon-tree)),
+.lc-canvas--uniapp :deep(._fc-l-item:has(.icon-application)) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.lc-canvas--uniapp :deep(._fc-l-item:has(.icon-tree) ._fc-l-name::after),
+.lc-canvas--uniapp :deep(._fc-l-item:has(.icon-application) ._fc-l-name::after) {
+  content: ' · 仅 Web 端可设计';
+  color: #f56c6c;
+  font-size: 10px;
 }
 .ds-row {
   display: flex;

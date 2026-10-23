@@ -1,0 +1,20 @@
+{
+  "name": "@lc/runtime-uni",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "uniapp 出码产物的运行时边界：请求（token+租户头）/ 表单 / 动作 / 图表",
+  "exports": {
+    "./package.json": "./package.json",
+    "./http": "./src/http.ts",
+    "./form": "./src/form.ts",
+    "./actions": "./src/actions.ts",
+    "./charts": "./src/charts.ts"
+  },
+  "scripts": {
+    "build": "vite build"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.40"
+  }
+}

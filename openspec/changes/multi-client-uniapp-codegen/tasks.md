@@ -21,7 +21,7 @@
 ## 3. emitUniApp 骨架（M2 前置）
 
 - [x] 3.1 TargetProfile 结构定义（componentMap/styleRules/apiAdapter/routerAdapter/capabilities）与 `emitUniApp(IR, profile)` 工程骨架：pages.json / manifest.json / App.vue / pages/<key>.vue（design D6）
-- [ ] 3.2 `@lc/runtime-uni` 仓库内 file 依赖包 + 独立编译测试 Gate（对位 P2 runtime-package-build）（design D6）
+- [x] 3.2 `@lc/runtime-uni` 仓库内 file 依赖包 + 独立编译测试 Gate（对位 P2 runtime-package-build）（design D6）
 - [ ] 3.3 HTTP 适配层：uni.request 封装、token 拦截、`X-Tenant-Id` 注入，对位现有 api 模块语义（design D6）
 - [ ] 3.4 px→rpx 换算与样式基线（375 画布基准），产物样式产出走 styleRules（design D6/Open Question 3）
 

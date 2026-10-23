@@ -9850,3 +9850,19 @@ Stage Summary:
 - 事件 #131（完整冷启动）+ 数据安全事故（dump 兜底链断裂）双双闭环，零 mvn 第 115 次；累计 131 次
 - ⚠️ 待用户裁决：.gitignore 第 64 行 backups/ 应收窄为 backups/jar/（恢复 dump-db 自动入库能力）；本次仅用 git add -f 临时兜底
 - 数据 RPO 评估：Flyway 空壳期间（07:05-07:16）若有业务写入仅丢 11 分钟窗口；业务数据主体回滚至 20261022-001001 快照（r202 收口态）
+---
+Task ID: r227
+Agent: main (cron 轻量运维)
+Task: 2026-10-23 10:05 例行巡检（Job 446961）
+
+Work Log:
+- r225-226 沙箱二连空窗后本轮自愈 ✓
+- 探活：四链路 200×4 但 auth=no such table → 事件 #132（标准重供给，Node 占 8080）
+- 好转：重供给后 bootstrap 从 git 恢复的 backups 拉起 mariadbd 1216 且数据完整（dump 268K/103 表，r224 的 add -f 兜底生效）
+- 定型流水线：pkill 五连 → 重拼 jar md5 e369839b ✓ → recover 零 mvn 拉起 java pid 1436（SYS_USER 已在，跳过导入）
+- 复验：40s 全绿 200×4 + nodeProbe 200；内存 3197MB，oom 0
+- 收口：dump + add -f 强制入库 + push
+
+Stage Summary:
+- 事件 #132 单轮闭环，零 mvn 第 116 次；累计 132 次
+- r224 的 git add -f 兜底已被重供给实证有效（dump 随 git 幸存）

@@ -2,8 +2,9 @@
 // golden 即规格：语料卡列表页（cardlist_test.json）+ 合成页（角色列/搜索抽屉/按钮链）。
 // 链出口 5.1 子集：message/open-link → uni API；refresh/set-filter/set-page → 页面本地
 // useUniList 函数——web 契约 list.expose=none 使 cards 的 list-ref 步骤在 parse 被拒
-// （IR 是 web 形状），出口表先行直测，5.3 parse 侧按端放开 gate 后这些 op 才从链里到达；
-// 容器族（open-container/内置行语义）5.2/5.3 落地，5.1 以 lc:todo 注释 + unsupported 登记。
+// （IR 是 web 形状），出口表先行直测，5.3 parse 侧按端放开 gate 后这些 op 才从链里到达。
+// 内置 open case（Task 5.2 起）：页面存在 formContainer 时出真实现 openContainer(...)，
+// 无容器保留 lc:todo + unsupported（合成页无容器，仍走 todo 路径）。
 // npx vitest run src/views/page/codegen/__tests__/uni/emit-list.test.ts
 
 import { describe, expect, it } from 'vitest'
@@ -117,7 +118,7 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
     )
   })
 
-  it('脚本：useUniList 接线 + 触底 + 空行点击挂点 + 内置 delete 真实现 / open-container todo', () => {
+  it('脚本：useUniList 接线 + 触底 + 空行点击挂点 + 内置 delete 真实现 / edit 开容器真实现（页面有容器）', () => {
     const { node, ir } = corpus()
     const frag = emitListNode(node, ir, PROFILES.uniapp)
     expect(frag.script).toEqual([
@@ -131,7 +132,7 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
       `  const row = payload.row`,
       `  switch (payload.key) {`,
       `    case 'edit':`,
-      `      // lc:todo op=open-container(mode=edit) ← 内置行语义：uni 容器适配 Task 5.2/5.3 落地`,
+      `      void openContainer(String(row?.id ?? ''), false, 'edit')`,
       `      return`,
       `    case 'delete':`,
       `      if (row?.id != null) void cards1792036403314List.removeRow(String(row.id))`,
@@ -141,7 +142,7 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
     ])
   })
 
-  it('imports 与 unsupported 登记：容器族/详情弹窗 uni 首版不出码', () => {
+  it('imports 与 unsupported 登记：详情弹窗仍登记；open-container 已由容器段承接不再登记', () => {
     const { node, ir } = corpus()
     const frag = emitListNode(node, ir, PROFILES.uniapp)
     expect(frag.imports).toEqual([
@@ -154,12 +155,6 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
         type: 'page-list-cards',
         key: 'viewDetail',
         message: '详情弹窗（viewDetail）uni 首版未出码',
-      },
-      {
-        path: 'rule[0]',
-        type: 'page-list-cards',
-        key: 'open-container',
-        message: '按钮 edit 的内置行语义（mode=edit）需容器：uni 容器适配 Task 5.2/5.3 落地',
       },
     ])
   })
@@ -238,7 +233,7 @@ describe('emitListNode — 合成页（角色列 + 搜索抽屉 + 按钮链）',
       `function onButtonClick(payload: { key: string; label: string; row: Record<string, unknown> | null }) {`,
       `  switch (payload.key) {`,
       `    case 'create':`,
-      `      // lc:todo op=open-container(mode=create) ← 内置行语义：uni 容器适配 Task 5.2/5.3 落地`,
+      `      // lc:todo op=open-container(mode=create) ← 内置行语义：页面无 formContainer，uni 侧无对位载体`,
       `      return`,
       `    case 'audit':`,
       `      uni.showToast({ title: '已提交审核', icon: 'success' })`,
@@ -267,7 +262,7 @@ describe('emitListNode — 合成页（角色列 + 搜索抽屉 + 按钮链）',
         path: 'rule[0]',
         type: 'page-list-cards',
         key: 'open-container',
-        message: '按钮 create 的内置行语义（mode=create）需容器：uni 容器适配 Task 5.2/5.3 落地',
+        message: '按钮 create 的内置行语义（mode=create）需容器：页面无 formContainer，uni 侧无对位载体',
       },
     ])
   })

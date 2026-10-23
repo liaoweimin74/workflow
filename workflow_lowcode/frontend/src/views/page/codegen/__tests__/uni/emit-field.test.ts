@@ -110,16 +110,24 @@ describe('emitFieldNode — 字段族 golden（Task 4.1）', () => {
     )
   })
 
-  it('无 uniapp 映射的字段类型：lc:todo 挂点注释（不出空标签，与 web 同纪律）', () => {
+  it('无 uniapp 映射的字段类型：lc:todo 挂点注释 + unsupported 登记（不出空标签，与 web 同纪律）', () => {
     const node = fieldNodeOf({
       type: 'SystemUserPicker',
       field: 'owner',
       title: '负责人',
       props: {},
     })
-    expect(emitFieldNode(node, profile).template).toBe(
-      `<!-- lc:todo node=n1 type=SystemUserPicker field=owner 组件类型无 uniapp 出码契约，整字段未出码 -->`,
-    )
+    expect(emitFieldNode(node, profile)).toEqual({
+      template: `<!-- lc:todo node=n1 type=SystemUserPicker field=owner 组件类型无 uniapp 出码契约，整字段未出码 -->`,
+      unsupported: [
+        {
+          path: 'rule[0]',
+          type: 'SystemUserPicker',
+          key: 'field-component',
+          message: '字段 owner 的组件 SystemUserPicker 无 uniapp 映射，模板以 lc:todo 占位',
+        },
+      ],
+    })
   })
 
   it('component-map 登记：textarea 进映射（KNOW_TYPES 派生不再手工列），三类型带 props 白名单', async () => {

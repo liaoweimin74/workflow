@@ -35,7 +35,7 @@
 ## 5. 列表 / 详情 / 容器出码（M2）
 
 - [x] 5.1 page-list-cards：uni-card + 触底加载 + uni-search-bar + 筛选抽屉；按钮/行点击链真执行（spec: uniapp-codegen-target 场景「page-table 出码为 uni-table 简表」同口径的列表侧）
-- [ ] 5.2 page-detail 堆叠详情 + page-steps（uni-steps）+ page-data-container（uni-popup 弹层，容器段 open/close/confirmSave）
+- [x] 5.2 page-detail 堆叠详情 + page-steps（uni-steps）+ page-data-container（uni-popup 弹层，容器段 open/close/confirmSave）
 - [ ] 5.3 动作出口适配：open-link→uni.navigateTo、message→uni.showToast、list-ref 族→ref、container 族→容器函数；export 整支 unsupported；脚本普通函数上下文（form/row/page/message/http）（spec: uniapp-codegen-target「动作出口按端适配」）
 
 ## 6. uni-table 与降级件（M3）

@@ -3,8 +3,10 @@
  *
  * design G3/D5：parse → IR 与 web 出码完全同源复用，本模块只做编排与工程文件组装：
  *  · 页面 SFC 装配（Task 5.1 起）：view 根容器 + 逐顶层节点分派——page-list-cards 走
- *    emitListNode 片段（模板缩 2 格、script/import/unsupported 并入页面），其余组件族
- *    以 lc:todo 注释挂点占位，族装配按任务落地（5.2 容器族、6.x 表格族、7.x 字段族）；
+ *    emitListNode、formContainer 走 emitContainerNode（容器段，Task 5.2）、展示组件族
+ *    （page-steps/page-detail/page-data-container）走 emitWidgetNode（Task 5.2），片段
+ *    模板缩 2 格、script/import/unsupported 并入页面；其余组件族以 lc:todo 注释挂点
+ *    占位，族装配按任务落地（6.x 表格族、7.x 字段族）；
  *  · pages.json / manifest.json / App.vue（project-files，清单即真相）；
  *  · 报告（Task 2.4 per-target，uniapp 维度）：uni 片段的 unsupported 合并进 manifest
  *    后喂报告——「按端不支持」与「共享 parse 拒绝」在同一份清单里可见。
@@ -15,7 +17,9 @@ import type { GenerateResult, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
 import { buildReport } from '../report'
 import { PROFILES } from '../target-profile'
+import { emitContainerNode } from './emit-container'
 import { emitListNode } from './emit-list'
+import { emitWidgetNode } from './emit-widget'
 import { buildAppVue, buildManifestJson, buildPagesJson, type UniClientConfig } from './project-files'
 
 export function generatePageUni(
@@ -43,41 +47,94 @@ export function generatePageUni(
 }
 
 /**
- * 页面 SFC 装配：模板 = view 根容器 + 逐顶层节点分派；script = 片段 imports（去重保序）
- * + 数据源常量 + 片段 script。页面名不再注入 SFC——标题由 pages.json
- * navigationBarTitleText 承担（Task 3.1 的骨架注入随之移除）。
+ * import 行按源合并（Task 5.2）：多片段各自出 `import { x } from 'vue'` 这类同源行，
+ * 全行去重会留双行（同名字段重复声明），按 source 合并 brace 名单（首现序、名单保序
+ * union）；非 brace 行（无默认 import 现状）原样保序去重。
+ */
+function mergeImports(lines: string[]): string[] {
+  const namesBySource = new Map<string, string[]>()
+  const rawPending = new Set<string>()
+  for (const line of lines) {
+    const m = /^import \{([^}]*)\} from '([^']+)'$/.exec(line)
+    if (!m) {
+      rawPending.add(line)
+      continue
+    }
+    const names = m[1].split(',').map((s) => s.trim()).filter(Boolean)
+    const hit = namesBySource.get(m[2])
+    if (hit) {
+      for (const n of names) if (!hit.includes(n)) hit.push(n)
+    } else {
+      namesBySource.set(m[2], names)
+    }
+  }
+  const out: string[] = []
+  const doneSource = new Set<string>()
+  for (const line of lines) {
+    const m = /^import \{([^}]*)\} from '([^']+)'$/.exec(line)
+    if (!m) {
+      if (rawPending.has(line)) {
+        rawPending.delete(line)
+        out.push(line)
+      }
+      continue
+    }
+    if (doneSource.has(m[2])) continue
+    doneSource.add(m[2])
+    out.push(`import { ${namesBySource.get(m[2])!.join(', ')} } from '${m[2]}'`)
+  }
+  return out
+}
+
+/**
+ * 页面 SFC 装配：模板 = view 根容器 + 逐顶层节点分派（page-list-cards / formContainer /
+ * 展示组件族 → 对应片段；其余 lc:todo 挂点）；script = 片段 imports（按源合并）+ 数据源
+ * 常量 + 容器段脚本（对位 web 容器段位置）+ 其余片段脚本。页面名不再注入 SFC——标题由
+ * pages.json navigationBarTitleText 承担（Task 3.1 的骨架注入随之移除）。
  */
 function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
   const unsupported: Unsupported[] = []
   const imports: string[] = []
   const scripts: string[] = []
+  // 容器预扫描（Task 5.2）：容器段模板在节点原位出（弹层为浮层，位置无关），脚本段
+  // 插到数据源常量之后、其余片段脚本之前（对位 web 容器段位置）
+  const containerNode = ir.nodes.find((n) => n.artifact.type === 'formContainer')
+  const containerFrag = containerNode ? emitContainerNode(containerNode, ir) : null
 
   // 模板主体（相对缩进 0，SFC 组装时统一缩 2 格）
   const T: string[] = ['<view class="lc-page">']
+  const pad = (l: string) => (l ? `  ${l}` : l)
   for (const n of ir.nodes) {
     if (n.artifact.type === 'page-list-cards') {
       const frag = emitListNode(n, ir, PROFILES.uniapp)
-      T.push(...frag.template.split('\n').map((l) => (l ? `  ${l}` : l)))
+      T.push(...frag.template.split('\n').map(pad))
       imports.push(...frag.imports)
       scripts.push(...frag.script)
       unsupported.push(...frag.unsupported)
+    } else if (n === containerNode && containerFrag) {
+      T.push(...containerFrag.template.split('\n').map(pad))
+      imports.push(...containerFrag.imports)
+      unsupported.push(...containerFrag.unsupported)
     } else {
-      // 未装配组件族：锚点挂点保留（回读侧按地址回节点），族装配按任务落地
-      T.push(
-        `  <!-- lc:todo node=${n.artifact.id} type=${n.artifact.type} field=${n.artifact.field} 组件族 uniapp 装配按任务落地 -->`,
-      )
+      // 展示组件族（page-steps/page-detail/page-data-container）走 widget 片段；其余族
+      // 未装配：锚点挂点保留（回读侧按地址回节点），族装配按任务落地
+      const frag = emitWidgetNode(n, ir)
+      if (frag) {
+        T.push(...frag.template.split('\n').map(pad))
+        imports.push(...frag.imports)
+        scripts.push(...frag.script)
+        unsupported.push(...frag.unsupported)
+      } else {
+        T.push(
+          `  <!-- lc:todo node=${n.artifact.id} type=${n.artifact.type} field=${n.artifact.field} 组件族 uniapp 装配按任务落地 -->`,
+        )
+      }
     }
   }
   T.push('</view>')
 
-  // script：imports 去重保序（多列表节点共享同一组 import）→ 数据源常量 → 片段 script
-  const S: string[] = []
-  const seen = new Set<string>()
-  for (const i of imports) {
-    if (seen.has(i)) continue
-    seen.add(i)
-    S.push(i)
-  }
+  // script：imports 按源合并（多片段共享同一组 import）→ 数据源常量 → 容器段 → 片段脚本
+  const S: string[] = [...mergeImports(imports)]
   // 数据源常量：对位 web emit.ts 227-233（ds 恒出，登记表有源才出）
   const ds = ir.dataSources[0] ?? { id: '', refId: '' }
   S.push(`const ds = { id: '${ds.id}', refId: '${ds.refId}' }`)
@@ -87,6 +144,7 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
     ir.dataSources.forEach((d) => S.push(`  '${d.id}': '${d.refId}',`))
     S.push('}')
   }
+  if (containerFrag) S.push(...containerFrag.script)
   S.push(...scripts)
 
   return {

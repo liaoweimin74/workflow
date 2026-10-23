@@ -128,6 +128,27 @@ describe('@lc/runtime-uni — 四入口骨架行为（Task 3.2/3.3）', () => {
     expect(validate()).toBe(true)
   })
 
+  it('form.useUniForm：init 初值预填 model（嵌套按形态 []/{}）+ reset 复位（Task 5.2 容器段）', () => {
+    const form = useUniForm([
+      { field: 'name', title: '姓名', props: { required: true } },
+      { field: 'amount', title: '金额', init: 0 },
+      { field: 'items', title: '明细', init: [] },
+      { field: 'invoice', title: '发票', init: {} },
+    ])
+    // model 预填：字段片段的 v-model 与 openContainer 的整表复位都依赖键存在
+    expect(form.model.name).toBe('')
+    expect(form.model.amount).toBe(0)
+    expect(form.model.items).toEqual([])
+    expect(form.model.invoice).toEqual({})
+    form.model.name = '张三'
+    ;(form.model.items as unknown[]).push({ sku: 'x' })
+    form.reset()
+    expect(form.model.name).toBe('')
+    expect(form.model.items).toEqual([])
+    // 复位后校验回到必填失败态
+    expect(form.validate()).toBe(false)
+  })
+
   it('actions.runAction：open-link→uni.navigateTo、message→uni.showToast、未适配 op 拒绝', async () => {
     const calls = stubUni()
     await expect(runAction({ op: 'open-link', url: '/pages/gen/orders' }, {})).resolves.toBe(true)

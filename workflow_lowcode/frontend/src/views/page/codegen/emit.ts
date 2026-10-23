@@ -1019,8 +1019,9 @@ function condOf(p: IrNode, cfgName: string, rows: string, toggle: string): strin
   return `${cfgName}.${toggle} && (!${max} || (${rows} || []).length < ${max})`
 }
 
-/** 常量序列化：合法标识符键名去引号、无引号的字符串值用单引号，贴近人写的风格便于 review */
-function jsonToTs(v: unknown): string {
+/** 常量序列化：合法标识符键名去引号、无引号的字符串值用单引号，贴近人写的风格便于 review。
+ * uni 侧（Task 5.2 formRules/steps items 等）复用同一序列化器：两端产物常量字节形状一致。 */
+export function jsonToTs(v: unknown): string {
   return JSON.stringify(v, null, 2)
     .replace(/^(\s*)"([A-Za-z_$][\w$]*)": /gm, '$1$2: ')
     .replace(/: "([^"'\\]*)"/g, ": '$1'")

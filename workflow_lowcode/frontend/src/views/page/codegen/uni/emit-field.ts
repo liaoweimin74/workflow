@@ -14,7 +14,7 @@
  * 首行无缩进、嵌套行相对缩进，页面装配（Task 5.x）统一加页内缩进。
  */
 
-import { camelField, pascal, type IrNode } from '../ir'
+import { camelField, pascal, type IrNode, type Unsupported } from '../ir'
 import type { UniAppComponentMapping } from '../component-map'
 import type { TargetProfile } from '../target-profile'
 
@@ -22,6 +22,11 @@ export interface UniFieldFragment {
   template: string
   /** 产物 script 追加行（precision 取整 handler 等）；无则缺省 */
   script?: string[]
+  /**
+   * uni 侧适配不了的字段（Task 5.2 新增通道）：todo 占位只是产物内可见缺口，
+   * unsupported 让报告/manifest 与产物看到同一份真相（容器装配收集合并）。
+   */
+  unsupported?: Unsupported[]
 }
 
 /** 属性片段序列化（与 web emit.propText 同规则）：const → :name="constName"，字符串 → name="v"，其余 → :name="JSON" */
@@ -58,6 +63,14 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
   if (!mapping || !node.artifact.field) {
     return {
       template: `<!-- lc:todo node=${node.artifact.id} type=${node.artifact.type} field=${node.artifact.field} 组件类型无 uniapp 出码契约，整字段未出码 -->`,
+      unsupported: [
+        {
+          path: node.artifact.rulePath,
+          type: node.artifact.type,
+          key: 'field-component',
+          message: `字段 ${node.artifact.field || '(无 field)'} 的组件 ${node.artifact.type} 无 uniapp 映射，模板以 lc:todo 占位`,
+        },
+      ],
     }
   }
 

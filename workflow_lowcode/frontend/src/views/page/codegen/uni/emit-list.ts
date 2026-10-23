@@ -147,6 +147,9 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
   const type = node.artifact.type
   const unsupported: Unsupported[] = []
   const sink = { unsupported }
+  // 页面存在 formContainer → 内置 open case 出真实现（openContainer 由容器段装配提供，
+  // Task 5.2）；无容器保留 todo + unsupported，绝不静默
+  const hasContainer = ir.nodes.some((n) => n.artifact.type === 'formContainer')
 
   // —— 数据源寻址（对位 web propText 的 dsRef 分支：首源走 ds.refId，其余查登记表）——
   const dsProp = node.props.find((x) => x.name === 'ds-ref-id')
@@ -337,17 +340,24 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
         )
       } else if (sc.kind === 'delete') {
         caseLines.push(`    case 'delete':`, `      if (row?.id != null) void ${p}List.removeRow(String(row.id))`, '      return')
+      } else if (hasContainer) {
+        // 内置 open case 真实现（镜像 web emitSwitchCase 636）：容器函数由容器段装配提供
+        caseLines.push(
+          `    case '${sc.key}':`,
+          `      void openContainer(String(row?.id ?? ''), ${sc.readonly}, '${sc.mode}')`,
+          '      return',
+        )
       } else {
         caseLines.push(
           `    case '${sc.key}':`,
-          `      // lc:todo op=open-container(mode=${sc.mode}) ← 内置行语义：uni 容器适配 Task 5.2/5.3 落地`,
+          `      // lc:todo op=open-container(mode=${sc.mode}) ← 内置行语义：页面无 formContainer，uni 侧无对位载体`,
           '      return',
         )
         unsupported.push({
           path: node.artifact.rulePath,
           type,
           key: 'open-container',
-          message: `按钮 ${sc.key} 的内置行语义（mode=${sc.mode}）需容器：uni 容器适配 Task 5.2/5.3 落地`,
+          message: `按钮 ${sc.key} 的内置行语义（mode=${sc.mode}）需容器：页面无 formContainer，uni 侧无对位载体`,
         })
       }
     }

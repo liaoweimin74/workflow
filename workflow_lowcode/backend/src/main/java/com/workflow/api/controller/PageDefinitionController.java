@@ -49,7 +49,7 @@ public class PageDefinitionController {
     @PostMapping
     public R<PageDefinition> create(@RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.create(
-                request.getName(), request.getKey(), request.getType(), request.getFormKey(),
+                request.getAppId(), request.getName(), request.getKey(), request.getType(), request.getFormKey(),
                 request.getDataSourceId(), request.getSchema());
         return R.ok(pageDef);
     }
@@ -61,12 +61,13 @@ public class PageDefinitionController {
     public R<PageResponse<PageDefinitionDTO>> list(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String appId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String type) {
 
         PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size);
-        Page<PageDefinition> result = pageDefService.list(status, name, type, pageable);
+        Page<PageDefinition> result = pageDefService.list(appId, status, name, type, pageable);
 
         List<PageDefinitionDTO> dtos = result.getContent().stream()
                 .map(this::toDTO)
@@ -158,6 +159,7 @@ public class PageDefinitionController {
         dto.setType(pageDef.getType());
         dto.setFormKey(pageDef.getFormKey());
         dto.setDataSourceId(pageDef.getDataSourceId());
+        dto.setAppId(pageDef.getAppId());
         dto.setVersion(pageDef.getVersion());
         dto.setStatus(pageDef.getStatus());
         dto.setPublishedVersion(pageDef.getPublishedVersion());
@@ -181,6 +183,7 @@ public class PageDefinitionController {
         dto.setCreatedBy(pageDef.getCreatedBy());
         dto.setCreatedAt(pageDef.getCreatedAt());
         dto.setUpdatedAt(pageDef.getUpdatedAt());
+        dto.setAppId(pageDef.getAppId());
         dto.setSchema(pageDef.getSchema());
         return dto;
     }

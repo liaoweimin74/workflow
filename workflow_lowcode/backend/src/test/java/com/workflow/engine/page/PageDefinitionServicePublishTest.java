@@ -2,6 +2,7 @@ package com.workflow.engine.page;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.app.repository.AppDefinitionRepository;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
@@ -33,6 +34,9 @@ class PageDefinitionServicePublishTest {
     private PageDefinitionRepository pageDefRepository;
 
     @Mock
+    private AppDefinitionRepository appRepository;
+
+    @Mock
     private FormDefinitionRepository formDefRepository;
 
     @Mock
@@ -49,7 +53,7 @@ class PageDefinitionServicePublishTest {
     void setUp() {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
-        service = new PageDefinitionService(pageDefRepository, tenantProvider,
+        service = new PageDefinitionService(pageDefRepository, appRepository, tenantProvider,
                 validator, new ObjectMapper());
     }
 

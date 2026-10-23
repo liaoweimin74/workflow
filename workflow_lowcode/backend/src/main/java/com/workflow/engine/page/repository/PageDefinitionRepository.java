@@ -48,6 +48,10 @@ public interface PageDefinitionRepository extends JpaRepository<PageDefinition, 
 
     Page<PageDefinition> findByTenantIdAndAppIdOrderByUpdatedAtDesc(String tenantId, String appId, Pageable pageable);
 
+    /** app 维度 + 名称模糊搜索（设计器页面列表）。 */
+    Page<PageDefinition> findByTenantIdAndAppIdAndNameContainingOrderByUpdatedAtDesc(
+            String tenantId, String appId, String name, Pageable pageable);
+
     /**
      * 悲观锁查询（用于发布等需要串行化状态流转的场景）。
      */

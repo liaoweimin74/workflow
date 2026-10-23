@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.app.entity.AppDefinition;
+import com.workflow.engine.app.repository.AppDefinitionRepository;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -32,7 +34,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class PageDefinitionService {
 
+    /** 默认应用 code（创建未指定应用时的归属兜底；V68 迁移回填，运行时缺失则自动创建）。 */
+    private static final String DEFAULT_APP_CODE = "default";
+
     private final PageDefinitionRepository pageDefRepository;
+    private final AppDefinitionRepository appRepository;
     private final TenantProvider tenantProvider;
     private final PageValidator validator;
     private final ObjectMapper objectMapper;
@@ -44,10 +50,12 @@ public class PageDefinitionService {
     private final ConcurrentHashMap<String, Object> publishLocks = new ConcurrentHashMap<>();
 
     public PageDefinitionService(PageDefinitionRepository pageDefRepository,
+                                 AppDefinitionRepository appRepository,
                                  TenantProvider tenantProvider,
                                  PageValidator validator,
                                  ObjectMapper objectMapper) {
         this.pageDefRepository = pageDefRepository;
+        this.appRepository = appRepository;
         this.tenantProvider = tenantProvider;
         this.validator = validator;
         this.objectMapper = objectMapper;
@@ -56,26 +64,29 @@ public class PageDefinitionService {
     /**
      * 创建页面定义（默认 status=DRAFT, version=1）。
      *
+     * @param appId   归属应用 ID（可空：落租户「默认应用」，存量调用方式兼容；显式指定时校验应用存在）
      * @param name    页面名称
-     * @param key     页面标识（租户内唯一）
+     * @param key     页面标识（app 内唯一，唯一键 (tenant_id, app_id, key, version)）
      * @param type    页面类型（VIEW 已废弃 / PAGE，null 或空白默认 PAGE）
      * @param formKey 绑定的业务表单 key（VIEW 用，可空，遗留字段）
      * @param dataSourceId 绑定的数据源 ID（新协议，可空）
      * @param schema  页面 schema（模板实例化可直接带入；空则待设计器保存）
      * @return 创建的页面定义
-     * @throws BusinessException 如果 key 已存在
+     * @throws BusinessException 如果 app 内 key 已存在，或指定的应用不存在
      */
     @Transactional
-    public PageDefinition create(String name, String key, String type, String formKey, String dataSourceId, String schema) {
+    public PageDefinition create(String appId, String name, String key, String type, String formKey, String dataSourceId, String schema) {
         String tenantId = tenantProvider.getTenantId();
+        String resolvedAppId = resolveAppId(tenantId, appId);
 
-        if (pageDefRepository.existsByTenantIdAndKey(tenantId, key)) {
+        if (pageDefRepository.existsByTenantIdAndAppIdAndKey(tenantId, resolvedAppId, key)) {
             throw new BusinessException(400, "页面 key 已存在: " + key);
         }
 
         PageDefinition pageDef = new PageDefinition();
         pageDef.setId(UUID.randomUUID().toString().replace("-", ""));
         pageDef.setTenantId(tenantId);
+        pageDef.setAppId(resolvedAppId);
         pageDef.setName(name);
         pageDef.setKey(key);
         pageDef.setType(type == null || type.isBlank() ? "PAGE" : type);
@@ -86,6 +97,31 @@ public class PageDefinitionService {
         pageDef.setStatus("DRAFT");
 
         return pageDefRepository.save(pageDef);
+    }
+
+    /**
+     * 应用归属解析：显式指定时校验应用租户内存在（400）；未指定时落当前租户
+     * 「默认应用」（code=default），默认应用缺失则自动创建（存量调用方式兼容）。
+     */
+    private String resolveAppId(String tenantId, String appId) {
+        if (appId != null && !appId.isBlank()) {
+            appRepository.findByIdAndTenantId(appId, tenantId)
+                    .orElseThrow(() -> new BusinessException(400, "应用不存在: " + appId));
+            return appId;
+        }
+        return resolveDefaultApp(tenantId).getId();
+    }
+
+    private AppDefinition resolveDefaultApp(String tenantId) {
+        return appRepository.findByTenantIdAndCode(tenantId, DEFAULT_APP_CODE)
+                .orElseGet(() -> {
+                    AppDefinition app = new AppDefinition();
+                    app.setId(UUID.randomUUID().toString().replace("-", ""));
+                    app.setTenantId(tenantId);
+                    app.setCode(DEFAULT_APP_CODE);
+                    app.setName("默认应用");
+                    return appRepository.save(app);
+                });
     }
 
     /**
@@ -116,12 +152,19 @@ public class PageDefinitionService {
     /**
      * 分页查询页面定义列表。
      *
+     * @param appId  归属应用过滤（可选；指定时按 app 维度查询，可与 name 组合；
+     *               status/type 组合仅用于存量租户级列表）
      * @param status 状态过滤（可选）
      * @param name   名称模糊搜索（可选）
      * @param type   类型过滤（可选：VIEW/PAGE）
      */
-    public Page<PageDefinition> list(String status, String name, String type, Pageable pageable) {
+    public Page<PageDefinition> list(String appId, String status, String name, String type, Pageable pageable) {
         String tenantId = tenantProvider.getTenantId();
+        if (appId != null && !appId.isBlank()) {
+            return name != null && !name.isBlank()
+                    ? pageDefRepository.findByTenantIdAndAppIdAndNameContainingOrderByUpdatedAtDesc(tenantId, appId, name, pageable)
+                    : pageDefRepository.findByTenantIdAndAppIdOrderByUpdatedAtDesc(tenantId, appId, pageable);
+        }
         boolean hasType = type != null && !type.isBlank();
         boolean hasName = name != null && !name.isBlank();
         boolean hasStatus = status != null && !status.isBlank();

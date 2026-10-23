@@ -8,6 +8,7 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.app.repository.AppDefinitionRepository;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.FormDefinitionService;
@@ -99,7 +100,8 @@ class PageDefinitionPublishIntegrationTest {
         // 页面链路全真实：Validator/Service + 内存仓库（发布临界区同步模拟行锁）
         pageRepo = new InMemoryPageRepository();
         PageValidator validator = new PageValidator(formDefRepository, objectMapper, tenantProvider, dsService);
-        pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, objectMapper);
+        pageDefService = new PageDefinitionService(pageRepo, mock(AppDefinitionRepository.class),
+                tenantProvider, validator, objectMapper);
 
         // PAGE 引用的全局数据源（FORM 型，绑定 biz_leave）
         lenient().when(dsService.getEnabled()).thenReturn(List.of(enabledFormDs(DS_REF, "biz_leave")));
@@ -508,6 +510,16 @@ class PageDefinitionPublishIntegrationTest {
             return page(all().stream()
                     .filter(p -> p.getTenantId().equals(tenantId)
                             && p.getAppId() != null && p.getAppId().equals(appId))
+                    .toList(), pageable);
+        }
+
+        @Override
+        public Page<PageDefinition> findByTenantIdAndAppIdAndNameContainingOrderByUpdatedAtDesc(
+                String tenantId, String appId, String name, Pageable pageable) {
+            return page(all().stream()
+                    .filter(p -> p.getTenantId().equals(tenantId)
+                            && p.getAppId() != null && p.getAppId().equals(appId)
+                            && p.getName().contains(name))
                     .toList(), pageable);
         }
 

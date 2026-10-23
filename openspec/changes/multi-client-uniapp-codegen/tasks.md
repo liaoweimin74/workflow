@@ -8,7 +8,7 @@
 - [x] 1.1 Flyway 迁移：建 `wf_app` / `wf_app_client` / `wf_app_client_page` / `wf_app_release` 四表 + `wf_page_def` 加 `app_id` 与唯一键 `(tenant_id, app_id, key, version)` + 每租户「默认应用」回填；实体与 Repository 落地，唯一键约束测试先行（spec: app-client-model「页面应用归属与唯一性」）
 - [x] 1.2 App / Client CRUD API（TDD：controller/service 测试先行），含 `uk(tenant_id, code)`、`uk(tenant_id, app_id, client_type, name)` 校验与租户归属校验（spec: app-client-model「应用与客户端实例建模」）
 - [x] 1.3 页面分配 API：`wf_app_client_page` 启用清单 + sort 导航序 + 跨应用分配 400 + 设计类型与 Client 端类型兼容校验 400（web→WEB，uniapp→MP_WEIXIN/H5/APP）（spec: app-client-model「客户端页面启用清单」「应用管理接口」）
-- [ ] 1.4 页面服务层 key 唯一性与查询接口加 app 维度；未显式指定应用时落「默认应用」的兼容路径（spec: custom-page-designer MODIFIED「自定义页面创建与保存」）
+- [x] 1.4 页面服务层 key 唯一性与查询接口加 app 维度；未显式指定应用时落「默认应用」的兼容路径（spec: custom-page-designer MODIFIED「自定义页面创建与保存」）
 - [ ] 1.5 存量回归：既有页面路由、菜单挂载、渲染在默认应用归入后行为不变（回归测试）
 
 ## 2. 设计器端维度（M1）

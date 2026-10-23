@@ -5,12 +5,16 @@ package com.workflow.api.dto;
  */
 public class PageDefinitionSaveRequest {
 
+    private String appId;
     private String name;
     private String key;
     private String type;
     private String formKey;
     private String dataSourceId;
     private String schema;
+
+    public String getAppId() { return appId; }
+    public void setAppId(String appId) { this.appId = appId; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

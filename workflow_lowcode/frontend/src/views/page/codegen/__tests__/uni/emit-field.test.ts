@@ -1,6 +1,6 @@
 // ----- Task 4.1: uni 字段族出码 golden（input/textarea/inputNumber/datePicker）-----
 // golden 快照先行（plan Task 4.1）：期望模板即规格。口径：
-//  · 与 web fieldBlock 对位：锚点注释 + uni-forms-item(label) + 控件；首行无缩进，
+//  · 与 web fieldBlock 对位：锚点注释 + uni-forms-item(label+name+错误通道，4.4 统一开标签) + 控件；首行无缩进，
 //    页面装配时统一加缩进；
 //  · v-model 读 artifact.host.vmodel（parse 已按作用域算好前缀：页面级 form.<field>）；
 //  · 属性白名单来自 component-map（单一事实源）：未登记的 IR prop 不上模板
@@ -38,7 +38,7 @@ describe('emitFieldNode — 字段族 golden（Task 4.1）', () => {
     expect(emitFieldNode(node, profile).template).toBe(
       [
         `<!-- lc:node=n1 type=input field=name -->`,
-        `<uni-forms-item label="姓名">`,
+        `<uni-forms-item label="姓名" name="name" :error-message="errors.name">`,
         `  <uni-easyinput v-model="form.name" placeholder="请输入姓名" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -55,7 +55,7 @@ describe('emitFieldNode — 字段族 golden（Task 4.1）', () => {
     expect(emitFieldNode(node, profile).template).toBe(
       [
         `<!-- lc:node=n1 type=textarea field=remark -->`,
-        `<uni-forms-item label="备注">`,
+        `<uni-forms-item label="备注" name="remark" :error-message="errors.remark">`,
         `  <uni-easyinput v-model="form.remark" type="textarea" placeholder="请填写备注" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -73,7 +73,7 @@ describe('emitFieldNode — 字段族 golden（Task 4.1）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1 type=inputNumber field=qty -->`,
-        `<uni-forms-item label="数量">`,
+        `<uni-forms-item label="数量" name="qty" :error-message="errors.qty">`,
         `  <uni-number-box v-model="form.qty" :min="1" :max="99" :step="0.1" @change="onQtyChange" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -103,7 +103,7 @@ describe('emitFieldNode — 字段族 golden（Task 4.1）', () => {
     expect(emitFieldNode(node, profile).template).toBe(
       [
         `<!-- lc:node=n1 type=datePicker field=birthday -->`,
-        `<uni-forms-item label="生日">`,
+        `<uni-forms-item label="生日" name="birthday" :error-message="errors.birthday">`,
         `  <uni-datetime-picker v-model="form.birthday" type="date" placeholder="请选择日期" />`,
         `</uni-forms-item>`,
       ].join('\n'),

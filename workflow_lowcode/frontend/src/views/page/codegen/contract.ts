@@ -23,8 +23,13 @@ export type DropKind =
 export type PropEmit =
   /** 落组件 prop：同名，或改名（如嵌套的 viewActions.buttons 提到根 prop buttons） */
   | { emit: 'prop'; as?: string }
-  /** 落元素属性（容器/表单控件）；on 缺省为本类型 tag */
-  | { emit: 'attr'; as?: string; by?: AttrBy; on?: string }
+  /**
+   * 落元素属性（容器/表单控件）；on 缺省为本类型 tag。skipDefault：契约声明的
+   * "缺席形状"——值等于它时载体与登记都不留痕迹（回导按 STRUCT_DEFAULTS 补默认值），
+   * 比无差别落 attr 准：$required: false 若留 rename，web 产物核对不了（模板不渲染
+   * required=false），回导 rename 校验就会假红。
+   */
+  | { emit: 'attr'; as?: string; by?: AttrBy; on?: string; skipDefault?: unknown }
   /** 子规则（容器的 props.rule），交给容器递归出码 */
   | { emit: 'children' }
   /**
@@ -185,6 +190,14 @@ const FIELD_SELF: Record<string, PropEmit> = {
   type: { emit: 'anchor', key: 'type' },
   field: { emit: 'anchor', key: 'field' },
   title: { emit: 'attr', as: 'label', on: 'el-form-item' },
+  /**
+   * 必填结构键（Task 4.4）：与 title 对称落 el-form-item 载体，skipDefault: false——
+   * 缺省（非必填）不留任何痕迹。true 时载体真出 required：web 是 el-form-item 的
+   * :required="true"（星标视觉，校验仍在 form-create 运行时），uniapp 是 uni-forms-item
+   * 的 required 星标；设计器必填控件写 rule 顶层 $required（vendor utils 的 Required →
+   * formCreate$required），契约登记后不再是 unsupported 噪声，rename 供回导还原。
+   */
+  $required: { emit: 'attr', as: 'required', on: 'el-form-item', skipDefault: false },
   /** fcTable 子节点的格地址（"行:列"），模板上只有锚点能承载 */
   slot: { emit: 'anchor', key: 'slot' },
 }

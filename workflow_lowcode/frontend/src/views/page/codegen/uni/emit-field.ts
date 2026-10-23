@@ -92,12 +92,26 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
 
   const template = [
     `<!-- ${node.artifact.anchor} -->`,
-    `<uni-forms-item label="${label}">`,
+    `${formItemOpen(node, label)}`,
     `  <${mapping.tag} ${attrs.join(' ')} />`,
     `</uni-forms-item>`,
   ].join('\n')
 
   return scriptLines.length ? { template, script: scriptLines } : { template }
+}
+
+/**
+ * uni-forms-item 开标签（Task 4.4 必填/校验落法）：label + name（字段寻址，恒出）
+ * + required（契约 $required 落 el-form-item 载体的值 === true 才出——uni-forms-item
+ * 的星标视觉）+ :error-message（恒出——errors 由页面装配的 useUniForm.validate 提供
+ * （Task 3.2），校验消息按字段写 errors[field]，模板逐字段展示）。
+ * 所有字段载体（通用字段族/select 三形态/group/subForm/FormulaField）统一走这里，
+ * 开标签形状由本函数单点锁定。
+ */
+function formItemOpen(node: IrNode, label: string): string {
+  const field = node.artifact.field
+  const required = (node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.required === true
+  return `<uni-forms-item label="${label}" name="${field}"${required ? ' required' : ''} :error-message="errors.${field}">`
 }
 
 /**
@@ -138,7 +152,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `<uni-forms-item label="${label}">`,
+        `${formItemOpen(node, label)}`,
         `  <${mapping.tag} ${['v-model' + `="${vmodel}"`, ...local, ...attrs].join(' ').trimEnd()} />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -160,7 +174,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `<uni-forms-item label="${label}">`,
+        `${formItemOpen(node, label)}`,
         ...trigger,
         `      <checkbox-group class="lc-select-sheet__options" @change="${inst}Change">`,
         `        <label v-for="opt in ${options}" :key="opt.value" class="lc-select-sheet__option">`,
@@ -188,7 +202,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
   return {
     template: [
       `<!-- ${node.artifact.anchor} -->`,
-      `<uni-forms-item label="${label}">`,
+      `${formItemOpen(node, label)}`,
       ...trigger,
       `      <uni-search-bar v-model="${inst}Keyword" class="lc-select-sheet__search" placeholder="搜索" cancel-button="none" />`,
       `      <scroll-view scroll-y class="lc-select-sheet__options">`,
@@ -256,7 +270,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `<uni-forms-item label="${label}">`,
+        `${formItemOpen(node, label)}`,
         `  <view class="lc-nested lc-nested--sub">`,
         ...node.children.flatMap((c) => childFrag(c, '    ')),
         `  </view>`,
@@ -288,7 +302,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
 
   const template = [
     `<!-- ${node.artifact.anchor} -->`,
-    `<uni-forms-item label="${label}">`,
+    `${formItemOpen(node, label)}`,
     `  <view class="lc-nested lc-nested--group">`,
     `    <${rowTag} class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`,
     ...headLines,
@@ -360,7 +374,7 @@ function emitFormulaField(node: IrNode, label: string, vmodel: string): UniField
   return {
     template: [
       `<!-- ${node.artifact.anchor} -->`,
-      `<uni-forms-item label="${label}">`,
+      `${formItemOpen(node, label)}`,
       `  <LcFormula ${attrs.join(' ')} />`,
       `</uni-forms-item>`,
     ].join('\n'),

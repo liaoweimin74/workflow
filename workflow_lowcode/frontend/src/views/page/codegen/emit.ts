@@ -52,6 +52,16 @@ function labelCarrierOf(type: string): boolean {
   return !!entry && entry.emit === 'attr' && entry.on === 'el-form-item'
 }
 
+/**
+ * el-form-item 必填星标（Task 4.4）：$required 非缺省时载体真出 :required="true"。
+ * 这是回导 rename（$required → el-form-item@required）在 web 产物上的核对证据——
+ * 校验行为仍在 form-create 运行时（读 schema 的 $required），产物上的星标只是视觉。
+ * $required: false 已被契约 skipDefault 拦在 parse 侧，这里只处理 true。
+ */
+function elFormItemRequired(node: IrNode): string {
+  return node.attrs['el-form-item']?.required === true ? ' :required="true"' : ''
+}
+
 /** 单个属性片段：与重构前 propSnippet 的序列化规则逐字节一致 */
 function propText(p: IrProp, ir: IrPage): string {
   const v = p.value
@@ -168,7 +178,7 @@ export function emitTemplate(ir: IrPage): string {
       const label = p.attrs['el-form-item']?.label
       const wrap = labelCarrierOf(p.artifact.type)
       L.push(`      <!-- ${p.artifact.anchor} -->`)
-      if (wrap) L.push(`      <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
+      if (wrap) L.push(`      <el-form-item${label === undefined ? '' : ` label="${label}"`}${elFormItemRequired(p)}>`)
       L.push(
         `${wrap ? '        ' : '      '}<${p.tag}${head}${props.length ? ` ${props.join(' ')}` : ''} ${events.join(' ')} />`,
       )
@@ -647,7 +657,7 @@ function renderWidgetRow(widgets: IrNode[], indent: string, ir: IrPage): string[
     // 标题载体按类型表态：dash 族的节点 title 被渲染器置空（空壳 form-item 只为撑满档传高），
     // page-* 展示组件的 title 照旧由 form-create 当 label 渲染，两者都靠 self.title 登记决定
     const label = p.attrs['el-form-item']?.label
-    L.push(`${indent}    <el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
+    L.push(`${indent}    <el-form-item${label === undefined ? '' : ` label="${label}"`}${elFormItemRequired(p)}>`)
     L.push(`${indent}      <${p.tag}${props.length ? ` ${props.join(' ')}` : ''}${events.length ? ` ${events.join(' ')}` : ''} />`)
     L.push(`${indent}    </el-form-item>`)
     L.push(`${indent}  </el-col>`)
@@ -725,7 +735,7 @@ function renderWidgetCell(c: IrNode, indent: string, ir: IrPage): string[] {
   return [
     `${indent}<el-col class="fc-form-col" :span="${lit(span)}">`,
     `${indent}  <!-- ${c.artifact.anchor} -->`,
-    `${indent}  <el-form-item${label === undefined ? '' : ` label="${label}"`}>`,
+    `${indent}  <el-form-item${label === undefined ? '' : ` label="${label}"`}${elFormItemRequired(c)}>`,
     `${indent}    <${c.tag}${props.length ? ` ${props.join(' ')}` : ''}${events.length ? ` ${events.join(' ')}` : ''} />`,
     `${indent}  </el-form-item>`,
     `${indent}</el-col>`,
@@ -740,7 +750,7 @@ function renderListCell(c: IrNode, indent: string, ir: IrPage): string[] {
   const label = c.attrs['el-form-item']?.label
   const wrap = labelCarrierOf(c.artifact.type)
   const L = [`${indent}<!-- ${c.artifact.anchor} -->`]
-  if (wrap) L.push(`${indent}<el-form-item${label === undefined ? '' : ` label="${label}"`}>`)
+  if (wrap) L.push(`${indent}<el-form-item${label === undefined ? '' : ` label="${label}"`}${elFormItemRequired(c)}>`)
   L.push(
     `${indent}${wrap ? '  ' : ''}<${c.tag}${head}${props.length ? ` ${props.join(' ')}` : ''} ${events.join(' ')} />`,
   )
@@ -848,7 +858,7 @@ function fieldBlock(c: IrNode, valuePath: string, indent: string, itemClass?: st
   const inner = `${indent}  `
   const open = `${inner}<${c.tag} v-model="${valuePath}"${control.length ? ` ${control.join(' ')}` : ''}${wbEvents}`
   const cls = itemClass ? ` class="${itemClass}"` : ''
-  const L = [`${indent}<!-- ${c.artifact.anchor} -->`, `${indent}<el-form-item${cls} label="${label}">`]
+  const L = [`${indent}<!-- ${c.artifact.anchor} -->`, `${indent}<el-form-item${cls} label="${label}"${elFormItemRequired(c)}>`]
   // options 在 rule 顶层（form-create 形状）：选项由常量驱动 el-option，写成 :options= 是错位 emit
   if (c.config && Array.isArray(c.config.obj.options)) {
     L.push(`${open}>`)
@@ -918,7 +928,7 @@ function renderNested(p: IrNode, indent: string): string[] {
   const label = p.attrs['el-form-item']?.label
   const head = (tagLine: string) => [
     `${indent}<!-- ${p.artifact.anchor} -->`,
-    `${indent}<el-form-item${label === undefined ? '' : ` label="${label}"`}>`,
+    `${indent}<el-form-item${label === undefined ? '' : ` label="${label}"`}${elFormItemRequired(p)}>`,
     tagLine,
   ]
 

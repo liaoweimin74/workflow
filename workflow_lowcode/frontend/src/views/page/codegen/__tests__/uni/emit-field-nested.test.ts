@@ -78,7 +78,7 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1.f1 type=group field=contacts -->`,
-        `<uni-forms-item label="联系人">`,
+        `<uni-forms-item label="联系人" name="contacts" :error-message="errors.contacts">`,
         `  <view class="lc-nested lc-nested--group">`,
         `    <uni-card class="lc-nested-row" v-for="(contactsRow, i) in form.contacts || []" :key="i">`,
         `      <view class="lc-nested-row-head">`,
@@ -90,11 +90,11 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
         `        </view>`,
         `      </view>`,
         `      <!-- lc:node=n1.f1.f1 type=input field=name -->`,
-        `      <uni-forms-item label="姓名">`,
+        `      <uni-forms-item label="姓名" name="name" :error-message="errors.name">`,
         `        <uni-easyinput v-model="contactsRow.name" placeholder="请输入姓名" />`,
         `      </uni-forms-item>`,
         `      <!-- lc:node=n1.f1.f2 type=input field=phone -->`,
-        `      <uni-forms-item label="电话">`,
+        `      <uni-forms-item label="电话" name="phone" :error-message="errors.phone">`,
         `        <uni-easyinput v-model="contactsRow.phone" />`,
         `      </uni-forms-item>`,
         `    </uni-card>`,
@@ -133,7 +133,7 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1.f1 type=group field=addrs -->`,
-        `<uni-forms-item label="地址">`,
+        `<uni-forms-item label="地址" name="addrs" :error-message="errors.addrs">`,
         `  <view class="lc-nested lc-nested--group">`,
         `    <view class="lc-nested-row" v-for="(addrsRow, i) in form.addrs || []" :key="i">`,
         `      <view class="lc-nested-row-head">`,
@@ -142,7 +142,7 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
         `        </view>`,
         `      </view>`,
         `      <!-- lc:node=n1.f1.f1 type=input field=city -->`,
-        `      <uni-forms-item label="城市">`,
+        `      <uni-forms-item label="城市" name="city" :error-message="errors.city">`,
         `        <uni-easyinput v-model="addrsRow.city" />`,
         `      </uni-forms-item>`,
         `    </view>`,
@@ -172,11 +172,11 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1.f1 type=group field=logs -->`,
-        `<uni-forms-item label="日志">`,
+        `<uni-forms-item label="日志" name="logs" :error-message="errors.logs">`,
         `  <view class="lc-nested lc-nested--group">`,
         `    <view class="lc-nested-row" v-for="(logsRow, i) in form.logs || []" :key="i">`,
         `      <!-- lc:node=n1.f1.f1 type=input field=note -->`,
-        `      <uni-forms-item label="备注">`,
+        `      <uni-forms-item label="备注" name="note" :error-message="errors.note">`,
         `        <uni-easyinput v-model="logsRow.note" />`,
         `      </uni-forms-item>`,
         `    </view>`,
@@ -208,14 +208,14 @@ describe('emitFieldNode subForm — 单对象块容器（Task 4.3）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1.f1 type=subForm field=payee -->`,
-        `<uni-forms-item label="收款信息">`,
+        `<uni-forms-item label="收款信息" name="payee" :error-message="errors.payee">`,
         `  <view class="lc-nested lc-nested--sub">`,
         `    <!-- lc:node=n1.f1.f1 type=input field=account -->`,
-        `    <uni-forms-item label="账号">`,
+        `    <uni-forms-item label="账号" name="account" :error-message="errors.account">`,
         `      <uni-easyinput v-model="form.payee.account" />`,
         `    </uni-forms-item>`,
         `    <!-- lc:node=n1.f1.f2 type=inputNumber field=amount -->`,
-        `    <uni-forms-item label="金额">`,
+        `    <uni-forms-item label="金额" name="amount" :error-message="errors.amount">`,
         `      <uni-number-box v-model="form.payee.amount" />`,
         `    </uni-forms-item>`,
         `  </view>`,
@@ -238,7 +238,7 @@ describe('emitFieldNode FormulaField — LcFormula 接线（Task 4.3）', () => 
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1 type=FormulaField field=total -->`,
-        `<uni-forms-item label="合计">`,
+        `<uni-forms-item label="合计" name="total" :error-message="errors.total">`,
         `  <LcFormula v-model="form.total" :form="form" expression="${'${price}'} * ${'${count}'}" :precision="3" prefix="￥" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -265,7 +265,7 @@ describe('emitFieldNode FormulaField — LcFormula 接线（Task 4.3）', () => 
     expect(out.template).toContain(
       [
         `    <!-- lc:node=n1.f1.f2 type=FormulaField field=sum -->`,
-        `    <uni-forms-item label="小计">`,
+        `    <uni-forms-item label="小计" name="sum" :error-message="errors.sum">`,
         `      <LcFormula v-model="form.payee.sum" :form="form.payee" expression="${'${amount}'} * 2" />`,
         `    </uni-forms-item>`,
       ].join('\n'),

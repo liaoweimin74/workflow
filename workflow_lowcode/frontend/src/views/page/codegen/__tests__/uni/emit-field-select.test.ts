@@ -51,7 +51,7 @@ describe('emitFieldNode select — 单选 uni-data-select（Task 4.2）', () => 
     expect(emitFieldNode(node, profile).template).toBe(
       [
         `<!-- lc:node=n1 type=select field=city -->`,
-        `<uni-forms-item label="城市">`,
+        `<uni-forms-item label="城市" name="city" :error-message="errors.city">`,
         `  <uni-data-select v-model="form.city" :localdata="cityConfig.options" format="{label}" placeholder="请选择城市" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -82,7 +82,7 @@ describe('emitFieldNode select — 单选 uni-data-select（Task 4.2）', () => 
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1 type=select field=region -->`,
-        `<uni-forms-item label="区域">`,
+        `<uni-forms-item label="区域" name="region" :error-message="errors.region">`,
         `  <uni-data-select v-model="form.region" />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -119,7 +119,7 @@ describe('emitFieldNode select — multiple 自绘弹层（Task 4.2）', () => {
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1 type=select field=tags -->`,
-        `<uni-forms-item label="标签">`,
+        `<uni-forms-item label="标签" name="tags" :error-message="errors.tags">`,
         `  <view class="lc-select" @click="lcSelTagsPopup?.open()">`,
         `    <text :class="{ 'lc-select__placeholder': !lcSelTagsLabel }">{{ lcSelTagsLabel || '请选择' }}</text>`,
         `  </view>`,
@@ -178,7 +178,7 @@ describe('emitFieldNode select — filterable 远程搜索自绘弹层（Task 4.
     expect(out.template).toBe(
       [
         `<!-- lc:node=n1 type=select field=city -->`,
-        `<uni-forms-item label="城市">`,
+        `<uni-forms-item label="城市" name="city" :error-message="errors.city">`,
         `  <view class="lc-select" @click="lcSelCityPopup?.open()">`,
         `    <text :class="{ 'lc-select__placeholder': !lcSelCityLabel }">{{ lcSelCityLabel || '请选择' }}</text>`,
         `  </view>`,

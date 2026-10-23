@@ -932,6 +932,9 @@ function applyLeaf(plan: IrNode, leaf: Leaf, rulePath: string, ctx: Ctx, nestedD
   const entry = leaf.entry
   const rel = leaf.path
   const node = plan.artifact
+  // 契约声明的缺省值 = 语义缺席：载体与登记都不留痕迹，回导按 STRUCT_DEFAULTS 补默认值
+  // （$required: false 若留 rename，web 产物里没有可核对的 required，回导校验会假红）
+  if (entry?.emit === 'attr' && entry.skipDefault !== undefined && JSON.stringify(entry.skipDefault) === JSON.stringify(leaf.value)) return
   if (!entry) {
     // 结构键等于默认值时由全局默认值登记表解释（manifest.contract.defaults），非默认值必须显式登记
     if (rel in STRUCT_DEFAULTS && JSON.stringify(STRUCT_DEFAULTS[rel]) === JSON.stringify(leaf.value)) return

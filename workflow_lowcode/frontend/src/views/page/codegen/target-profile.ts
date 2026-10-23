@@ -66,8 +66,8 @@ export interface TargetProfile {
   platform: 'web' | 'uniapp'
   /** 组件映射表：uniapp 直接引用 component-map 单一事实源；web 走宿主组件包无映射表 */
   componentMap: Record<string, UniAppComponentMapping> | null
-  /** 样式规则：px→rpx 换算基准（Task 3.4 消费；uniapp 画布 375 设计稿宽） */
-  styleRules: { designWidth: number }
+  /** 样式规则：web 直接出 px；uniapp 带 toRpx 做 px→rpx 换算（Task 3.4，375 设计稿基准） */
+  styleRules: { designWidth: number; toRpx?: (px: number | string) => string }
   /** API 适配：请求器与鉴权/租户头（Task 3.2 runtime-uni 消费） */
   apiAdapter: { request: string; authHeader: string; tenantHeader: string }
   /** 路由适配（Task 3.2 消费） */
@@ -87,6 +87,9 @@ function deriveCapabilities(platform: 'web' | 'uniapp'): Set<string> {
   )
 }
 
+/** uniapp 画布设计稿宽：375 基准（750rpx 满幅，px ×2 出 rpx） */
+const UNIAPP_DESIGN_WIDTH = 375
+
 export const PROFILES: Record<'web' | 'uniapp', TargetProfile> = {
   web: {
     platform: 'web',
@@ -99,7 +102,15 @@ export const PROFILES: Record<'web' | 'uniapp', TargetProfile> = {
   uniapp: {
     platform: 'uniapp',
     componentMap: UNIAPP_COMPONENT_MAP,
-    styleRules: { designWidth: 375 },
+    styleRules: {
+      designWidth: UNIAPP_DESIGN_WIDTH,
+      // px→rpx（Task 3.4）：750rpx 满幅 ÷ 375 设计稿宽 → 数值 ×2；0 出无单位零；
+      // 字符串视为设计者显式给定的带单位值，原样透传不改写
+      toRpx: (px) => {
+        if (typeof px === 'number') return px === 0 ? '0' : `${(px * 750) / UNIAPP_DESIGN_WIDTH}rpx`
+        return px
+      },
+    },
     apiAdapter: { request: 'uni.request', authHeader: 'Authorization', tenantHeader: 'X-Tenant-Id' },
     routerAdapter: { navigate: 'uni.navigateTo' },
     capabilities: deriveCapabilities('uniapp'),

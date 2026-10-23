@@ -28,7 +28,7 @@
 ## 4. 字段族出码（M2）
 
 - [x] 4.1 uni-easyinput（input/textarea）、uni-number-box（precision 封装）、uni-datetime-picker 映射 + emit 登记，golden 快照先行（spec: uniapp-codegen-target「组件映射保真口径」）
-- [ ] 4.2 select：单选 picker / uni-data-select；multiple 与远程搜索自绘弹层（含 options config 常量消费）
+- [x] 4.2 select：单选 picker / uni-data-select；multiple 与远程搜索自绘弹层（含 options config 常量消费）
 - [ ] 4.3 group / subForm 块容器（v-model 前缀口径）与 FormulaField（formulaEval 纯函数移植 + form 数据后端）
 - [ ] 4.4 字段校验：必填/规则在产物模板的落法与回填写入（对位 Web 产物 FIELD_SELF 口径）
 

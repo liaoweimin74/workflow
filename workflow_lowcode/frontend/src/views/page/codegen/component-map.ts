@@ -33,7 +33,12 @@ export const UNIAPP_COMPONENT_MAP: Record<string, UniAppComponentMapping> = {
   inputNumber: { tag: 'uni-number-box', render: 'LcInputNumber', props: { min: true, max: true } },
   radio: { tag: 'uni-radio-group', render: 'LcRadio' },
   checkbox: { tag: 'uni-checkbox-group', render: 'LcCheckbox' },
-  select: { tag: 'uni-data-select', render: 'LcSelect' },
+  select: {
+    tag: 'uni-data-select',
+    render: 'LcSelect',
+    // multiple/filterable 是形态分支条件（Task 4.2），不透传；clearable→clear 改名
+    props: { placeholder: true, clearable: 'clear', disabled: true },
+  },
   switch: { tag: 'uni-switch', render: 'LcSwitch' },
   rate: { tag: 'uni-rate', render: 'LcRate' },
   slider: { tag: 'uni-slider', render: 'LcSlider' },

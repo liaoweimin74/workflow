@@ -9895,3 +9895,18 @@ Work Log:
 Stage Summary:
 - 事件 #133 完整冷启动单轮恢复成功，零 mvn 第 117 次
 - mariadb 客户端需 sysroot LD_LIBRARY_PATH（libncurses.so.6）
+
+---
+Task ID: r235
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #134）：四链路假绿（8080 被 bun src/index.ts + node index.ts 占据，auth=no such table: SYS_USER）、Java 缺位、workflow 库空壳（dump-db 报无效）
+- pkill 五连（含 bun/node 假绿）→ jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型超时被杀）
+- 复验：Java 拉起 8080 auth 真绿、mariadbd/vite 在线、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.35G oom 0
+
+Stage Summary:
+- 事件 #134 标准重供给单轮恢复成功，零 mvn 第 118 次
+- 此前 r231-234 沙箱四连败（历史最长），期间环境重供给由本轮闭环

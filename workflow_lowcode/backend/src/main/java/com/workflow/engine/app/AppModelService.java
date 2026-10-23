@@ -1,5 +1,7 @@
 package com.workflow.engine.app;
 
+import com.workflow.api.dto.AppClientPageItem;
+import com.workflow.api.dto.AppClientPageResponse;
 import com.workflow.api.dto.AppClientResponse;
 import com.workflow.api.dto.AppClientSaveRequest;
 import com.workflow.api.dto.AppResponse;
@@ -7,16 +9,22 @@ import com.workflow.api.dto.AppSaveRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.app.entity.AppClient;
+import com.workflow.engine.app.entity.AppClientPage;
 import com.workflow.engine.app.entity.AppDefinition;
+import com.workflow.engine.app.repository.AppClientPageRepository;
 import com.workflow.engine.app.repository.AppClientRepository;
 import com.workflow.engine.app.repository.AppDefinitionRepository;
+import com.workflow.engine.page.entity.PageDefinition;
+import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -31,7 +39,8 @@ import java.util.UUID;
  * - Client 唯一键 uk_client(tenant_id, app_id, client_type, name)，
  *   同一 App 同一端类型允许多个 Client（不同名称）。
  *
- * 页面分配（启用清单）方法在 Task 1.3 扩展。
+ * 页面启用清单（Task 1.3）：PUT 全量替换（事务内先删后插），分配时按
+ * 端类型校验页面设计类型兼容（web ↔ WEB，uniapp ↔ MP_WEIXIN/H5/APP）。
  */
 @Service
 public class AppModelService {
@@ -43,15 +52,25 @@ public class AppModelService {
     private static final String RENDER_CODEGEN = "CODEGEN";
     private static final String CLIENT_TYPE_WEB = "WEB";
 
+    /** 页面设计类型（spec: uniapp-codegen）：web = Web 设计器，uniapp = UniApp 设计器。 */
+    private static final String DESIGN_TYPE_WEB = "web";
+    private static final String DESIGN_TYPE_UNIAPP = "uniapp";
+
     private final AppDefinitionRepository appRepository;
     private final AppClientRepository clientRepository;
+    private final PageDefinitionRepository pageDefRepository;
+    private final AppClientPageRepository clientPageRepository;
     private final TenantProvider tenantProvider;
 
     public AppModelService(AppDefinitionRepository appRepository,
                            AppClientRepository clientRepository,
+                           PageDefinitionRepository pageDefRepository,
+                           AppClientPageRepository clientPageRepository,
                            TenantProvider tenantProvider) {
         this.appRepository = appRepository;
         this.clientRepository = clientRepository;
+        this.pageDefRepository = pageDefRepository;
+        this.clientPageRepository = clientPageRepository;
         this.tenantProvider = tenantProvider;
     }
 
@@ -174,6 +193,53 @@ public class AppModelService {
         clientRepository.delete(client);
     }
 
+    // ---------------- 页面启用清单（Task 1.3） ----------------
+
+    /**
+     * 全量替换客户端页面启用清单。校验链：客户端 404 → 页面存在/归属本应用
+     * 400 → 设计类型与端类型兼容 400 → 事务内先删后插（条目顺序即清单顺序）。
+     */
+    @Transactional
+    public List<AppClientPageResponse> assignPages(String appId, String clientId, List<AppClientPageItem> items) {
+        AppClient client = requireClient(appId, clientId);
+        String tenantId = client.getTenantId();
+        List<AppClientPageItem> entries = items == null ? List.of() : items;
+        List<AppClientPage> rows = new ArrayList<>(entries.size());
+        for (AppClientPageItem item : entries) {
+            if (item.getPageId() == null || item.getPageId().isBlank()) {
+                throw new BusinessException(400, "页面 ID 不能为空");
+            }
+            PageDefinition page = pageDefRepository.findByIdAndTenantId(item.getPageId(), tenantId)
+                    .orElseThrow(() -> new BusinessException(400, "页面不存在: " + item.getPageId()));
+            if (!appId.equals(page.getAppId())) {
+                throw new BusinessException(400, "页面不属于该应用: " + item.getPageId());
+            }
+            checkDesignTypeCompatible(page, client);
+            AppClientPage row = new AppClientPage();
+            row.setId(newId());
+            row.setTenantId(tenantId);
+            row.setClientId(clientId);
+            row.setPageId(page.getId());
+            row.setSort(item.getSort() == null ? 0 : item.getSort());
+            row.setNavConfigJson(item.getNavConfig());
+            rows.add(row);
+        }
+        clientPageRepository.deleteByTenantIdAndClientId(tenantId, clientId);
+        rows.forEach(clientPageRepository::save);
+        return rows.stream().map(row -> toResponse(row, pageName(tenantId, row.getPageId()))).toList();
+    }
+
+    /**
+     * 查询客户端页面启用清单（按 sort 升序，由仓储派生方法保证），附带页面名称。
+     */
+    public List<AppClientPageResponse> getAssignedPages(String appId, String clientId) {
+        AppClient client = requireClient(appId, clientId);
+        return clientPageRepository.findByTenantIdAndClientIdOrderBySortAsc(client.getTenantId(), clientId)
+                .stream()
+                .map(row -> toResponse(row, pageName(client.getTenantId(), row.getPageId())))
+                .toList();
+    }
+
     // ---------------- internal ----------------
 
     private AppDefinition requireApp(String appId) {
@@ -193,6 +259,46 @@ public class AppModelService {
             throw new BusinessException(404, "客户端不存在");
         }
         return client;
+    }
+
+    /**
+     * 设计类型与端类型兼容校验（二元规则，spec: uniapp-codegen D2）：
+     * web 页面只能分配给 WEB Client；uniapp 页面分配给小程序/H5/App Client
+     * （同一 uniapp 页面池跨端复用）。存量页面 design_type 为空按 web 处理；
+     * 未知设计类型直接拒绝。
+     */
+    private void checkDesignTypeCompatible(PageDefinition page, AppClient client) {
+        String designType = page.getDesignType() == null || page.getDesignType().isBlank()
+                ? DESIGN_TYPE_WEB : page.getDesignType();
+        boolean webClient = CLIENT_TYPE_WEB.equals(client.getClientType());
+        boolean compatible;
+        if (DESIGN_TYPE_WEB.equals(designType)) {
+            compatible = webClient;
+        } else if (DESIGN_TYPE_UNIAPP.equals(designType)) {
+            compatible = !webClient;
+        } else {
+            throw new BusinessException(400, "不支持的设计类型: " + designType);
+        }
+        if (!compatible) {
+            throw new BusinessException(400, "页面设计类型(" + designType + ")与客户端端类型("
+                    + client.getClientType() + ")不兼容: " + page.getId());
+        }
+    }
+
+    private String pageName(String tenantId, String pageId) {
+        return pageDefRepository.findByIdAndTenantId(pageId, tenantId)
+                .map(PageDefinition::getName)
+                .orElse(null);
+    }
+
+    private AppClientPageResponse toResponse(AppClientPage row, String pageName) {
+        AppClientPageResponse vo = new AppClientPageResponse();
+        vo.setId(row.getId());
+        vo.setPageId(row.getPageId());
+        vo.setPageName(pageName);
+        vo.setSort(row.getSort());
+        vo.setNavConfig(row.getNavConfigJson());
+        return vo;
     }
 
     private String newId() {

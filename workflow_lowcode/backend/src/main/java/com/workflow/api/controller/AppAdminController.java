@@ -1,5 +1,7 @@
 package com.workflow.api.controller;
 
+import com.workflow.api.dto.AppClientPageItem;
+import com.workflow.api.dto.AppClientPageResponse;
 import com.workflow.api.dto.AppClientResponse;
 import com.workflow.api.dto.AppClientSaveRequest;
 import com.workflow.api.dto.AppResponse;
@@ -20,8 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 多端应用管理 Controller（Task 1.2）。
- * 应用（App）与客户端实例（Client）的 CRUD；页面分配接口见 Task 1.3。
+ * 多端应用管理 Controller（Task 1.2 / 1.3）。
+ * 应用（App）与客户端实例（Client）的 CRUD；页面启用清单
+ * PUT/GET /{appId}/clients/{clientId}/pages。
  * 响应封装统一为 { code, data, message }（R<T>）。
  */
 @RestController
@@ -83,5 +86,24 @@ public class AppAdminController {
     public R<Void> deleteClient(@PathVariable String appId, @PathVariable String clientId) {
         appModelService.deleteClient(appId, clientId);
         return R.ok();
+    }
+
+    /**
+     * 全量替换客户端页面启用清单（Task 1.3）。
+     */
+    @PutMapping("/{appId}/clients/{clientId}/pages")
+    public R<List<AppClientPageResponse>> assignPages(@PathVariable String appId,
+                                                      @PathVariable String clientId,
+                                                      @RequestBody List<AppClientPageItem> items) {
+        return R.ok(appModelService.assignPages(appId, clientId, items));
+    }
+
+    /**
+     * 查询客户端页面启用清单（按 sort 升序，附带页面名称）。
+     */
+    @GetMapping("/{appId}/clients/{clientId}/pages")
+    public R<List<AppClientPageResponse>> getAssignedPages(@PathVariable String appId,
+                                                           @PathVariable String clientId) {
+        return R.ok(appModelService.getAssignedPages(appId, clientId));
     }
 }

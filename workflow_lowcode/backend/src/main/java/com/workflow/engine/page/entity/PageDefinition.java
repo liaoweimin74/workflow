@@ -31,6 +31,14 @@ public class PageDefinition {
     @Column(name = "app_id", length = 80)
     private String appId;
 
+    /**
+     * 页面设计类型：web（Web 设计器，WEB Client 运行时渲染）/
+     * uniapp（UniApp 设计器，小程序/H5/App 出码交付）。
+     * 创建时确定、不可变更；存量数据由 V69 迁移回填 'web'。
+     */
+    @Column(name = "design_type", length = 16, nullable = false)
+    private String designType = "web";
+
     @Column(name = "name", length = 255, nullable = false)
     private String name;
 
@@ -99,6 +107,9 @@ public class PageDefinition {
 
     public String getAppId() { return appId; }
     public void setAppId(String appId) { this.appId = appId; }
+
+    public String getDesignType() { return designType; }
+    public void setDesignType(String designType) { this.designType = designType; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

@@ -73,7 +73,7 @@ login.yaml
 # 并行 spike 的 worktree 检出目录（只留本地，绝不进版本库）
 .worktrees/
 
-# �?Manual gitignore entries go ABOVE this line (outside auto-generated block) �?
+# �?Manual gitignore entries go ABOVE this line (outside auto-generated block) �?
 # <!-- openspec-superpowers-opencode_gitignore -->
 
 # Worktree isolation
@@ -88,24 +88,24 @@ login.yaml
 
 .codegraph/
 
-# OpenCode tool-generated artifacts �?track only opencode.json
+# OpenCode tool-generated artifacts �?track only opencode.json
 
 .opencode/*
 !.opencode/opencode.json
 
-# Skills lock �?global Superpowers version pinning, not project code
+# Skills lock �?global Superpowers version pinning, not project code
 
 skills.lock.json
 
-# OpenSpec Schema �?do not track
+# OpenSpec Schema �?do not track
 
 openspec/schemas/
 
-# OpenSpec config �?do not track
+# OpenSpec config �?do not track
 
 openspec/config.yaml
 
-# OpenSpec change registry �?local dev state only
+# OpenSpec change registry �?local dev state only
 
 openspec/oso-change-registry.json
 

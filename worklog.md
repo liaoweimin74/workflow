@@ -9956,3 +9956,18 @@ Work Log:
 Stage Summary:
 - 事件 #137 标准重供给单轮恢复成功，零 mvn 第 121 次
 - 连续重供给节奏持续（r237/r238/r246 同型）
+
+---
+Task ID: r248
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #138）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.34G oom 0
+- r247 沙箱故障 1 轮
+
+Stage Summary:
+- 事件 #138 标准重供给单轮恢复成功，零 mvn 第 122 次

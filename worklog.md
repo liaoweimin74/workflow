@@ -9910,3 +9910,18 @@ Work Log:
 Stage Summary:
 - 事件 #134 标准重供给单轮恢复成功，零 mvn 第 118 次
 - 此前 r231-234 沙箱四连败（历史最长），期间环境重供给由本轮闭环
+
+---
+Task ID: r237
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #135）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.17G oom 0
+
+Stage Summary:
+- 事件 #135 标准重供给单轮恢复成功，零 mvn 第 119 次
+- r236 沙箱故障 1 轮

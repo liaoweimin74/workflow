@@ -1,0 +1,17 @@
+{
+  "name": "lc-app-builder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "低代码平台 app-builder：uni 产物落盘 + uni build + 归档（Task 9.2），miniprogram-ci 体验版上传（Task 9.3）",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { codegenProbeWriter } from './vite.codegen-probe-writer'
+import { uniPreviewPlugin } from './vite.uni-preview'
 
 // 【远程物料 import map（change: remote-materials，design D2）】
 // 物料 bundle 里 import 的是裸模块名（vue / element-plus / @platform/sdk），
@@ -95,7 +96,9 @@ export default defineConfig({
     tailwindcss(),
     materialImportMap(),
     // 出码按钮的落盘通道（dev-only：configureServer 钩子只在 `vite dev` 执行，build 不带）
-    codegenProbeWriter(__dirname)
+    codegenProbeWriter(__dirname),
+    // uni 产物预览通道（Task 8.2，dev-only 同上）：落盘 + 构建 + 5301 静态服务
+    uniPreviewPlugin(__dirname)
   ],
   build: {
     rollupOptions: {

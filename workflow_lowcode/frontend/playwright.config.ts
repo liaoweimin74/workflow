@@ -56,6 +56,14 @@ export default defineConfig({
       dependencies: ['codegen-lab'],
       use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
     },
+    {
+      // 产物级预览（Task 8.1/8.2）：uni 产物落盘 + uni build h5 + 5301 iframe 重挂。
+      // 构建是分钟级贵操作，默认不进常规 project；真跑归 10.1 uni-dual-render（plan Task 10.1）
+      name: 'uni-preview',
+      testMatch: /uni-preview\.spec\.ts/,
+      dependencies: ['designer-codegen'],
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
+    },
   ],
   webServer: {
     command: `npx vite --port ${PORT} --strictPort`,

@@ -10072,3 +10072,21 @@ Work Log:
 
 Stage Summary:
 - r262 恢复后服务连续稳定，无需干预恢复链
+
+---
+Task ID: r268
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 03:05（Job 446961）——事件 #145 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r265-267 连续 3 轮故障后恢复，累计 #69-#71）
+- 探活四链路 200×4 但 auth 返回 no such table: SYS_USER=假绿；bun(1145)/node(1305) 占 8080，Java 进程消失，dump 无效 → 判定事件 #145 标准重供给
+- pkill 五连清场 + git checkout jar-parts + 重拼 jar（md5 e369839b / 121300861B 校验通过）
+- 前台 recover-dplus.sh 幸存型超时（第 13 次，工具 180s 杀掉但 Java 已拉起）
+- 复验：ss 8080=java(1415)/3000=vite(1244)/3306=mariadbd(1216)，auth 真绿，40s 四链路 200×4，workflow 104 表
+- 收口 dump 191034（272K）强制入库推送（先前 add 路径展开失败已修正，.gitignore:64 仍待裁决）
+
+Stage Summary:
+- 事件 #145 单轮闭环，累计恢复 145 次，零 mvn 达 129 次
+- 沙箱累计故障 71 次（连续 3 轮后自愈）
+- HEAD 9da9901e 已推远端

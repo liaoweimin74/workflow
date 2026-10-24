@@ -9985,3 +9985,18 @@ Work Log:
 
 Stage Summary:
 - 事件 #139 标准重供给单轮恢复成功，零 mvn 第 123 次
+
+---
+Task ID: r254
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 沙箱 4 小时空窗（r250-253 四连败）后自愈
+- 标准重供给（事件 #140）：8080 被 bun/node 假绿占据、workflow 库空壳（dump-db 报无效）
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.32G oom 0
+
+Stage Summary:
+- 事件 #140 标准重供给单轮恢复成功，零 mvn 第 124 次

@@ -88,10 +88,14 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(sfc).toContain(`import { useUniForm } from '@lc/runtime-uni/form'`)
     expect(sfc).toContain(`import { uniDataApi } from '@lc/runtime-uni/data'`)
     expect(sfc).not.toMatch(/<!-- lc:todo node=n\d+ type=formContainer/)
+    // 6.4 起 tableForm 出卡片式子列表编辑器（进 SFC + 行函数进 script，不再 todo/field-component 登记）
+    expect(sfc).toContain('<!-- lc:node=n2.f10 type=tableForm field=delivery_plan -->')
+    expect(sfc).toContain('function addDeliveryPlanRow()')
     // 内置 edit case 走容器函数（容器存在），open-container 不再登记 unsupported；
-    // 无映射容器子字段（LookupPicker/dataPicker/tableForm）走 field-component 登记
+    // 无映射容器子字段（LookupPicker/dataPicker）走 field-component 登记
     expect(manifest.unsupported.some((u) => u.key === 'open-container' && u.type === 'page-list-cards')).toBe(false)
     expect(manifest.unsupported.some((u) => u.key === 'field-component' && u.type === 'LookupPicker')).toBe(true)
+    expect(manifest.unsupported.some((u) => u.key === 'field-component' && u.type === 'tableForm')).toBe(false)
     expect(manifest.unsupported.some((u) => u.key === 'viewDetail')).toBe(true)
   })
 

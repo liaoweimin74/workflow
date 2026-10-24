@@ -10,7 +10,9 @@
  *    丢弃登记），staticProps 恒以字面量出（textarea 的 type=textarea）；
  *  · inputNumber 的 precision 在 uni-number-box 无原生对位 → 封装：:step 派生
  *    （10^-precision）+ @change 取整 handler（script 追加行，供页面 SFC 合并）；
- *  · 无映射的字段类型出 lc:todo 挂点注释（与 web 同纪律：绝不出空标签占位）。
+ *  · 无映射的字段类型出 lc:todo 挂点注释（与 web 同纪律：绝不出空标签占位）；
+ *  · tableForm 嵌套容器 6.4 起出卡片式子列表编辑器（emitNestedField 的
+ *    props.columns[].rule 分支，Task 6.4）。
  * 首行无缩进、嵌套行相对缩进，页面装配（Task 5.x）统一加页内缩进。
  */
 
@@ -55,10 +57,12 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
   // FormulaField（Task 4.3）：对位组件 LcFormula 在 @lc/runtime-uni，不进 component-map（见 emitFormulaField 注）
   if (node.artifact.type === 'FormulaField' && node.artifact.field) return emitFormulaField(node, label, vmodel)
 
-  // 嵌套块容器（Task 4.3）：group/subForm（carrier props.rule）递归出码；tableForm 首版不出码落 todo；
-  // 页面级嵌套容器已在 parse 侧整节点降级（无 form 后端），这里不再出块
-  if (node.nested && node.nested.carrier === 'props.rule' && !node.degraded) return emitNestedField(node, profile, label)
-
+  // 嵌套块容器（Task 4.3）：group/subForm（carrier props.rule）递归出码；tableForm
+  // （carrier props.columns[].rule）6.4 起出卡片式子列表编辑器；页面级嵌套容器已在
+  // parse 侧整节点降级（无 form 后端），这里不再出块
+  if (node.nested && !node.degraded && (node.nested.carrier === 'props.rule' || node.nested.carrier === 'props.columns[].rule')) {
+    return emitNestedField(node, profile, label)
+  }
   const mapping = profile.componentMap?.[node.artifact.type]
   if (!mapping || !node.artifact.field) {
     return {
@@ -261,7 +265,13 @@ function optionsRefOf(node: IrNode): string | null {
  *  · 行函数 script 由片段携带（web 集中在页面 script 段），仅出模板真绑到的
  *    handler（没配增删/排序不留空函数——TS6133 孤儿），新行形状 = rowKeys，
  *    move 的边界守卫与 web 同一套；
- *  · tableForm（carrier props.columns[].rule）首版不出码：到不了这里，落 todo。
+ *  · tableForm（carrier props.columns[].rule）6.4 起出卡片式子列表编辑器（Task 6.4，
+ *    design 决策 2）：web 是 el-table + 列模板，uni 每行一张卡片、字段纵向排；列头
+ *    label 无载体不再重复（字段自身 form-item label 保留）；hidden 列 parse 侧整列
+ *    降级落 todo 行；增删/上下限沿用 config（deletable→行删除键 min 禁用态、addable→
+ *    添加行 max 条件、showIndex→行头序号）；filterEmptyColumn 是回填写入过滤
+ *    （TableForm.vue:146），产物按原样回填、值在 config 常量供人工接管；行函数与
+ *    group 同一套（新行形状 = rowKeys）。
  */
 function emitNestedField(node: IrNode, profile: TargetProfile, label: string): UniFieldFragment {
   const n = node.nested!
@@ -269,13 +279,21 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
   const has = (k: string) => !!node.config && k in node.config.obj
   const opt = (k: string, fallback: string) => (has(k) ? `${cfgName}.${k}` : fallback)
   const rows = n.valuePath
+  // 行函数名（group/tableForm 共用）：add< Pascal(field) >Row / remove… / move…
+  const base = pascal(camelField(node.artifact.field))
+  const h = { add: `add${base}Row`, remove: `remove${base}Row`, move: `move${base}Row` }
 
-  // 子节点递归：parse 降级的子节点落 todo 行，其余走 emitFieldNode（子锚点/label/v-model 都在子节点 artifact 上）
+  // 子节点递归：parse 降级的子节点落 todo 行，其余走 emitFieldNode（子锚点/label/v-model
+  // 都在子节点 artifact 上）。子片段的 script（inputNumber precision 取整 handler 等）
+  // 并进本容器的 script——容器/页面装配只消费本函数的返回，不递归收子件 script。
+  const childScripts: string[] = []
   const childFrag = (c: IrNode, pad: string): string[] => {
     if (c.degraded) {
       return [`${pad}<!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} ${c.degradeReason ?? 'parse 降级'} -->`]
     }
-    return emitFieldNode(c, profile).template.split('\n').map((l) => `${pad}${l}`)
+    const f = emitFieldNode(c, profile)
+    childScripts.push(...(f.script ?? []))
+    return f.template.split('\n').map((l) => `${pad}${l}`)
   }
 
   // —— subForm：值形态是对象，子字段直接挂 form.<容器字段>（v-model 由 parse 算好）——
@@ -289,13 +307,58 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
         `  </view>`,
         `</uni-forms-item>`,
       ].join('\n'),
+      ...(childScripts.length ? { script: childScripts } : {}),
     }
+  }
+
+  // —— tableForm：卡片式子列表编辑器（Task 6.4，design 决策 2）——
+  // web 是 el-table + 列模板（emit.ts 949-980）；uni 无表格编辑形态 → 每行一张卡片、
+  // 字段纵向排。列头（el-table-column label）无载体，列 label 不再重复出——字段自身
+  // 的 uni-forms-item label 保留（kv 载体合一）；hidden 列 parse 侧已整列降级，不进
+  // columns 迭代。增删/上下限沿用 config：deletable → 行头删除键（min 下限禁用态）、
+  // addable → 添加行（max 上限条件，condOf 与 web 同构）、showIndex → 行头序号
+  // （web innerText idx+1，uni 用 {{ i + 1 }}）；filterEmptyColumn 是回填写入过滤
+  // （TableForm.vue:146），产物按原样回填，值在 config 常量里供人工接管，不出模板。
+  // 行函数 add/remove 与 group 同一套（addPascalRow/removePascalRow，新行形状 = rowKeys）。
+  if (n.carrier === 'props.columns[].rule') {
+    const headLines: string[] = []
+    const ops: string[] = []
+    if (has('showIndex')) ops.push(`        <text class="lc-nested-row-idx">{{ i + 1 }}</text>`)
+    if (has('deletable')) {
+      ops.push(
+        `        <button size="mini" :disabled="(${rows} || []).length <= ${opt('min', '0')}" @click="${h.remove}(i)">删除</button>`,
+      )
+    }
+    if (ops.length) {
+      headLines.push(`      <view class="lc-nested-row-head">`, ...ops, `      </view>`)
+    }
+    const template = [
+      `<!-- ${node.artifact.anchor} -->`,
+      `${formItemOpen(node, label)}`,
+      `  <view class="lc-nested lc-nested--table">`,
+      `    <view class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`,
+      ...headLines,
+      ...node.nested!.columns.flatMap((col) =>
+        col.children.flatMap((c) => childFrag(c, '      ')),
+      ),
+      `    </view>`,
+      ...(has('addable') ? [`    <button v-if="${condOf(node, cfgName!, rows, 'addable')}" @click="${h.add}">添加</button>`] : []),
+      `  </view>`,
+      `</uni-forms-item>`,
+    ].join('\n')
+    const script: string[] = []
+    if (has('addable') || has('deletable')) {
+      const keys = n.rowKeys.map((k) => `${k}: ''`).join(', ')
+      script.push(`/** ${node.artifact.anchor} 行增删（新行形状 = 子字段） */`)
+      if (has('addable')) script.push(`function ${h.add}() { ${rows}.push(${keys ? `{ ${keys} }` : '{}'}) }`)
+      if (has('deletable')) script.push(`function ${h.remove}(i: number) { ${rows}.splice(i, 1) }`)
+    }
+    const all = [...script, ...childScripts]
+    return all.length ? { template, script: all } : { template }
   }
 
   // —— group：行数组 + 行壳 + 行头/操作 + 添加键 ——
   const rowTag = node.config?.obj.type === 'card' ? 'uni-card' : 'view'
-  const base = pascal(camelField(node.artifact.field))
-  const h = { add: `add${base}Row`, remove: `remove${base}Row`, move: `move${base}Row` }
 
   const ops: string[] = []
   if (has('sortBtn')) {
@@ -343,7 +406,8 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
       script.push('}')
     }
   }
-  return script.length ? { template, script } : { template }
+  const all = [...script, ...childScripts]
+  return all.length ? { template, script: all } : { template }
 }
 
 /** 添加键显隐条件（与 web emit.condOf 同构）：max 缺省 '0' → !0 恒真 */

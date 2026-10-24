@@ -188,6 +188,95 @@ describe('emitFieldNode group — 行数组块容器（Task 4.3）', () => {
   })
 })
 
+describe('emitFieldNode tableForm — 卡片式子列表编辑器（Task 6.4）', () => {
+  it('golden：行卡片（序号 + 删除）+ 字段纵向排 + 添加行（max 条件）+ 行函数 script；hidden 列不出', () => {
+    const node = nestedNodeOf(
+      {
+        type: 'tableForm',
+        field: 'items',
+        title: '明细',
+        props: {
+          addable: true,
+          deletable: true,
+          showIndex: false,
+          min: 1,
+          max: 5,
+          columns: [
+            { label: '名称', rule: [{ type: 'input', field: 'name', title: '名称', props: { placeholder: '请输入名称' } }] },
+            { label: '数量', rule: [{ type: 'inputNumber', field: 'qty', title: '数量', props: {} }] },
+            { label: '隐藏列', hidden: true, rule: [{ type: 'input', field: 'secret', title: '隐藏', props: {} }] },
+          ],
+        },
+      },
+      'tableForm',
+    )
+    const out = emitFieldNode(node, profile)
+    // 行头只在有真内容时出：showIndex=false 无序号、deletable 有删除 → 行头只有操作区；
+    // 列头（el-table-column label）在卡片形态无载体 → 列 label 不再重复（字段自身 form-item label 保留）
+    expect(out.template).toBe(
+      [
+        `<!-- lc:node=n1.f1 type=tableForm field=items -->`,
+        `<uni-forms-item label="明细" name="items" :error-message="errors.items">`,
+        `  <view class="lc-nested lc-nested--table">`,
+        `    <view class="lc-nested-row" v-for="(itemsRow, i) in form.items || []" :key="i">`,
+        `      <view class="lc-nested-row-head">`,
+        `        <text class="lc-nested-row-idx">{{ i + 1 }}</text>`,
+        `        <button size="mini" :disabled="(form.items || []).length <= itemsConfig.min" @click="removeItemsRow(i)">删除</button>`,
+        `      </view>`,
+        `      <!-- lc:node=n1.f1.c0.f1 type=input field=name -->`,
+        `      <uni-forms-item label="名称" name="name" :error-message="errors.name">`,
+        `        <uni-easyinput v-model="itemsRow.name" placeholder="请输入名称" />`,
+        `      </uni-forms-item>`,
+        `      <!-- lc:node=n1.f1.c1.f1 type=inputNumber field=qty -->`,
+        `      <uni-forms-item label="数量" name="qty" :error-message="errors.qty">`,
+        `        <uni-number-box v-model="itemsRow.qty" />`,
+        `      </uni-forms-item>`,
+        `      <!-- lc:todo node=n1.f1.c2.f1 type=input field=secret 隐藏列首版不出码 -->`,
+        `    </view>`,
+        `    <button v-if="itemsConfig.addable && (!itemsConfig.max || (form.items || []).length < itemsConfig.max)" @click="addItemsRow">添加</button>`,
+        `  </view>`,
+        `</uni-forms-item>`,
+      ].join('\n'),
+    )
+    expect(out.script).toEqual([
+      `/** lc:node=n1.f1 type=tableForm field=items 行增删（新行形状 = 子字段） */`,
+      `function addItemsRow() { form.items.push({ name: '', qty: '', secret: '' }) }`,
+      `function removeItemsRow(i: number) { form.items.splice(i, 1) }`,
+    ])
+  })
+
+  it('纯展示配置（无 addable/deletable/showIndex）：行头不出、无添加键、无 script', () => {
+    const node = nestedNodeOf(
+      {
+        type: 'tableForm',
+        field: 'logs',
+        title: '日志',
+        props: {
+          columns: [{ label: '备注', rule: [{ type: 'input', field: 'note', title: '备注', props: {} }] }],
+        },
+      },
+      'tableForm',
+    )
+    const out = emitFieldNode(node, profile)
+    expect(out.template).toBe(
+      [
+        `<!-- lc:node=n1.f1 type=tableForm field=logs -->`,
+        `<uni-forms-item label="日志" name="logs" :error-message="errors.logs">`,
+        `  <view class="lc-nested lc-nested--table">`,
+        `    <view class="lc-nested-row" v-for="(logsRow, i) in form.logs || []" :key="i">`,
+        `      <!-- lc:node=n1.f1.c0.f1 type=input field=note -->`,
+        `      <uni-forms-item label="备注" name="note" :error-message="errors.note">`,
+        `        <uni-easyinput v-model="logsRow.note" />`,
+        `      </uni-forms-item>`,
+        `    </view>`,
+        `  </view>`,
+        `</uni-forms-item>`,
+      ].join('\n'),
+    )
+    expect(out.script).toBeUndefined()
+  })
+})
+
 describe('emitFieldNode subForm — 单对象块容器（Task 4.3）', () => {
   it('golden：lc-nested--sub 块 + 子节点递归（v-model=form.<容器>.<子>），无 script', () => {
     const node = nestedNodeOf(

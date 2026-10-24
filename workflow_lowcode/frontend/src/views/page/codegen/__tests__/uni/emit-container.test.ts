@@ -245,16 +245,18 @@ describe('emitContainerNode — 语料卡列表容器（cardlist_test.json，con
     expect(frag).not.toBeNull()
     // 弹层头：tabTitle → attr as title（attrs.el-dialog.title）
     expect(frag!.template).toContain('<view class="lc-form-popup__head">编辑记录</view>')
-    // 无 uniapp 映射的字段：LookupPicker/dataPicker/tableForm 落 lc:todo（字段可见可见缺口）
+    // 无 uniapp 映射的字段：LookupPicker/dataPicker 落 lc:todo（字段可见缺口）；
+    // tableForm 6.4 起出卡片式子列表编辑器（每行序号+删除、字段纵向排）
     expect(frag!.template).toContain('<!-- lc:todo node=n2.f4 type=LookupPicker field=customer')
     expect(frag!.template).toContain('<!-- lc:todo node=n2.f7 type=dataPicker field=warehouse')
-    expect(frag!.template).toContain('<!-- lc:todo node=n2.f10 type=tableForm field=delivery_plan')
+    expect(frag!.template).toContain('<!-- lc:node=n2.f10 type=tableForm field=delivery_plan -->')
+    expect(frag!.template).toContain('<view class="lc-nested lc-nested--table">')
+    expect(frag!.template).toContain('v-for="(deliveryPlanRow, i) in form.delivery_plan || []"')
     // 首列表刷新目标（n1 卡列表实例）
     expect(frag!.script.join('\n')).toContain('void cards1792036403314List.reload()')
     // 无映射字段 → unsupported（UniFieldFragment.unsupported 通道）；选择器带回接线登记
     expect(frag!.unsupported.some((u) => u.key === 'field-component' && u.type === 'LookupPicker')).toBe(true)
     expect(frag!.unsupported.some((u) => u.key === 'field-component' && u.type === 'dataPicker')).toBe(true)
-    expect(frag!.unsupported.some((u) => u.key === 'field-component' && u.type === 'tableForm')).toBe(true)
     expect(frag!.unsupported.some((u) => u.key === 'writeback' && u.type === 'LookupPicker')).toBe(true)
   })
 })

@@ -85,11 +85,15 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
   const headTitle = typeof dialogAttrs?.title === 'string' ? dialogAttrs.title : ''
 
   // —— 字段片段（缩进 4 嵌进弹层体）+ 无映射字段 unsupported 收集 ——
+  // 字段子片段的 script（嵌套行函数 / inputNumber precision 取整 handler）并进容器
+  // script——模板真绑到的 handler 必须有声明方，否则产物 SFC 引用未声明函数。
   const pad4 = (l: string) => (l ? `    ${l}` : l)
   const bodyLines: string[] = []
+  const fieldScripts: string[] = []
   for (const child of node.children) {
     const frag = emitFieldNode(child, PROFILES.uniapp)
     bodyLines.push(...frag.template.split('\n').map(pad4))
+    fieldScripts.push(...(frag.script ?? []))
     unsupported.push(...(frag.unsupported ?? []))
   }
 
@@ -178,6 +182,8 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
   S.push('  }')
   S.push(...reloadLine)
   S.push('}')
+  // 字段子片段 script（嵌套行函数 / precision 取整 handler）：函数声明提升，位置无关
+  S.push(...fieldScripts)
 
   return {
     template: T.join('\n'),

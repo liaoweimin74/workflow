@@ -59,7 +59,7 @@
 
 ## 9. 构建发布（M3）
 
-- [ ] 9.1 AppRelease 快照 API：创建时固化各页 published_version、version 递增、不可原地变更（spec: app-release-pipeline「AppRelease 发布快照」）
+- [x] 9.1 AppRelease 快照 API：创建时固化各页 published_version、version 递增、不可原地变更（spec: app-release-pipeline「AppRelease 发布快照」）（实现口径：AppReleaseService.create 读启用清单逐页固化 publishedVersion 快照（未发布页 400、空清单 400），快照 JSON 形状 {client:{type,buildConfig,navigation},pages:[{key,pageId,title,publishedVersion,nav}]}（9.2 构建直接吃快照）；version=Client 内最新+1；刻意无 update 路径（测试反射锁死接口面），重发布=新建 Release；GET 列表 version 降序、跨租户/跨 Client 404；快照字符串值转义防 JSON 注入；AppReleaseControllerTest 10 用例，后端全量 1601 绿）
 - [ ] 9.2 构建触发与归档：`uni build -p mp-weixin | h5`、artifact_url 与 BUILDING/PUBLISHED/FAILED 状态机（spec: app-release-pipeline「按 Client 构建」）
 - [ ] 9.3 miniprogram-ci 体验版上传 + 二维码回传（spec: app-release-pipeline「体验版上传」）
 - [ ] 9.4 `WechatMiniprogramClient` 按 Client 配置多实例化（登录/推送/上传按 Client 凭证）（spec: app-release-pipeline「小程序凭证多实例」）

@@ -35,6 +35,8 @@ export function generatePage(
 ): GenerateResult {
   const ir = parseIr(schema, meta)
   const files = emitFiles(ir)
-  const manifest = emitManifest(ir)
+  // 本入口只出 web 产物（uniapp 走 uni/emit-uni 的 generatePageUni）：manifest 的
+  // 「页面根级未装配」登记随之按 web 口径（见 emitManifest 的 target）。
+  const manifest = emitManifest(ir, 'web')
   return { files, manifest, report: buildReport(schema, meta.pageKey, manifest, files, meta.target ?? 'web') }
 }

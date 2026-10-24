@@ -18,6 +18,7 @@ import {
   type IrPage,
   type IrProp,
   type IrSwitchCase,
+  type Unsupported,
 } from './ir'
 
 const NO_REFRESH_TODO = 'lc:todo 列表组件未 defineExpose，取数刷新需人工接（page-list-cards 现状）'
@@ -87,6 +88,40 @@ function propTexts(p: IrNode, ir: IrPage): string[] {
 function lit(v: unknown): string {
   if (typeof v === 'string') return `'${v.replace(/'/g, "\\'")}'`
   return JSON.stringify(v)
+}
+
+/**
+ * 页面根级分派：一个节点在页面根会被哪个分支装配（顺序即优先级）。
+ *
+ * 一处真相、两处消费 —— emitTemplate 的装配分支读它决定怎么出码，emitManifest 的
+ * 未装配登记读同一函数决定登记谁。分开写两份判定就会漂：模板说「我出了」、登记说
+ * 「我没出」，或者反过来（正是静默丢弃的成因：已登记契约的根级字段族从产物里消失，
+ * 连挂点注释与登记都没有）。
+ */
+type RootDispatch = 'widget' | 'table' | 'container' | 'list' | 'degraded' | 'unregistered' | 'unassembled'
+
+function rootDispatchOf(p: IrNode): RootDispatch {
+  if (widgetOf(p.artifact.type)) return 'widget'
+  if (p.table) return 'table'
+  if (p.artifact.type === 'formContainer') return 'container'
+  if (listOf(p.artifact.type)) return 'list'
+  if (p.degraded) return 'degraded'
+  if (!TYPE_CONTRACTS[p.artifact.type]) return 'unregistered'
+  // 契约登记了、页面根却没有分派它：字段族（input/select/dataPicker/…）是容器里的东西，
+  // 挂在页面根就是越界形态（V1 页面模型 = 列表 + 容器表单）。
+  return 'unassembled'
+}
+
+/** 页面根级未装配的节点（web 模板口径）：manifest 按这些逐节点登记，产物侧同时留挂点注释 */
+function rootUnassembledOf(ir: IrPage): Unsupported[] {
+  return ir.nodes
+    .filter((p) => rootDispatchOf(p) === 'unassembled')
+    .map((p) => ({
+      path: p.artifact.rulePath,
+      type: p.artifact.type,
+      key: 'not-assembled',
+      message: `组件类型 ${p.artifact.type} 在页面根无装配分派（字段族只在容器内出码），整节点未出码`,
+    }))
 }
 
 /**
@@ -160,17 +195,18 @@ export function emitTemplate(ir: IrPage): string {
     pendingWidgets.length = 0
   }
   for (const p of plans) {
-    if (widgetOf(p.artifact.type)) {
+    const d = rootDispatchOf(p)
+    if (d === 'widget') {
       pendingWidgets.push(p)
       continue
     }
     flushWidgets()
-    if (p.table) {
+    if (d === 'table') {
       L.push(...renderTable(p, '      ', ir))
       continue
     }
-    if (p.artifact.type === 'formContainer') continue // 覆盖层容器出在 </el-form> 之后
-    if (listOf(p.artifact.type)) {
+    if (d === 'container') continue // 覆盖层容器出在 </el-form> 之后
+    if (d === 'list') {
       const head = p.artifact.host.ref ? ` ref="${p.artifact.host.ref}"` : ''
       const props = propTexts(p, ir)
       // 出口按节点算：契约里 when='chain' 的那几个只在该节点真有链时才在这份上
@@ -187,16 +223,24 @@ export function emitTemplate(ir: IrPage): string {
     }
     // 降级节点（页面级嵌套容器）：不猜形态、不出死标签，整棵子树各留一行挂点注释。
     // 注释里的 node/type/field 就是回读侧的锚点，登记齐了 holes 仍为零，债走 unsupported。
-    if (p.degraded) {
+    if (d === 'degraded') {
       L.push(...degradeComments(p, '      '))
       continue
     }
     // 未登记类型：留一行挂点注释（与容器子节点同一口径），别让整节点静默消失
-    if (!TYPE_CONTRACTS[p.artifact.type]) {
+    if (d === 'unregistered') {
       L.push(
         `      <!-- lc:todo node=${p.artifact.id} type=${p.artifact.type} field=${p.artifact.field} 组件类型无出码契约，整节点未出码 -->`,
       )
+      continue
     }
+    // 已登记契约、页面根却没有分派它（字段族是容器里的东西，挂页面根就是越界形态）：
+    // 旧行为是整节点从产物里静默消失 —— 连挂点注释都没有，报告还把它算作「可出码」。
+    // 挂点注释 + manifest 登记（rootUnassembledOf 读同一分派判定）一起补，
+    // 让产物 / manifest / 报告三份真相对得上。
+    L.push(
+      `      <!-- lc:todo node=${p.artifact.id} type=${p.artifact.type} field=${p.artifact.field} 页面根级无装配分派（该类型只在容器/列表内出码），整节点未出码 -->`,
+    )
   }
   flushWidgets()
   L.push('    </el-form>')
@@ -1065,9 +1109,20 @@ export function emitFiles(ir: IrPage): Record<string, string> {
 
 // ==================== manifest ====================
 
-export function emitManifest(ir: IrPage): GeneratedManifest {
+/**
+ * manifest 是「产物侧事实」的登记表，`target` 指明这份 manifest 描述的是哪个端的模板产物
+ * （决定页面根级未装配的登记口径：web 与 uniapp 的装配族不同，各端的缺口由各端的模板兜底登记，
+ * 不能拿一端的账去判另一端 —— 与 report.ts 的 per-target 口径同一条纪律）。
+ * 默认 web：`generatePage` 只出 web 产物（uniapp 走 generatePageUni）。
+ */
+export function emitManifest(ir: IrPage, target: 'web' | 'uniapp' = 'web'): GeneratedManifest {
   // 注入 adapter 缺失是产物侧（目标实现）的事实，挂到 manifest 的报告里而不是在 parse 里判
   const unsupported = [...ir.unsupported]
+  // 页面根级未装配（web 模板口径）：类型有契约、emitTemplate 却没分派它。旧行为是整节点
+  // 从产物里静默消失且报告把它算「可出码」—— 产物/manifest/报告三份真相互相矛盾（静默丢弃）。
+  // uniapp 不在这一层登记：uni 的装配族不同（page-table/fcTable/dash-* 等由 emit-uni 装配），
+  // 同名缺口由 emitPage 的兜底分派逐节点登记。
+  if (target === 'web') unsupported.push(...rootUnassembledOf(ir))
   for (const inj of ir.injections) {
     if (INJECT_ADAPTERS[inj.constName]) continue
     unsupported.push({

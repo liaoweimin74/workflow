@@ -346,3 +346,55 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(sfc).toContain("  const res = await http.get('/v1/ping')")
   })
 })
+
+// ----- 页面根级未装配族：uni 兜底分派逐节点登记（静默丢弃补丁的 uni 侧）-----
+// 活库 uni_page 实测：rule = [input, radio, LookupPicker] 三个节点全落 emitPage 的 lc:todo 兜底，
+// 注释只挂在产物里，manifest 一条不记；报告还把它们算作「可出码」（产物是空壳）。
+// 本次只补「不静默丢弃」：兜底分派对**已登记契约**的节点逐节点 push unsupported
+// （未登记类型由 parse 的「无出码契约」承担，不重复记两行）。
+// 装配本身属越界形态（V1 页面模型 = 列表 + 容器表单，字段族在容器内出码），登记在案、不在此实现。
+describe('页面根级未装配族：uni 兜底分派逐节点登记', () => {
+  const rootFields = {
+    rule: [
+      { type: 'input', field: 'title1', props: {} },
+      { type: 'radio', field: 'kind1', props: {} },
+      { type: 'LookupPicker', field: 'owner1', props: { dataSourceId: 'ds_x' } },
+    ],
+    option: {},
+    dataSources: [],
+    actions: [],
+  }
+  const uni = () =>
+    generatePageUni(rootFields as any, { pageKey: 'uni_root_unassembled', pageName: 'uni_root_unassembled', client: CLIENT })
+
+  it('产物留挂点注释，且已登记契约的节点逐节点进 manifest（不再只有注释）', () => {
+    const { files, manifest } = uni()
+    const sfc = files['src/pages/gen/uni_root_unassembled.vue']
+    for (const t of ['input', 'radio', 'LookupPicker']) expect(sfc).toContain(`type=${t} field=`)
+    expect(manifest.unsupported).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'rule[0]', type: 'input', key: 'not-assembled' }),
+        expect.objectContaining({ path: 'rule[2]', type: 'LookupPicker', key: 'not-assembled' }),
+      ]),
+    )
+    // 未登记类型（radio）只保留 parse 那一条，同一节点不许记两行
+    expect(manifest.unsupported.filter((u) => u.type === 'radio')).toHaveLength(1)
+  })
+
+  it('不变量：页面根的每个节点要么被装配、要么在自身地址登记（报告口径不许掩盖空产物）', () => {
+    const { report } = uni()
+    const roots = report.nodes.filter((n) => /^rule\[\d+\]$/.test(n.path))
+    expect(roots.map((n) => n.path)).toEqual(['rule[0]', 'rule[1]', 'rule[2]'])
+    const silent = roots.filter((n) => !report.unsupported.some((u) => u.path === n.path))
+    expect(silent.map((n) => `${n.path}:${n.type}`), 'uni 侧根级节点被静默丢弃').toEqual([])
+  })
+
+  it('受支持形态不回归：字段进容器照常出码，不产生 not-assembled 登记', () => {
+    const { manifest } = generatePageUni(JSON.parse(JSON.stringify(cardlist)) as any, {
+      pageKey: 'cardlist',
+      pageName: '卡片列表',
+      client: CLIENT,
+    })
+    expect(manifest.unsupported.filter((u) => u.key === 'not-assembled')).toEqual([])
+  })
+})

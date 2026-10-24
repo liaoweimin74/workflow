@@ -130,7 +130,12 @@ describe('GenerateReport — per-target（Task 2.4）', () => {
       expect(u!.path, `${t} 登记要带路径`).toBe(`rule[${i}]`)
       expect(u!.message, `${t} 登记要带原因`).toContain('仅 Web')
     }
-    expect(byType.has('input'), '双端共享组件不进 unsupported').toBe(false)
+    // 双端共享组件不按「三区能力矩阵」登记（input 在 uniapp 有装配面）。它在**页面根**
+    // 无装配分派是另一码事：那是产物侧（web 模板）的事实，走 not-assembled 登记（静默丢弃补丁），
+    // 与端能力正交 —— 两条账不许混成一条。
+    const inputUs = gen.report.unsupported.filter((u) => u.type === 'input')
+    expect(inputUs.every((u) => !u.message.includes('仅 Web')), '双端共享组件不按能力登记').toBe(true)
+    expect(inputUs.filter((u) => u.key === 'not-assembled'), '根级字段的装配缺口仍要登记').toHaveLength(1)
   })
 
   it('target=web（默认）：能力登记不参与，unsupported 与 manifest 同源（行为与现状一致）', () => {

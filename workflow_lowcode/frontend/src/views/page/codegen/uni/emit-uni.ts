@@ -6,7 +6,8 @@
  *    emitListNode、formContainer 走 emitContainerNode（容器段，Task 5.2）、展示组件族
  *    （page-steps/page-detail/page-data-container）走 emitWidgetNode（Task 5.2），片段
  *    模板缩 2 格、script/import/unsupported 并入页面；其余组件族以 lc:todo 注释挂点
- *    占位，族装配按任务落地（6.x 表格族、7.x 字段族）；
+ *    占位 + 逐节点 unsupported 登记（有契约却无装配分派的族：不留注释就登记就是静默丢弃，
+ *    报告会把它算「可出码」），族装配按任务落地（6.x 表格族、7.x 字段族）；
  *  · pages.json / manifest.json / App.vue（project-files，清单即真相）；
  *  · 脚本链装配（Task 5.3）：script 函数体照搬（scriptFunction 复用 web 同款）+ 材料
  *    注入（message→uniMessage、page→pageKey 常量、http→uniHttpShim）；
@@ -16,6 +17,7 @@
 
 import { emitManifest, jsonToTs } from '../emit'
 import { materialsOf, scriptFunction } from '../chain-emit'
+import { TYPE_CONTRACTS } from '../contract'
 import type { GenerateResult, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
 import { buildReport } from '../report'
@@ -37,7 +39,7 @@ export function generatePageUni(
     exportedAt: 'emit-uni',
     target: 'uniapp',
   })
-  const base = emitManifest(ir)
+  const base = emitManifest(ir, 'uniapp')
   const page = emitPage(ir)
   // uni 侧缺口（容器族语义/详情弹窗/未装配组件族）并入 manifest：报告与后续反读看到同一份真相
   const manifest = { ...base, unsupported: [...base.unsupported, ...page.unsupported] }
@@ -142,6 +144,17 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
         T.push(
           `  <!-- lc:todo node=${n.artifact.id} type=${n.artifact.type} field=${n.artifact.field} 组件族 uniapp 装配按任务落地 -->`,
         )
+        // 已登记契约的族（dash-filter、页面根级字段族等）在这里不只留注释：逐节点登记进
+        // manifest —— 报告/manifest 与产物说同一句话，别让「有契约」把空产物盖成「可出码」。
+        // 未登记类型由 parse 的「无出码契约」承担，不在这里重复记两行。
+        if (TYPE_CONTRACTS[n.artifact.type]) {
+          unsupported.push({
+            path: n.artifact.rulePath,
+            type: n.artifact.type,
+            key: 'not-assembled',
+            message: `组件类型 ${n.artifact.type} 在 uniapp 页面根无装配分派，模板以 lc:todo 占位`,
+          })
+        }
       }
     }
   }

@@ -49,7 +49,9 @@ describe('IR 目标无关性', () => {
   it('模板 / manifest 生成只读 IR：三个入口都吃 IrPage，不接 schema', () => {
     expect(emitSource).toMatch(/export function emitTemplate\(ir: IrPage\): string/)
     expect(emitSource).toMatch(/export function emitFiles\(ir: IrPage\)/)
-    expect(emitSource).toMatch(/export function emitManifest\(ir: IrPage\)/)
+    // target 说明「这份 manifest 描述哪个端的产物」（默认 web，uni 走 generatePageUni），
+    // 不是 schema：一份 IR 单入口的纪律不变
+    expect(emitSource).toMatch(/export function emitManifest\(ir: IrPage, target: 'web' \| 'uniapp' = 'web'\)/)
     expect(emitSource).not.toMatch(/function\s+\w+\(schema\b/)
   })
 

@@ -53,8 +53,8 @@
 
 ## 8. 预览（M2/M3）
 
-- [ ] 8.1 产物预览弹窗：H5 手机壳 iframe + 出码报告/源码/二维码页签 + 双渲染对照（spec: mobile-preview「产物级预览（发布前核对）」）
-- [ ] 8.2 产物级预览构建链路：emitUniApp → uni build h5 → 本地静态服务（端口 5301）+ 草稿口径 preview=true + 版本令牌重挂（spec: mobile-preview「产物级预览」「预览读取口径」）
+- [x] 8.1 产物预览弹窗：H5 手机壳 iframe + 出码报告/源码/二维码页签 + 双渲染对照（spec: mobile-preview「产物级预览（发布前核对）」）（实现口径：UniArtifactPreviewPane 左手机壳 iframe + 右报告/源码同屏（spec「右侧可见产物源码与出码报告」），构建失败保留上次产物对照、空态/错误成话；iframe 以版本令牌拼 `?v=` 且作 :key 强制重挂；定义现读画布（canvasSchema）与出码页签同源；dev-only 动态引入（uni 出码栈不进生产包）；二维码页签依赖 9.3 先占位（页签内说明指向发布链路）；完整双渲染对照在 codegen-lab 验证台 + 10.1 uni-dual-render）
+- [x] 8.2 产物级预览构建链路：emitUniApp → uni build h5 → 本地静态服务（端口 5301）+ 草稿口径 preview=true + 版本令牌重挂（spec: mobile-preview「产物级预览」「预览读取口径」）（实现口径：vite.uni-preview.ts dev 中间件（sameOrigin/SEGMENT 段校验/512KB 限/落盘白名单）→ spawn `npx --no-install uni build`（H5）→ node:http 静态服务 5301（首次构建成功后惰性起、幂等复用；导航路径落 index.html、缺失资源 404 不回 HTML）；版本令牌会话内存态随构建递增，previewUrl 带 `#/pages/gen/<key>?v=<n>`；预览 client 为单页简化清单（完整清单 Task 9.x 接入）；CLI 通道 scripts/build-preview.mjs 与中间件共用同一套 plan/write/build（产物逐字节一致）；落盘为直写覆盖（产物即真相，uni-shell 壳文件被覆盖属已知代价，git 可恢复）；e2e uni-preview.spec.ts 已落（playwright uni-preview project，真跑归 10.1））
 - [ ] 8.3 小程序预览二维码入口（依赖 9.3 上传链路）
 
 ## 9. 构建发布（M3）

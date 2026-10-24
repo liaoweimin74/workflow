@@ -33,10 +33,23 @@ export interface UniClientConfig {
   pages: UniClientPageEntry[]
 }
 
+/** easycom 默认规则（uni-ui）：uni-* → @dcloudio/uni-ui/lib/uni-$1/uni-$1.vue */
+const UNI_UI_EASYCOM = {
+  autoscan: true,
+  custom: { '^uni-(.*)': '@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue' },
+}
+
 /**
  * pages.json：页清单原样采用（清单即真相）+ globalStyle（client 名作标题）。
  * 分包（Task 7.3）：带 subRoot 的页面按 root 分组进 subPackages（保持清单顺序），
  * 其余进主包 pages；主包页路径仍为 `pages/gen/<key>`。
+ *
+ * easycom（Task 10.1 缺陷 E）：必须显式写出 uni-ui 默认规则——easycom 的 custom
+ * 规则**只从 pages.json 读**（@dcloudio/uni-cli-shared/dist/easycom.js:47
+ * `custom: (easycom && easycom.custom) || {}`，无内置默认规则）。不写这段，产物里
+ * uni-popup / uni-forms-item / uni-easyinput / uni-card / uni-number-box 等
+ * 全是**未解析裸标签**：输入框根本不存在（表单容器无法录入）、label 不渲染、
+ * popup 不是弹层（内容常驻 DOM、`ref.open` 不是函数）。
  */
 export function buildPagesJson(client: UniClientConfig): string {
   const pageOf = (p: UniClientPageEntry) => ({
@@ -57,6 +70,7 @@ export function buildPagesJson(client: UniClientConfig): string {
   }))
   return JSON.stringify(
     {
+      easycom: UNI_UI_EASYCOM,
       pages: mainPages,
       ...(subPackages.length ? { subPackages } : {}),
       globalStyle: {

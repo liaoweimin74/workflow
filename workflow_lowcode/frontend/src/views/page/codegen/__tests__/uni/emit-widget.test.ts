@@ -21,6 +21,8 @@ import type { IrNode, IrPage } from '../../ir'
 import { parseIr } from '../../parse'
 import { emitWidgetNode, extractPdcFields } from '../../uni/emit-widget'
 import dataContainer from '../fixtures/corpus/tmp_data_container_verify.json'
+import fcTablePlain from '../fixtures/fc-table/plain.json'
+import fcTableRich from '../fixtures/fc-table/rich.json'
 import detailSteps from '../fixtures/corpus/page_detail_steps_demo.json'
 import testPage from '../fixtures/test_page.schema.json'
 
@@ -398,6 +400,79 @@ describe('emitWidgetNode — page-table → uni-table 简表（Task 6.2）', () 
     const frag = emitWidgetNode(node, ir)
     expect(frag!.template).not.toContain("row['calc']")
     expect(frag!.unsupported.some((u) => u.key === 'column-contentType' && u.path === 'rule[0].props.columns[3]')).toBe(true)
+  })
+})
+
+describe('emitWidgetNode — fcTable → 纵向堆叠降级（Task 6.3）', () => {
+  /** plain：1×2 无合并，格 0:0 dash-kpi A、格 0:1 dash-kpi B；rich：3×4 带合并
+   *  （0:0 合 2×2 覆盖 0:1/1:0/1:1 → todo1+kpi1 归 home，0:3 dash-chart，2:2 dash-notice，
+   *  2:0..2:1 被 2×4 合并覆盖）+ 逐格 style/class */
+  const fcOf = (schema: unknown) => {
+    const ir = parseIr(clone(schema), { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+    const node = ir.nodes.find((n) => n.artifact.type === 'fcTable')
+    if (!node) throw new Error('页面应含 fcTable 节点')
+    return { node, ir }
+  }
+
+  it('plain：非空格按 (row,col) 纵排成块；空格不出块；子节点走 emitWidgetNode 分派', () => {
+    const { node, ir } = fcOf(fcTablePlain)
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    const [cellA, cellB] = node.table!.cells
+    const childA = cellA.children[0]
+    const childB = cellB.children[0]
+    // dash-* 无 uni 装配（7.x）→ emitWidgetNode 返回 null → lc:todo 挂点（同 5.2 顶层口径：
+    // 锚点寻址信息进 todo 注释，不另出独立锚点行）
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-ftable">',
+        '  <view class="lc-ftable__cell">',
+        `    <!-- lc:todo node=${childA.artifact.id} type=dash-kpi field=kpiA 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`,
+        '  </view>',
+        '  <view class="lc-ftable__cell">',
+        `    <!-- lc:todo node=${childB.artifact.id} type=dash-kpi field=kpiB 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`,
+        '  </view>',
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script).toEqual([])
+    expect(frag!.imports).toEqual([])
+  })
+
+  it('rich：合并格的子节点归 home 格出块（覆盖格无独立块）；逐格 style/class 落格 view', () => {
+    const { node, ir } = fcOf(fcTableRich)
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    // 可见 home 格 8 个，非空 3 个：0:0（todo1+kpi1，2×2 合并 home）、0:3（chart1）、
+    // 2:0（notice1 slot=2:2 被 {top:2,left:0,col:4} 覆盖 → home 2:0 渲染，同 web renderTable）
+    const cells = node.table!.cells.filter((c) => c.children.length)
+    expect(cells.map((c) => c.slot)).toEqual(['0:0', '0:3', '2:0'])
+    expect(cells[0].children.map((c) => c.artifact.field)).toEqual(['todo1', 'kpi1'])
+    expect(frag!.template).toContain('lc-ftable__cell')
+    // 逐格 style/class：home 格地址取值落 style/class 属性
+    expect(frag!.template).toContain('style="width: 200px; height: 120px"')
+    expect(frag!.template).toContain('class="lc-ftable__cell hero-cell"')
+    // 合并几何不出：rowspan/colspan/layout 语义在 uni 产物中不存在
+    expect(frag!.template).not.toContain('rowspan')
+    expect(frag!.template).not.toContain('colspan')
+    expect(frag!.template).not.toContain('lc-fc-table')
+  })
+
+  it('rich：几何视觉键（border/mini/formStyle/borderWidth/borderColor/layout/合并语义）→ 节点级 unsupported 一条', () => {
+    const { node, ir } = fcOf(fcTableRich)
+    const frag = emitWidgetNode(node, ir)
+    const geo = frag!.unsupported.filter((u) => u.key === 'table-geometry')
+    expect(geo).toHaveLength(1)
+    expect(geo[0].path).toBe(node.artifact.rulePath)
+    expect(geo[0].type).toBe('fcTable')
+  })
+
+  it('脚本/导入透传：格内 list 族片段的 script/imports 并入（无则空数组）', () => {
+    const { node, ir } = fcOf(fcTablePlain)
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script).toEqual([])
+    expect(frag!.imports).toEqual([])
   })
 })
 

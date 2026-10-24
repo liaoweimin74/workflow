@@ -8,9 +8,13 @@ import { describe, expect, it } from 'vitest'
 
 import { generatePageUni } from '../../uni/emit-uni'
 import cardlist from '../fixtures/corpus/cardlist_test.json'
+import fcTablePlain from '../fixtures/fc-table/plain.json'
+import fcTableRich from '../fixtures/fc-table/rich.json'
 import detailSteps from '../fixtures/corpus/page_detail_steps_demo.json'
 import testPage from '../fixtures/test_page.schema.json'
 import { CLIENT } from './client-fixture'
+
+const clone = (v: unknown) => JSON.parse(JSON.stringify(v))
 
 describe('generatePageUni — 编排与四类产物（Task 3.1）', () => {
   it('语料页 schema → files 含四类产物（相对 uni-shell 路径）', () => {
@@ -151,6 +155,32 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     // 6.2 起 page-table 出 uni-table 简表（emit-widget 装配），不再 todo 挂点
     expect(sfc).toContain('<uni-table :data="custTable1Rows" :loading="custTable1Loading">')
     expect(sfc).not.toMatch(/<!-- lc:todo node=n\d+ type=page-table/)
+  })
+
+  it('fc-table 语料：fcTable → 纵向堆叠块装配（Task 6.3）；rich 语料几何合并语义不出、格序 (row,col)', () => {
+    const { files, report } = generatePageUni(clone(fcTablePlain) as any, {
+      pageKey: 'fc_plain',
+      pageName: '布局表格',
+      client: CLIENT,
+    })
+    const sfc = files['src/pages/gen/fc_plain.vue']
+    expect(sfc).toContain('<view class="lc-ftable">')
+    expect(sfc).toContain('<view class="lc-ftable__cell">')
+    expect(sfc).toMatch(/<!-- lc:todo node=n1\.f1 type=dash-kpi field=kpiA /)
+    expect(sfc).not.toMatch(/<!-- lc:todo node=n1 type=fcTable/)
+
+    const rich = generatePageUni(clone(fcTableRich) as any, {
+      pageKey: 'fc_rich',
+      pageName: '布局表格rich',
+      client: CLIENT,
+    })
+    const richSfc = rich.files['src/pages/gen/fc_rich.vue']
+    // 非 7.x 子件（无）→ 全部 todo；合并覆盖格（notice1 slot=2:2）归 home 2:0 块
+    expect(richSfc).toContain('style="width: 200px; height: 120px"')
+    expect(richSfc).toContain('class="lc-ftable__cell hero-cell"')
+    expect(richSfc).not.toContain('rowspan')
+    // 几何视觉键节点级登记进报告（unsupported 有消费者：报告与产物同一份真相）
+    expect(report.unsupported.some((u) => u.key === 'table-geometry')).toBe(true)
   })
 
   it('script 链装配（5.3）：函数体照搬普通函数 + 材料注入（message→uniMessage、page 常量）', () => {

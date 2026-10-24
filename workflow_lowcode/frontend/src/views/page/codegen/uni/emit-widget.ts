@@ -1,6 +1,7 @@
 /**
  * uni 展示组件族出码（Task 5.2）：page-steps / page-detail / page-data-container。
  * Task 6.2：page-table → uni-table 简表（数据组件，接 useUniList）。
+ * Task 6.3：fcTable → 纵向堆叠降级（放弃合并单元格语义，非空 home 格按 (row,col) 纵排）。
  *
  * spec「组件映射保真口径」：page-detail→堆叠详情、page-steps→uni-steps、
  * page-data-container→uni-popup 弹层；page-table→uni-table 简表（Task 6.1 spike 回填：
@@ -29,7 +30,7 @@
  * 其余组件类型返回 null（调用方落 lc:todo 挂点）。首行无缩进，页面装配统一加页内缩进。
  */
 import { jsonToTs } from '../emit'
-import { camelField, type IrNode, type IrPage, type Unsupported } from '../ir'
+import { camelField, kebab, type IrNode, type IrPage, type Unsupported } from '../ir'
 import { needsBlock } from '../chain-emit'
 import { rowOf, stepStatementsUni, usesRow } from './emit-list'
 
@@ -93,6 +94,8 @@ export function emitWidgetNode(node: IrNode, ir: IrPage): UniWidgetFragment | nu
       return emitPdc(node, ir)
     case 'page-table':
       return emitTable(node, ir)
+    case 'fcTable':
+      return emitFcTable(node, ir)
     default:
       return null
   }
@@ -567,4 +570,63 @@ function emitTable(node: IrNode, ir: IrPage): UniWidgetFragment {
   ]
 
   return { template: T.join('\n'), script: S, imports, unsupported }
+}
+
+/**
+ * fcTable → 纵向堆叠降级（Task 6.3，design 决策 2）：web 静态 <table> 还原 row/col/合并
+ * 几何（IrTable.cells 只含可见 home 格，被合并覆盖格的子归 home），uni 放弃合并单元格
+ * 语义 —— 非空 home 格按 (row,col) 字典序纵排成块（.lc-ftable__cell），逐格 style/class
+ * 照落（键在 TABLE_RULE_CONTRACT 已登记 derived，不静默消失）；几何视觉键（border/mini/
+ * formStyle/borderWidth/borderColor + layout 合并）无纵排对位，节点级一条 unsupported
+ * 登记（不是逐键散报 —— 降级是节点级决策）。parse 侧格内字段控件已整字段降级（静态
+ * 表格不是表单），格内只剩 widget/list 族与嵌套 fcTable：复用 emitWidgetNode 分派
+ * （嵌套 fcTable 自然递归），null → lc:todo 挂点（同 5.2 纪律）；空格不出块（无内容
+ * 块是死 UI，同 5.2「空钩子不出」）。script/imports 收子片段（list 族格内时并入）。
+ */
+function emitFcTable(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const t = node.table!
+  const unsupported: Unsupported[] = [
+    {
+      path: node.artifact.rulePath,
+      type: node.artifact.type,
+      key: 'table-geometry',
+      message: 'fcTable 合并单元格/边框等几何视觉 uni 无纵排对位（design 决策 2 纵向堆叠），逐格内容保留',
+    },
+  ]
+  const T: string[] = [`<!-- ${node.artifact.anchor} -->`, '<view class="lc-ftable">']
+  const scripts: string[] = []
+  const imports: string[] = []
+  for (const cell of t.cells) {
+    if (!cell.children.length) continue // 空格不出块：无内容块是死 UI
+    const styleText = cellStyleText(cell.style)
+    const cls = ['lc-ftable__cell', ...(cell.className ? [cell.className] : [])].join(' ')
+    T.push(`  <view class="${cls}"${styleText ? ` style="${styleText}"` : ''}>`)
+    for (const c of cell.children) {
+      if (c.degraded) {
+        T.push(`    <!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} ${c.degradeReason ?? 'parse 降级'} -->`)
+        continue
+      }
+      const frag = emitWidgetNode(c, ir)
+      if (frag) {
+        T.push(...frag.template.split('\n').map((l) => `    ${l}`))
+        scripts.push(...frag.script)
+        imports.push(...frag.imports)
+        unsupported.push(...frag.unsupported)
+      } else {
+        T.push(`    <!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`)
+      }
+    }
+    T.push('  </view>')
+  }
+  T.push('</view>')
+  return { template: T.join('\n'), script: scripts, imports, unsupported }
+}
+
+/** fcTable 格 style 对象 → 内联串（与 web emit.styleText 同规则：非空值 `kebab: v` 以 `; ` 连接） */
+function cellStyleText(style: Record<string, unknown> | undefined): string {
+  if (!style) return ''
+  return Object.entries(style)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${kebab(String(k))}: ${String(v)}`)
+    .join('; ')
 }

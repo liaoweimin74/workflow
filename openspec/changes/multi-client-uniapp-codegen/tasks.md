@@ -42,7 +42,7 @@
 
 - [x] 6.1 uni-table spike：固定列/横向滚动真机表现实测，1 天内出结论并回填 design（design Risks 第 1 条）（可自动化部分已完成：uni-ui@1.5.12 源码核查——横向滚动 ✓ / 固定列 ✗ 收窄预案触发 / selection ✓；mp-weixin 真机触感实测归 10.3 人工清单）
 - [x] 6.2 page-table → uni-table 简表：横向滚动 + 操作「···」弹层 + 搜索/分页适配；按钮/列/排序链出口按 ACTION_OPS 白名单接线（spec: uniapp-codegen-target 场景「page-table 出码为 uni-table 简表」）
-- [ ] 6.3 fcTable 纵向堆叠降级（放弃合并单元格语义，slot 单元按行堆叠）（spec: uniapp-codegen-target「组件映射保真口径」）
+- [x] 6.3 fcTable 纵向堆叠降级（放弃合并单元格语义，slot 单元按行堆叠）（spec: uniapp-codegen-target「组件映射保真口径」）
 - [ ] 6.4 tableForm 卡片式子列表编辑器（每行一张卡片、字段纵向排，增删/上下限沿用 config）（同上）
 
 ## 7. 图表（M3）

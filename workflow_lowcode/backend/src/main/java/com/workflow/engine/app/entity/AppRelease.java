@@ -53,6 +53,12 @@ public class AppRelease {
     private String error;
 
     /**
+     * 体验版二维码地址（小程序 miniprogram-ci 上传回传，Task 9.3）。
+     */
+    @Column(name = "uploaded_qr_url", length = 512)
+    private String uploadedQrUrl;
+
+    /**
      * 状态：CREATED / BUILDING / BUILT / UPLOADED / FAILED。
      */
     @Column(name = "status", length = 32, nullable = false)
@@ -98,6 +104,9 @@ public class AppRelease {
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
+
+    public String getUploadedQrUrl() { return uploadedQrUrl; }
+    public void setUploadedQrUrl(String uploadedQrUrl) { this.uploadedQrUrl = uploadedQrUrl; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

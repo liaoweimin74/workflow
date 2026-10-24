@@ -14,7 +14,9 @@ public class AppReleaseResponse {
     private Integer version;
     private String snapshotJson;
     private String artifactUrl;
+    private String uploadedQrUrl;
     private String status;
+    private String error;
     private String createdBy;
     private LocalDateTime createdAt;
 
@@ -36,8 +38,14 @@ public class AppReleaseResponse {
     public String getArtifactUrl() { return artifactUrl; }
     public void setArtifactUrl(String artifactUrl) { this.artifactUrl = artifactUrl; }
 
+    public String getUploadedQrUrl() { return uploadedQrUrl; }
+    public void setUploadedQrUrl(String uploadedQrUrl) { this.uploadedQrUrl = uploadedQrUrl; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getError() { return error; }
+    public void setError(String error) { this.error = error; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

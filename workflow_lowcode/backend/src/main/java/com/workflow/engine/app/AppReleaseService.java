@@ -171,7 +171,9 @@ public class AppReleaseService {
         vo.setVersion(release.getVersion());
         vo.setSnapshotJson(release.getSnapshotJson());
         vo.setArtifactUrl(release.getArtifactUrl());
+        vo.setUploadedQrUrl(release.getUploadedQrUrl());
         vo.setStatus(release.getStatus());
+        vo.setError(release.getError());
         vo.setCreatedBy(release.getCreatedBy());
         vo.setCreatedAt(release.getCreatedAt());
         return vo;

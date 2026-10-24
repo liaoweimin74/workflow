@@ -15,17 +15,21 @@
   · 空态与错误都写成话，不塌成空白格让人误读。
 
 本组件只由 PageDesigner 在 import.meta.env.DEV 下动态引入（uni 出码栈 + 构建通道
-不进生产包）；二维码属 Task 8.3（依赖 9.3 上传链路），此处只留占位说明。
+不进生产包）；二维码入口（Task 8.3）走 9.3 发布链路（建快照 → 构建 mp-weixin →
+miniprogram-ci 上传 → uploadedQrUrl），目标端判定与链路在 uni-qr-run。
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { runUniArtifactPreview } from './uni-preview-run'
+import { resolveUniQrAvailability, runUniQrPreview, type UniQrTarget } from './uni-qr-run'
 
 const props = defineProps<{
   /** 页签当前是否被点亮：构建是贵操作，只在点亮时跑 */
   active: boolean
   pageKey: string
   pageName?: string
+  /** 页面归属应用 ID：二维码入口按 App 解析小程序客户端（Task 8.3） */
+  appId?: string | null
   getSchema: () => { rule: any[]; option: any; dataSources: any[]; actions: any[] }
 }>()
 
@@ -86,7 +90,58 @@ function build() {
     })
 }
 
-watch(() => props.active, (on) => { if (on) build() }, { immediate: true })
+// ----- Task 8.3：小程序体验版预览二维码（发布链路） -----
+const qrChecking = ref(false)
+/** 可用的小程序客户端（null = 目标端不具备条件，此时只有 qrReason 可说话） */
+const qrTarget = ref<UniQrTarget | null>(null)
+const qrReason = ref('')
+const qrBusy = ref(false)
+const qrError = ref('')
+const qrUrl = ref('')
+
+/** 点亮时解析目标端：MP_WEIXIN 且 Client 已配 appid 才给二维码入口 */
+function checkQr() {
+  qrChecking.value = true
+  qrError.value = ''
+  resolveUniQrAvailability(props.appId)
+    .then((out) => {
+      qrTarget.value = out.available ? out.target : null
+      qrReason.value = out.available ? '' : out.reason
+    })
+    .catch((e: any) => {
+      qrTarget.value = null
+      qrReason.value = e?.message || String(e)
+    })
+    .finally(() => {
+      qrChecking.value = false
+    })
+}
+
+/** 点「生成体验版二维码」才跑发布链路（上传是贵操作，也是「发布」语义） */
+function makeQr() {
+  qrBusy.value = true
+  qrError.value = ''
+  runUniQrPreview(props.appId)
+    .then((out) => {
+      if (!out.available) {
+        qrReason.value = out.reason
+        qrUrl.value = ''
+        return
+      }
+      qrUrl.value = out.qrUrl
+    })
+    .catch((e: any) => {
+      // 失败清掉旧二维码：扫到上一版比没有更糟
+      qrUrl.value = ''
+      qrError.value = e?.message || String(e)
+    })
+    .finally(() => {
+      qrBusy.value = false
+    })
+}
+
+// 点亮才干活：构建是贵操作，二维码目标解析要走网络（都在 watch 之后定义，避免 TDZ）
+watch(() => props.active, (on) => { if (on) { build(); checkQr() } }, { immediate: true })
 </script>
 
 <template>
@@ -137,9 +192,34 @@ watch(() => props.active, (on) => { if (on) build() }, { immediate: true })
 
     <p v-else-if="!error" class="uni-artifact-pane__idle">{{ busy ? '正在构建 H5 产物…' : '还没有产物，点「构建并预览」开始' }}</p>
 
+    <!-- 小程序端预览二维码（Task 8.3）：目标端为 MP_WEIXIN 且 Client 已配 appid 才有入口 -->
+    <div class="uni-artifact-pane__qr">
+      <p class="uni-artifact-pane__qr-title">小程序体验版预览</p>
+      <p v-if="qrChecking" class="uni-artifact-pane__qr-note">正在解析小程序客户端…</p>
+      <template v-else-if="qrTarget">
+        <p class="uni-artifact-pane__qr-note">
+          客户端「{{ qrTarget.clientName }}」（appid {{ qrTarget.appid }}）· 发布链路：建快照 → 构建 mp-weixin → miniprogram-ci 上传体验版
+        </p>
+        <div class="uni-artifact-pane__qr-row">
+          <el-button class="uni-artifact-pane__qr-build" size="small" :loading="qrBusy" @click="makeQr">
+            生成体验版二维码
+          </el-button>
+          <img
+            v-if="qrUrl"
+            class="uni-artifact-pane__qr-img"
+            :src="qrUrl"
+            alt="微信开发者工具预览二维码"
+          />
+        </div>
+        <p v-if="qrUrl" class="uni-artifact-pane__qr-note">用微信开发者工具扫此二维码（或「预览」）打开体验版</p>
+      </template>
+      <p v-else class="uni-artifact-pane__qr-note">{{ qrReason }}</p>
+      <p v-if="qrError" class="uni-artifact-pane__qr-error" role="alert">{{ qrError }}</p>
+    </div>
+
     <p class="uni-artifact-pane__hint">
       以上是按当前画布定义（含未保存的改动）构建的 uni 产物 H5，落盘 uni-shell/src/ 并构建后由本地静态服务承载。
-      小程序体验版与二维码在「发布」链路（Task 9.3）接入后开放。
+      小程序端体验版二维码按该 App 的小程序客户端走发布链路生成（上传即体验版发布，请确认后再点）。
     </p>
   </div>
 </template>
@@ -248,5 +328,47 @@ watch(() => props.active, (on) => { if (on) build() }, { immediate: true })
   margin: 0;
   font-size: 12px;
   color: #909399;
+}
+.uni-artifact-pane__qr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
+}
+.uni-artifact-pane__qr-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #303133;
+}
+.uni-artifact-pane__qr-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #606266;
+}
+.uni-artifact-pane__qr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.uni-artifact-pane__qr-img {
+  width: 160px;
+  height: 160px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fff;
+}
+.uni-artifact-pane__qr-error {
+  margin: 0;
+  padding: 8px;
+  border-radius: 4px;
+  background: #fef0f0;
+  color: #b03232;
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

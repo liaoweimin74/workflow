@@ -36,6 +36,11 @@ describe('PageDesigner 预览弹窗的产物预览页签', () => {
     // 两个页签各引一次（出码 + 产物预览），定义只有一个出口
     expect(SOURCE.split(':get-schema="canvasSchema"').length - 1).toBe(2)
   })
+
+  it('产物预览页签带上应用上下文：二维码入口要按 App 解析小程序客户端（Task 8.3）', () => {
+    // 二维码链路是 per-App 的（Release 挂 Client，页面归属 App），appId 必须从页定义带下去
+    expect(SOURCE).toMatch(/:is="UniArtifactPreviewPane"[\s\S]{0,400}:app-id="pageAppId"/)
+  })
 })
 
 describe('runUniArtifactPreview（uni-preview-run 客户端通道）', () => {

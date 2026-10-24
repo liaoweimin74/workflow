@@ -89,6 +89,7 @@
                 :active="status === 'uni-artifact'"
                 :page-key="pageKey"
                 :page-name="pageName || pageKey"
+                :app-id="pageAppId"
                 :get-schema="canvasSchema"
               />
             </el-tab-pane>

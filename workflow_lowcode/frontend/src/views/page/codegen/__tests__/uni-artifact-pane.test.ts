@@ -18,6 +18,15 @@ vi.mock('../uni-preview-run', async (importOriginal) => {
   return { ...actual, runUniArtifactPreview: (...args: any[]) => runUniArtifactPreviewSpy(...args) }
 })
 
+// Task 8.3：二维码入口的可用性判定与发布链路（本例只管「页签怎么说话」，链路本身由
+// uni-qr-run 的用例守）
+const resolveQrSpy = vi.hoisted(() => vi.fn())
+const runQrSpy = vi.hoisted(() => vi.fn())
+vi.mock('../uni-qr-run', () => ({
+  resolveUniQrAvailability: (...args: any[]) => resolveQrSpy(...args),
+  runUniQrPreview: (...args: any[]) => runQrSpy(...args),
+}))
+
 import UniArtifactPreviewPane from '../UniArtifactPreviewPane.vue'
 
 const OK_OUT = {
@@ -34,6 +43,7 @@ const open = (props: Record<string, any> = {}) =>
       active: true,
       pageKey: 'test_page',
       pageName: '测试页',
+      appId: 'app1',
       getSchema: () => structuredClone(testPage) as any,
       ...props,
     },
@@ -43,6 +53,8 @@ const open = (props: Record<string, any> = {}) =>
 beforeEach(() => {
   vi.clearAllMocks()
   runUniArtifactPreviewSpy.mockResolvedValue(OK_OUT)
+  // 缺省：没有可出二维码的小程序客户端（8.1 的用例不关心二维码区）
+  resolveQrSpy.mockResolvedValue({ available: false, reason: '当前应用未配置已填写 appid 的微信小程序客户端' })
 })
 
 describe('UniArtifactPreviewPane', () => {
@@ -50,6 +62,8 @@ describe('UniArtifactPreviewPane', () => {
     open({ active: false })
     await flushPromises()
     expect(runUniArtifactPreviewSpy).not.toHaveBeenCalled()
+    // 二维码目标解析同口径：不点亮不查客户端
+    expect(resolveQrSpy).not.toHaveBeenCalled()
 
     const closed = mount(UniArtifactPreviewPane, {
       props: { active: false, pageKey: 'test_page', getSchema: () => structuredClone(testPage) as any },
@@ -133,5 +147,86 @@ describe('UniArtifactPreviewPane', () => {
     const wrapper = open()
     await flushPromises()
     expect(wrapper.find('.uni-artifact-pane__report').text()).toContain('8/8')
+  })
+})
+
+// ----- Task 8.3：小程序端预览二维码入口（spec: mobile-preview「小程序端预览给出二维码」） -----
+describe('UniArtifactPreviewPane 二维码入口', () => {
+  const AVAILABLE = {
+    available: true,
+    target: { clientId: 'c1', clientName: '商户端小程序', appid: 'wx-abc' },
+    pageCount: 2,
+  }
+  const QR_OUT = {
+    available: true,
+    qrUrl: '/artifacts/r1/qr.png',
+    releaseId: 'r1',
+    version: 3,
+    appid: 'wx-abc',
+    clientName: '商户端小程序',
+    pageCount: 2,
+  }
+
+  it('目标端为 MP_WEIXIN 且 Client 已配 appid：给出二维码入口（不自动跑发布链路）', async () => {
+    resolveQrSpy.mockResolvedValue(AVAILABLE)
+    const wrapper = open()
+    await flushPromises()
+    expect(wrapper.find('.uni-artifact-pane__qr-build').exists()).toBe(true)
+    // 说明朝向的是哪个 Client / appid——二维码不是「某一页」的，是这个小程序体验版的
+    expect(wrapper.find('.uni-artifact-pane__qr').text()).toContain('商户端小程序')
+    expect(wrapper.find('.uni-artifact-pane__qr').text()).toContain('wx-abc')
+    // 未点击前不该有任何上传（上传是贵操作，且是「发布」语义）
+    expect(runQrSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.uni-artifact-pane__qr-img').exists()).toBe(false)
+  })
+
+  it('点击生成：走发布链路并把 uploadedQrUrl 展示成二维码', async () => {
+    resolveQrSpy.mockResolvedValue(AVAILABLE)
+    runQrSpy.mockResolvedValue(QR_OUT)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.uni-artifact-pane__qr-build').trigger('click')
+    await flushPromises()
+    const img = wrapper.find('.uni-artifact-pane__qr-img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe('/artifacts/r1/qr.png')
+    expect(img.attributes('alt')).toContain('微信')
+    // 入口参数就是页面归属的应用
+    expect(runQrSpy).toHaveBeenCalledWith('app1')
+  })
+
+  it('目标端不具备条件：明说为什么没有二维码，不给按钮也不跑链路', async () => {
+    resolveQrSpy.mockResolvedValue({
+      available: false,
+      reason: '当前应用未配置已填写 appid 的微信小程序客户端，无法生成体验版二维码',
+    })
+    const wrapper = open()
+    await flushPromises()
+    expect(wrapper.find('.uni-artifact-pane__qr-build').exists()).toBe(false)
+    expect(wrapper.find('.uni-artifact-pane__qr-note').text()).toContain('appid')
+    expect(runQrSpy).not.toHaveBeenCalled()
+  })
+
+  it('二维码链路失败：错误写在二维码区并清掉旧二维码（不让人扫到上一版）', async () => {
+    resolveQrSpy.mockResolvedValue(AVAILABLE)
+    runQrSpy.mockResolvedValueOnce(QR_OUT)
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.find('.uni-artifact-pane__qr-build').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.uni-artifact-pane__qr-img').exists()).toBe(true)
+
+    runQrSpy.mockRejectedValueOnce(new Error('构建未成功（FAILED）：uni build 失败（exit 1）'))
+    await wrapper.find('.uni-artifact-pane__qr-build').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.uni-artifact-pane__qr-error').text()).toContain('构建未成功')
+    expect(wrapper.find('.uni-artifact-pane__qr-img').exists()).toBe(false)
+  })
+
+  it('页面没归属应用：直说解析不了客户端（不静默空白）', async () => {
+    resolveQrSpy.mockResolvedValue({ available: false, reason: '当前页面未归属应用，无法解析小程序客户端' })
+    const wrapper = open({ appId: null })
+    await flushPromises()
+    expect(wrapper.find('.uni-artifact-pane__qr-note').text()).toContain('未归属应用')
   })
 })

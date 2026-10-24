@@ -14,7 +14,7 @@
  *    后喂报告——「按端不支持」与「共享 parse 拒绝」在同一份清单里可见。
  */
 
-import { emitManifest } from '../emit'
+import { emitManifest, jsonToTs } from '../emit'
 import { materialsOf, scriptFunction } from '../chain-emit'
 import type { GenerateResult, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
@@ -167,6 +167,10 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
     S.push('}')
   }
   if (containerFrag) S.push(...containerFrag.script)
+  // 具名常量（对位 web emit.ts:244）：parse 把 config 族（嵌套 group/tableForm 的
+  // <field>Config 等）登记进 ir.consts，片段模板只按名引用——声明必须由页面装配统一给出，
+  // 漏了就是运行期 ReferenceError 直接中断整页（片段用例只覆盖片段，覆盖不到这一层）。
+  for (const [name, value] of ir.consts) S.push(`const ${name} = ${jsonToTs(value)}`)
   // 图表片段的 echarts.use 行按首现收敛为一行（7.3；仅滤该行，其余 script 行原样）
   const dedupedScripts = dedupeUniEchartsUse(scripts)
   // 材料常量（script 白名单上下文的 uni 对位，运行期事件触发时求值，声明顺序无关）

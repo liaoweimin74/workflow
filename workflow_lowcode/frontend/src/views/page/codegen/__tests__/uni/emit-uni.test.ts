@@ -100,6 +100,24 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(manifest.unsupported.some((u) => u.key === 'viewDetail')).toBe(true)
   })
 
+  it('页装配声明 ir 常量（config 族 <field>Config）：模板引用前必须先声明，否则整页运行期中断', () => {
+    const { files } = generatePageUni(JSON.parse(JSON.stringify(cardlist)) as any, {
+      pageKey: 'cardlist',
+      pageName: '卡片列表',
+      client: CLIENT,
+    })
+    const sfc = files['src/pages/gen/cardlist.vue']
+    // 嵌套 tableForm/group 的 config 常量：模板按名引用（itemsConfig.min / deliveryPlanConfig.addable …），
+    // 由 parse 登记进 ir.consts、页面装配统一声明（对位 web emit.ts:244）；漏声明则运行期
+    // ReferenceError 直接中断整页渲染（背后是「片段只引用、装配忘记声明」这一类缺陷）
+    expect(sfc).toContain('const itemsConfig = {')
+    expect(sfc).toContain('const deliveryPlanConfig = {')
+    // 不变量：SFC 里出现的每个 <name>Config. 引用都要有同名 const 声明
+    const refs = [...sfc.matchAll(/(\w+Config)\./g)].map((m) => m[1])
+    const decls = [...sfc.matchAll(/const (\w+Config) = /g)].map((m) => m[1])
+    expect([...new Set(refs)].filter((r) => !decls.includes(r))).toEqual([])
+  })
+
   it('容器段装配（Task 5.2）：import 按源合并（vue 单行）+ 容器脚本先于列表片段脚本', () => {
     const schema = {
       rule: [

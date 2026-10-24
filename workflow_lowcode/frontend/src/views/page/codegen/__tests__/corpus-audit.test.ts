@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest'
 
 import { TYPE_CONTRACTS } from '../contract'
 import { generatePage, type GenerateReport } from '../generate'
+import { PROFILES, supports } from '../target-profile'
+import { generatePageUni } from '../uni/emit-uni'
 import { BASELINE } from './baseline'
 
 const corpus = import.meta.glob('./fixtures/corpus/*.json', { eager: true, import: 'default' }) as Record<
@@ -48,10 +50,16 @@ interface Row {
   threw: string | null
 }
 
-const memo: Row[] = []
+const memo: Record<'web' | 'uniapp', Row[]> = { web: [], uniapp: [] }
 
-function audit(): Row[] {
-  if (memo.length) return memo
+/**
+ * 一台仪器量两个目标（Task 10.2，spec「per-target 可出码率 Gate」）：
+ * 只有「同一份采集口径 + 同一个 buildReport」下的 web/uniapp 数字才可比，
+ * 所以这里只把生成器调用分叉（web=generatePage / uniapp=generatePageUni），
+ * 分桶、空洞、重命名核对全部共用。
+ */
+function audit(target: 'web' | 'uniapp' = 'web'): Row[] {
+  if (memo[target].length) return memo[target]
   for (const { key, schema } of pages) {
     let threw: string | null = null
     let nodes: Row['nodes'] = []
@@ -67,16 +75,40 @@ function audit(): Row[] {
     const bHoles: { path: string; kind: string }[] = []
     const failedRenameList: { path: string; to: string; detail: string; bucket: 'A' | 'B' | 'C' }[] = []
     try {
-      const { report } = generatePage(schema as any, { pageKey: key, pageName: key, exportedAt: 'corpus-audit' })
+      const { report } =
+        target === 'uniapp'
+          ? (generatePageUni(schema as any, {
+              pageKey: key,
+              pageName: key,
+              client: { key, pages: [{ key, title: key }] },
+            }) as unknown as { report: GenerateReport })
+          : generatePage(schema as any, { pageKey: key, pageName: key, exportedAt: 'corpus-audit' })
       nodes = report.nodes
       unsupported = report.unsupported
       registeredNodes = report.codegenRate.registeredNodes
-      emittableNodes = report.codegenRate.emittableNodes
-      bucketA = report.buckets.A
-      bucketB = report.buckets.B
-      bucketC = report.buckets.C
-      holes = report.holes.length
+      // per-target 数字（spec「per-target 可出码率 Gate」）：web 侧与顶层同值，
+      // uniapp 侧的分母排除 web-only 组件（能力过滤与契约阻断正交）——读错这一层
+      // 就等于拿 web 的账去判 uniapp 的债。
+      emittableNodes = report.codegenRateByTarget[target].emittableNodes
+      bucketA = report.bucketsByTarget[target].A
+      bucketB = report.bucketsByTarget[target].B
+      bucketC = report.bucketsByTarget[target].C
+      // 空洞总数 = 按 target 过滤后的三桶之和（与 bucketsByTarget 同源，避免「总数含 web-only、桶不含」的矛盾）
+      holes = bucketA + bucketB + bucketC
+      // 逐条空洞的桶归属同样按 target 过滤：web-only 子树上的空洞在 uniapp 目标
+      // 已整体登记 unsupported（随组件一起不交付），不算 uniapp 的债。
+      const ownerSupported = (path: string) => {
+        if (target === 'web') return true
+        let deepest: any
+        for (const n of report.nodes) {
+          if (path === n.path || path.startsWith(`${n.path}.`) || path.startsWith(`${n.path}[`)) {
+            if (!deepest || n.path.length > deepest.path.length) deepest = n
+          }
+        }
+        return deepest ? supports(PROFILES.uniapp, deepest.type) : true
+      }
       for (const h of report.holes) {
+        if (!ownerSupported(String(h.path))) continue
         if (h.bucket === 'B') bHoles.push({ path: h.path, kind: h.kind })
         else if (h.bucket === 'C') cHoles.push({ path: h.path, kind: h.kind, owner: h.owner || '（不属于任何 rule 节点）' })
       }
@@ -91,7 +123,7 @@ function audit(): Row[] {
     } catch (e: any) {
       threw = `${e.name}: ${e.message}`
     }
-    memo.push({
+    memo[target].push({
       key,
       nodes,
       registeredNodes,
@@ -109,7 +141,7 @@ function audit(): Row[] {
       threw,
     })
   }
-  return memo
+  return memo[target]
 }
 
 describe('语料体检：现网真实页面批量出码回读', () => {
@@ -142,6 +174,41 @@ describe('语料体检：现网真实页面批量出码回读', () => {
       emittable / total,
       `可出码率 ${emittable}/${total} 低于基线 ${BASELINE.corpus.emittableNodes}/${BASELINE.corpus.totalNodes}`,
     ).toBeGreaterThanOrEqual(BASELINE.corpus.nodeRate)
+  })
+
+  // ----- Task 10.2：per-target（uniapp）持续 Gate（spec: uniapp-codegen-target「per-target 可出码率 Gate」） -----
+
+  it('语料体检覆盖 uniapp 目标：每页都能跑完，C 保真桶必须为 0', () => {
+    for (const r of audit('uniapp')) {
+      expect(r.threw, `${r.key} uniapp 出码崩溃`).toBeNull()
+      // 口径注记：V1 的 uni 报告不带产物回导（emit-uni 调 buildReport 时 files 传空），
+      // C 桶（已登记组件子树上的不忠实出码）在 uniapp 侧结构上恒 0。这条断言是
+      // 「将来接上 uni 产物回导后 C 桶非零即失败」的前置闸门，不是当下的假绿。
+      expect(r.bucketC, `${r.key} uniapp 已登记组件出码不忠实：${JSON.stringify(r.cHoles)}`).toBe(0)
+    }
+  })
+
+  it('uniapp 持续 Gate：分桶与基线一致，可出码率不得低于基线，C 桶非零即失败', () => {
+    const rs = audit('uniapp')
+    const sum = (k: 'bucketA' | 'bucketB' | 'bucketC') => rs.reduce((s, r) => s + r[k], 0)
+    const total = rs.reduce((s, r) => s + r.nodes.length, 0)
+    const emittable = rs.reduce((s, r) => s + r.emittableNodes, 0)
+    expect(total).toBe(BASELINE.corpusUniapp.totalNodes)
+    expect(rs.reduce((s, r) => s + r.registeredNodes, 0)).toBe(BASELINE.corpusUniapp.registeredNodes)
+    expect(emittable).toBe(BASELINE.corpusUniapp.emittableNodes)
+    expect(sum('bucketA')).toBe(BASELINE.corpusUniapp.bucketA)
+    expect(sum('bucketB')).toBe(BASELINE.corpusUniapp.bucketB)
+    expect(sum('bucketC'), 'uniapp C 桶必须为 0').toBe(0)
+    expect(
+      emittable / total,
+      `uniapp 可出码率 ${emittable}/${total} 低于基线 ${BASELINE.corpusUniapp.emittableNodes}/${BASELINE.corpusUniapp.totalNodes}`,
+    ).toBeGreaterThanOrEqual(BASELINE.corpusUniapp.nodeRate)
+  })
+
+  it('web 与 uniapp 两套分桶同源可比：节点分母一致，差异只在两端可达性', () => {
+    const web = audit('web')
+    const uni = audit('uniapp')
+    expect(uni.reduce((s, r) => s + r.nodes.length, 0)).toBe(web.reduce((s, r) => s + r.nodes.length, 0))
   })
 
   it('分母诚实：覆盖率只算「有契约且出码器真走得到」，走不到的按最外层阻断点归因', () => {
@@ -206,6 +273,32 @@ describe('语料体检：现网真实页面批量出码回读', () => {
         `（其中仅登记未接通${regNodes - emitNodes}）  ` +
         `空洞 A广度${sum('bucketA')} / B页面${sum('bucketB')} / C保真${sum('bucketC')}`,
     )
+    console.log('\n================ uniapp 目标分桶（Task 10.2 per-target Gate） ================')
+    {
+      const uni = audit('uniapp')
+      const uniTotal = uni.reduce((s, r) => s + r.nodes.length, 0)
+      const uniEmit = uni.reduce((s, r) => s + r.emittableNodes, 0)
+      const uniSum = (k: 'bucketA' | 'bucketB' | 'bucketC') => uni.reduce((s, r) => s + r[k], 0)
+      console.log(
+        `uniapp 可出码率 ${uniEmit}/${uniTotal} = ${((uniEmit / uniTotal) * 100).toFixed(1)}%  ` +
+          `空洞 A广度${uniSum('bucketA')} / B页面${uniSum('bucketB')} / C保真${uniSum('bucketC')}`,
+      )
+      // 「不可出码」在 uniapp 侧不是静默丢弃：由 unsupported 清单按最外层阻断点逐条登记
+      // （V1 未接 uni 产物回导，空洞为 0，账目看这里）。
+      const uniUnsup = uni.reduce((s, r) => s + r.unsupported.length, 0)
+      console.log(
+        `uniapp 不可出码 ${uniTotal - uniEmit} 节点，unsupported 清单 ${uniUnsup} 条（按最外层阻断点登记，含 web-only 能力过滤）`,
+      )
+      for (const r of uni) {
+        if (!r.nodes.length) continue
+        console.log(
+          `${r.key.padEnd(26)} 可出码${String(r.emittableNodes).padStart(3)}/${String(r.nodes.length).padStart(3)}  ` +
+            `unsup${String(r.unsupported.length).padStart(3)}  ` +
+            `A${r.bucketA} B${r.bucketB} C${r.bucketC}`,
+        )
+      }
+    }
+
     console.log('\n================ 已登记却走不到的节点（按阻断原因归并） ================')
     const blockers = new Map<string, string[]>()
     for (const r of rs) {

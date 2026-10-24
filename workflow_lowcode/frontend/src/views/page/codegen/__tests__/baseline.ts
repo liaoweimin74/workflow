@@ -43,4 +43,23 @@ export const BASELINE = {
     bucketB: 0,
     bucketC: 0,
   },
+  /**
+   * uniapp 目标基线（Task 10.2，spec: uniapp-codegen-target「per-target 可出码率 Gate」）。
+   *
+   * 数字来自报告自身的 per-target 口径（codegenRateByTarget.uniapp / bucketsByTarget.uniapp），
+   * 不是 web 顶层数字的照抄：分母排除 web-only 组件（语料里没有 web-only 页，故总数与 web 相同）。
+   * 差异只在 A 桶：web 的 8 条 A 桶空洞全落在 tmp_widget_verify 的未登记 material 子树，
+   * 且由**产物回导**发现；V1 的 uni 报告不带产物回导（emit-uni 调 buildReport 时 files 传空），
+   * uniapp 的「不可出码」改由 unsupported 清单承担（不静默丢弃），故 uniapp 侧 A/B/C 全 0。
+   * 该表仍是 Gate：接上 uni 产物回导后 C 桶非零即失败；可出码率下降即失败。
+   */
+  corpusUniapp: {
+    totalNodes: 98,
+    registeredNodes: 95,
+    emittableNodes: 94,
+    nodeRate: 94 / 98,
+    bucketA: 0,
+    bucketB: 0,
+    bucketC: 0,
+  },
 } as const

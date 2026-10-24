@@ -67,6 +67,6 @@
 ## 10. 验证与 Gate（贯穿）
 
 - [ ] 10.1 双渲染 e2e 延伸：宿主 vs uni-app H5 产物（列表/表单容器/dashboard 三类，Playwright 对位 P2 D5 口径）（spec: uniapp-codegen-target / mobile-preview）
-- [ ] 10.2 语料体检 uniapp 目标基线 Gate：C 桶 0、可出码率 ≥ 基线（spec: uniapp-codegen-target「per-target 可出码率 Gate」）
+- [x] 10.2 语料体检 uniapp 目标基线 Gate：C 桶 0、可出码率 ≥ 基线（spec: uniapp-codegen-target「per-target 可出码率 Gate」）（实现口径：`corpus-audit.test.ts` 的 `audit()` **参数化为 `audit(target)`**——一台仪器量两个目标（`web` 走 `generatePage`、`uniapp` 走 `generatePageUni`），分桶/空洞/重命名核对共用同一份采集口径；数字一律读**报告自身的 per-target 字段**（`codegenRateByTarget[target]` / `bucketsByTarget[target]`），不是顶层 web 数字照抄——读错这一层等于拿 web 的账判 uniapp 的债；逐条空洞的桶归属同样按 target 过滤 web-only 子树（`supports(PROFILES.uniapp, owner.type)`）。基线入 `baseline.ts` 的 `corpusUniapp`（**实测** 98 节点 / 95 有契约 / 94 可出码 = 95.9% / A0 B0 C0），Gate 断言：三桶计数与基线一致、C 桶必须为 0、可出码率 ≥ 基线、web 与 uniapp 节点分母一致（同源可比）。报表新增「uniapp 目标分桶」段：总率 + 逐页 可出码/unsupported/三桶。**口径真相（实测而非假设）**：uniapp 侧 A/B/C 全 0 不是「更干净」，而是 V1 的 uni 报告**不做产物回导**（`emit-uni` 调 `buildReport` 时 files 传空 → `reverseToSchema` 不参与）；web 侧那 8 条 A 桶空洞全落在 `tmp_widget_verify` 的未登记 material 子树、且由回导发现。故 uniapp 的「不静默丢弃」由 unsupported 清单承担（40 条 / 12 页，按最外层阻断点登记，含 web-only 能力过滤），报表同段打印「不可出码 N 节点，unsupported K 条」供人工对账；C 桶断言是「将来接上 uni 产物回导后 C 桶非零即失败」的前置闸门，已在该用例注释里写明，不当假绿用。测试：corpus-audit 9 用例全绿（新增 uniapp 3 条：逐页不崩 + C 桶 0；分桶/率 Gate；两端分母一致）；`npx vitest run src/views/page/codegen` 451 通过（唯一失败仍是 `preview-middleware.test.ts` 5301 环境冲突））
 - [ ] 10.3 小程序真机人工校验清单：登录（wx.login→token）、列表、详情、提交、二维码预览
 - [ ] 10.4 存量回归：web 目标 golden 产物字节不变 + Web 动态渲染主链路全量回归（design Migration Plan）

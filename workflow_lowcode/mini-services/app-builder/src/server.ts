@@ -1,17 +1,23 @@
-// app-builder HTTP 服务（Task 9.2 Step 3）。
+// app-builder HTTP 服务（Task 9.2 Step 3 / Task 9.3 Step 3）。
 //
 // Java 后端（AppReleaseBuildService）经 RestClient POST /build 转发构建请求：
 //   {releaseId, platform, buildConfig, files}
 //   → uni-build.buildApp 落盘 + `uni build -p <platform>` + 归档
 //   → {ok:true, artifactUrl, artifactPath} | 4xx/5xx {ok:false, error}
 //
+// Java 后端（AppReleaseUploadService）经 RestClient POST /upload 转发体验版上传：
+//   {releaseId, platform, appId, privateKeyPath, version, desc}
+//   → mp-upload.uploadExperience 从归档产物上传 + 生成预览二维码
+//   → {ok:true, qrUrl} | 4xx/5xx {ok:false, error}
+//
 // 零运行时依赖（node:http）；TS 直跑（node --experimental-strip-types，
 // Node >= 22.6，engines 已钉）。buildConfig 在 V1 不参与 shell 工程
 // 改写（manifest appid 由 uni-shell 现状提供），先透传校验后忽略——
-// 9.3 上传（miniprogram-ci）才消费 appid 凭证。
+// 上传（miniprogram-ci）以 Client 的 appid/privateKeyPath 凭证消费。
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 // 显式 .ts 扩展名：node --experimental-strip-types 直跑 ESM 需要（vitest 亦兼容）
 import { buildApp } from './uni-build.ts'
+import { uploadExperience } from './mp-upload.ts'
 
 const MAX_BODY = 4_000_000
 
@@ -23,6 +29,8 @@ export interface ServerOptions {
   archiveRoot: string
   /** 构建替身（测试注入；缺省 buildApp 内部走 defaultSpawnUni） */
   buildFn?: typeof buildApp
+  /** 上传替身（测试注入；缺省 mp-upload.uploadExperience 内部走 realMiniCi） */
+  uploadFn?: typeof uploadExperience
 }
 
 export interface BuildRequestBody {
@@ -30,6 +38,15 @@ export interface BuildRequestBody {
   platform?: unknown
   buildConfig?: unknown
   files?: unknown
+}
+
+export interface UploadRequestBody {
+  releaseId?: unknown
+  platform?: unknown
+  appId?: unknown
+  privateKeyPath?: unknown
+  version?: unknown
+  desc?: unknown
 }
 
 function readBody(req: IncomingMessage, max: number): Promise<string> {
@@ -81,6 +98,35 @@ export async function handleBuild(
   return { status: 200, payload: { ok: true, artifactUrl: result.artifactUrl, artifactPath: result.artifactPath } }
 }
 
+/**
+ * 组装 uploadExperience 入参并执行；请求体形状问题归 400，上传失败归 500。
+ * 独立导出供测试直调（不占端口）。
+ */
+export async function handleUpload(
+  body: UploadRequestBody,
+  opts: Pick<ServerOptions, 'archiveRoot' | 'uploadFn'>,
+): Promise<{ status: number; payload: unknown }> {
+  const releaseId = typeof body.releaseId === 'string' ? body.releaseId : ''
+  const appId = typeof body.appId === 'string' ? body.appId : ''
+  const privateKeyPath = typeof body.privateKeyPath === 'string' ? body.privateKeyPath : ''
+  if (!releaseId) return { status: 400, payload: { ok: false, error: 'releaseId 不能为空' } }
+  if (!appId) return { status: 400, payload: { ok: false, error: 'appId 不能为空（按 Client 配置的上传凭证）' } }
+  if (!privateKeyPath) return { status: 400, payload: { ok: false, error: 'privateKeyPath 不能为空（按 Client 配置的上传私钥）' } }
+  const result = await (opts.uploadFn ?? uploadExperience)({
+    archiveRoot: opts.archiveRoot,
+    releaseId,
+    platform: typeof body.platform === 'string' && body.platform ? body.platform : undefined,
+    appId,
+    privateKeyPath,
+    version: typeof body.version === 'string' ? body.version : undefined,
+    desc: typeof body.desc === 'string' ? body.desc : undefined,
+  })
+  if (!result.ok) {
+    return { status: 500, payload: { ok: false, error: result.error } }
+  }
+  return { status: 200, payload: { ok: true, qrUrl: result.qrUrl } }
+}
+
 /** 创建 app-builder server（listen 由调用方控制，便于测试端口注入） */
 export function createAppBuilderServer(opts: ServerOptions): Server {
   return createServer(async (req, res) => {
@@ -97,6 +143,16 @@ export function createAppBuilderServer(opts: ServerOptions): Server {
           return sendJson(res, 400, { ok: false, error: `请求体解析失败：${e?.message || e}` })
         }
         const { status, payload } = await handleBuild(body, opts)
+        return sendJson(res, status, payload)
+      }
+      if (req.method === 'POST' && url.pathname === '/upload') {
+        let body: UploadRequestBody
+        try {
+          body = JSON.parse(await readBody(req, MAX_BODY))
+        } catch (e: any) {
+          return sendJson(res, 400, { ok: false, error: `请求体解析失败：${e?.message || e}` })
+        }
+        const { status, payload } = await handleUpload(body, opts)
         return sendJson(res, status, payload)
       }
       return sendJson(res, 404, { ok: false, error: 'not found' })

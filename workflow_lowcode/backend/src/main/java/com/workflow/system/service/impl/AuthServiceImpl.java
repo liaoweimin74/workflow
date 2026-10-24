@@ -101,7 +101,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public LoginResponse loginByMiniprogram(String code) {
-        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
+        return loginByMiniprogram(code, null);
+    }
+
+    @Override
+    @Transactional
+    public LoginResponse loginByMiniprogram(String code, String clientId) {
+        WechatMiniprogramClient.SessionInfo session = resolveSession(code, clientId);
         SysUserOpenid binding = userOpenidRepository
                 .findByAppIdAndOpenidAndIsDeleted(session.appId(), session.openid(), GlobalConstant.DELETED_NO)
                 .orElseThrow(() -> new BusinessException(401, "该微信未绑定平台账号，请先使用账号密码绑定"));
@@ -111,7 +117,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public LoginResponse bindMiniprogram(String code, String username, String password) {
-        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
+        return bindMiniprogram(code, username, password, null);
+    }
+
+    @Override
+    @Transactional
+    public LoginResponse bindMiniprogram(String code, String username, String password, String clientId) {
+        WechatMiniprogramClient.SessionInfo session = resolveSession(code, clientId);
         SysUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
         if (!passwordEncoder.matches(password, user.getPassword())) {
@@ -145,6 +157,17 @@ public class AuthServiceImpl implements AuthService {
         binding.setUnionid(session.unionid());
         userOpenidRepository.save(binding);
         return tokenResponse(user);
+    }
+
+    /**
+     * 换取微信会话（Task 9.4）：clientId 非空时用该 Client 的凭证
+     * （多实例，spec「小程序凭证多实例」）；为空时用全局配置（单 appid 部署后向兼容）。
+     */
+    private WechatMiniprogramClient.SessionInfo resolveSession(String code, String clientId) {
+        if (clientId == null || clientId.isBlank()) {
+            return miniprogramClient.code2Session(code);
+        }
+        return miniprogramClient.code2Session(miniprogramClient.forClientId(clientId), code);
     }
 
     private SysUser requireActiveUser(Long userId, String missingMessage) {

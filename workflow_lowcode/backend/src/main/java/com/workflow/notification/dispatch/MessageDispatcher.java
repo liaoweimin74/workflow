@@ -169,6 +169,8 @@ public class MessageDispatcher {
                 channelMessage.setContent(message.getContent() != null ? message.getContent().toString() : "");
                 channelMessage.setTemplateData(message.getContent());
                 channelMessage.setLinkTemplate(message.getLinkJson());
+                // 按 Client 凭证投递（Task 9.4）：消息内容可声明目标小程序 appId
+                channelMessage.setAppId(ChannelMessage.appIdFrom(message.getContent()));
 
                 ChannelDeliveryResult result = adapter.send(channelMessage);
                 if (result.isSuccess()) {

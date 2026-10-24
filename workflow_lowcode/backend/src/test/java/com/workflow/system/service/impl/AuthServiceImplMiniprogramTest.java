@@ -180,6 +180,50 @@ class AuthServiceImplMiniprogramTest {
         verify(openidRepository, never()).save(any());
     }
 
+    // ---------- Task 9.4：登录/绑定按 Client 凭证（spec「小程序凭证多实例」） ----------
+
+    @Test
+    void loginByMiniprogram_with_clientId_uses_that_client_credentials() {
+        WechatMiniprogramClient.Credentials creds =
+                new WechatMiniprogramClient.Credentials("wx-c1", "sec-c1");
+        when(miniprogramClient.forClientId("c1")).thenReturn(creds);
+        when(miniprogramClient.code2Session(creds, CODE))
+                .thenReturn(new WechatMiniprogramClient.SessionInfo("wx-c1", OPENID, "union-c1"));
+        SysUserOpenid boundToC1 = new SysUserOpenid();
+        boundToC1.setUserId(7L);
+        boundToC1.setAppId("wx-c1");
+        boundToC1.setOpenid(OPENID);
+        when(openidRepository.findByAppIdAndOpenidAndIsDeleted("wx-c1", OPENID, 0))
+                .thenReturn(Optional.of(boundToC1));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "customer", 1)));
+
+        LoginResponse response = service.loginByMiniprogram(CODE, "c1");
+
+        // 按该 Client 的 appId 查绑定（不是全局单例 appId）
+        verify(openidRepository).findByAppIdAndOpenidAndIsDeleted("wx-c1", OPENID, 0);
+        assertEquals(7L, response.user().id());
+    }
+
+    @Test
+    void bindMiniprogram_with_clientId_creates_binding_with_that_appId() {
+        WechatMiniprogramClient.Credentials creds =
+                new WechatMiniprogramClient.Credentials("wx-c1", "sec-c1");
+        when(miniprogramClient.forClientId("c1")).thenReturn(creds);
+        when(miniprogramClient.code2Session(creds, CODE))
+                .thenReturn(new WechatMiniprogramClient.SessionInfo("wx-c1", OPENID, "union-c1"));
+        when(userRepository.findByUsername("customer")).thenReturn(Optional.of(user(7L, "customer", 1)));
+        when(passwordEncoder.matches("secret", "encoded")).thenReturn(true);
+        when(openidRepository.findByAppIdAndOpenidAndIsDeleted("wx-c1", OPENID, 0)).thenReturn(Optional.empty());
+        when(openidRepository.findByAppIdAndUserIdAndIsDeleted("wx-c1", 7L, 0)).thenReturn(Optional.empty());
+        when(openidRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.bindMiniprogram(CODE, "customer", "secret", "c1");
+
+        ArgumentCaptor<SysUserOpenid> captor = ArgumentCaptor.forClass(SysUserOpenid.class);
+        verify(openidRepository).save(captor.capture());
+        assertEquals("wx-c1", captor.getValue().getAppId());
+    }
+
     private SysUser user(Long id, String username, int status) {
         SysUser user = new SysUser();
         user.setId(id);

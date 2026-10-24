@@ -98,6 +98,8 @@ public class RetryTask {
             channelMessage.setContent(message.getContent() != null ? message.getContent().toString() : "");
             channelMessage.setTemplateData(message.getContent());
             channelMessage.setLinkTemplate(message.getLinkJson());
+            // 按 Client 凭证重试（Task 9.4）：与原投递同口径透传目标小程序 appId
+            channelMessage.setAppId(ChannelMessage.appIdFrom(message.getContent()));
 
             ChannelDeliveryResult result = adapter.send(channelMessage);
 

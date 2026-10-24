@@ -33,13 +33,13 @@ public class AuthController {
     /** 小程序静默登录：code 换 openid 后按已绑定账号发 token。 */
     @PostMapping("/miniprogram/login")
     public R<LoginResponse> miniprogramLogin(@Valid @RequestBody MiniprogramLoginRequest request) {
-        return R.ok(authService.loginByMiniprogram(request.code()));
+        return R.ok(authService.loginByMiniprogram(request.code(), request.clientId()));
     }
 
     /** 首次绑定：账号密码校验通过后把当前微信绑到该账号，并直接返回登录态。 */
     @PostMapping("/miniprogram/bind")
     public R<LoginResponse> miniprogramBind(@Valid @RequestBody MiniprogramBindRequest request) {
-        return R.ok(authService.bindMiniprogram(request.code(), request.username(), request.password()));
+        return R.ok(authService.bindMiniprogram(request.code(), request.username(), request.password(), request.clientId()));
     }
 
     @PostMapping("/logout")

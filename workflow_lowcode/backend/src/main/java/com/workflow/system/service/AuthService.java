@@ -32,10 +32,24 @@ public interface AuthService {
     LoginResponse loginByMiniprogram(String code);
 
     /**
+     * 按 Client 凭证登录（Task 9.4）：
+     * {@code clientId} 非空时用该小程序客户端的 appId/appSecret 换 code（多实例），
+     * 为空时回落全局配置（单 appid 部署）。
+     */
+    LoginResponse loginByMiniprogram(String code, String clientId);
+
+    /**
      * 首次绑定并登录：校验平台账号密码，把当前微信 openid 绑到该账号。
      * 当前微信已绑本账号时幂等返回登录态。
      */
     LoginResponse bindMiniprogram(String code, String username, String password);
+
+    /**
+     * 按 Client 凭证绑定并登录（Task 9.4）：
+     * {@code clientId} 非空时用该小程序客户端的 appId/appSecret 换 code（多实例），
+     * 绑定的 openid 归属该 Client 的 appId。
+     */
+    LoginResponse bindMiniprogram(String code, String username, String password, String clientId);
 
     /**
      * 按 userId 构造带角色与权限集合的 LoginUser（JWT 过滤器用）。

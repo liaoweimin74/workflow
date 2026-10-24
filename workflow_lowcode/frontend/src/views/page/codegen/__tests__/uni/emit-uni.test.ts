@@ -29,7 +29,9 @@ describe('generatePageUni — 编排与四类产物（Task 3.1）', () => {
     const sfc = files['src/pages/gen/test_page.vue']
     expect(sfc).toContain('<template>')
     expect(sfc).toContain('<view class="lc-page">')
-    expect(sfc).toContain('<!-- lc:todo node=n1 type=page-table')
+    // 6.2 起 test_page 的 page-table 出 uni-table 简表：页面全装配，无 lc:todo 挂点残留
+    expect(sfc).toContain('<uni-table :data="table1789468745852Rows"')
+    expect(sfc).not.toContain('lc:todo node=')
     expect(sfc).not.toContain('测试页面')
   })
 
@@ -146,7 +148,9 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(sfc).toContain('const stepsDemo1Items = [')
     expect(sfc).toContain('<view class="lc-detail__title">客户档案详情（点击上方列表行联动）</view>')
     expect(sfc).toContain("{{ custDetail1Data['Fyczmv3ks22dabc'] }}")
-    expect(sfc).toMatch(/<!-- lc:todo node=n\d+ type=page-table/)
+    // 6.2 起 page-table 出 uni-table 简表（emit-widget 装配），不再 todo 挂点
+    expect(sfc).toContain('<uni-table :data="custTable1Rows" :loading="custTable1Loading">')
+    expect(sfc).not.toMatch(/<!-- lc:todo node=n\d+ type=page-table/)
   })
 
   it('script 链装配（5.3）：函数体照搬普通函数 + 材料注入（message→uniMessage、page 常量）', () => {

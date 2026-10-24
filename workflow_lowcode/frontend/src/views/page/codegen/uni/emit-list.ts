@@ -67,10 +67,10 @@ interface SearchField {
 const sq = (v: string): string => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 
 /** 行字段访问：统一下标 + 引号（业务字段大量带短横线，不赌合法标识符） */
-const rowOf = (prop: string | undefined): string => `row[${sq(String(prop ?? ''))}]`
+export const rowOf = (prop: string | undefined): string => `row[${sq(String(prop ?? ''))}]`
 
 /** web emitHandlers 的同名判定：case 体读 row 才声明形参（noUnusedLocals） */
-const usesRow = (lines: string[]): boolean => lines.some((l) => /\brow\b/.test(l))
+export const usesRow = (lines: string[]): boolean => lines.some((l) => /\brow\b/.test(l))
 
 /**
  * 链步骤 → uni 产物语句。返回的 todo 注释也是体（缺口在产物里可见，绝不静默跳步）；

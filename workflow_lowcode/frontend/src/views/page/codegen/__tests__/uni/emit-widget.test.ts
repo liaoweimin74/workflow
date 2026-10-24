@@ -22,6 +22,7 @@ import { parseIr } from '../../parse'
 import { emitWidgetNode, extractPdcFields } from '../../uni/emit-widget'
 import dataContainer from '../fixtures/corpus/tmp_data_container_verify.json'
 import detailSteps from '../fixtures/corpus/page_detail_steps_demo.json'
+import testPage from '../fixtures/test_page.schema.json'
 
 const clone = (v: unknown) => JSON.parse(JSON.stringify(v))
 
@@ -204,6 +205,199 @@ describe('emitWidgetNode — page-data-container → uni-popup 弹层（纯展�
     const frag = emitWidgetNode(node, ir)
     expect(frag).not.toBeNull()
     expect(frag!.template).not.toContain('lc-dc__title')
+  })
+})
+
+describe('emitWidgetNode — page-table → uni-table 简表（Task 6.2）', () => {
+  /** 语料 test_page 的 page-table：3 列（code/name/dept，前两列可排序）、搜索 ×3、
+   *  border/stripe、toolbar 新建 + 行按钮 edit/delete/view、selectionMode=none、
+   *  row-edit 动作已编译为内置 open case（探针实测：switchCases 4 个、chains 空） */
+  const tableOf = () => {
+    const ir = parseIr(clone(testPage), { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+    const node = ir.nodes.find((n) => n.artifact.type === 'page-table')
+    if (!node) throw new Error('页面应含 page-table 节点')
+    return { node, ir }
+  }
+
+  it('模板：uni-table 简表（搜索条 + toolbar + 列静态展开 + sortable 列 + 操作列收「···」弹层）', () => {
+    const { node, ir } = tableOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-table">',
+        `  <uni-search-bar v-model="table1789468745852Search" class="lc-table__search" placeholder="搜索" @confirm="table1789468745852OnSearch" @clear="table1789468745852OnSearch" />`,
+        '  <view class="lc-table__toolbar">',
+        `    <button class="lc-table__toolbar-btn" size="mini" @click="onButtonClick({ key: 'create', label: '新增', row: null })">新增</button>`,
+        `    <button class="lc-table__filter-open" size="mini" @click="table1789468745852FilterOpen">筛选</button>`,
+        '  </view>',
+        '  <uni-table :data="table1789468745852Rows" :loading="table1789468745852Loading">',
+        '    <uni-tr>',
+        '      <uni-th>人员编码</uni-th>',
+        '      <uni-th>人员姓名</uni-th>',
+        '      <uni-th>所属部门</uni-th>',
+        '      <uni-th class="lc-table__th-actions">操作</uni-th>',
+        '    </uni-tr>',
+        '    <uni-tr v-for="row in table1789468745852Rows" :key="row.id">',
+        "      <uni-td>{{ row['code'] }}</uni-td>",
+        "      <uni-td>{{ row['name'] }}</uni-td>",
+        "      <uni-td>{{ row['dept'] }}</uni-td>",
+        '      <uni-td class="lc-table__td-actions">',
+        `        <button class="lc-table__more" size="mini" @click="table1789468745852MoreOpen(row)">···</button>`,
+        '      </uni-td>',
+        '    </uni-tr>',
+        '  </uni-table>',
+        `  <view class="lc-table__status">{{ table1789468745852Loading ? '加载中…' : table1789468745852Finished ? '没有更多了' : '' }}</view>`,
+        `  <uni-popup ref="table1789468745852MorePopup" type="bottom" class="lc-table__more-popup" background-color="#fff">`,
+        '    <view class="lc-table__more-body">',
+        `      <button class="lc-table__more-btn" @click="table1789468745852MoreTap('edit', '编辑')">编辑</button>`,
+        `      <button class="lc-table__more-btn" @click="table1789468745852MoreTap('delete', '删除')">删除</button>`,
+        `      <button class="lc-table__more-btn" @click="table1789468745852MoreTap('view', '查看')">查看</button>`,
+        '    </view>',
+        '  </uni-popup>',
+        `  <uni-popup ref="table1789468745852FilterPopup" type="bottom" class="lc-table__filter" background-color="#fff">`,
+        '    <view class="lc-table__filter-body">',
+        '      <view v-for="f in table1789468745852SearchFields" :key="f.prop" class="lc-table__filter-field">',
+        '        <text class="lc-table__filter-label">{{ f.label }}</text>',
+        `        <input v-model="table1789468745852FieldValues[f.prop]" class="lc-table__filter-input" :placeholder="f.label" />`,
+        '      </view>',
+        `      <button class="lc-table__filter-btn" @click="table1789468745852FilterConfirm">查询</button>`,
+        `      <button class="lc-table__filter-btn" plain @click="table1789468745852FilterReset">重置</button>`,
+        '    </view>',
+        '  </uni-popup>',
+        '</view>',
+      ].join('\n'),
+    )
+  })
+
+  it('脚本：useUniList + onMounted 首载 + onReachBottom + 搜索/More 函数组 + 内置 4 case 真实现（页面有容器）', () => {
+    const { node, ir } = tableOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script).toEqual([
+      `const table1789468745852SearchFields = [{ prop: 'code', label: '人员编码' }, { prop: 'name', label: '人员姓名' }, { prop: 'dept', label: '所属部门' }]`,
+      `const table1789468745852List = useUniList({ refId: ds.refId, pageSize: 20, searchFields: table1789468745852SearchFields })`,
+      `const { rows: table1789468745852Rows, loading: table1789468745852Loading, finished: table1789468745852Finished, keyword: table1789468745852Search, fieldValues: table1789468745852FieldValues } = table1789468745852List`,
+      `const table1789468745852MoreRow = ref<Record<string, unknown> | null>(null)`,
+      `const table1789468745852MorePopup = ref<{ open: () => void; close: () => void } | null>(null)`,
+      `const table1789468745852FilterPopup = ref<{ open: () => void; close: () => void } | null>(null)`,
+      `onMounted(() => void table1789468745852List.reload())`,
+      `onReachBottom(() => table1789468745852List.loadMore())`,
+      `function table1789468745852OnSearch() {`,
+      `  table1789468745852List.onSearch()`,
+      `}`,
+      `function table1789468745852FilterOpen() {`,
+      `  table1789468745852FilterPopup.value?.open()`,
+      `}`,
+      `function table1789468745852FilterConfirm() {`,
+      `  table1789468745852List.onSearch()`,
+      `  table1789468745852FilterPopup.value?.close()`,
+      `}`,
+      `function table1789468745852FilterReset() {`,
+      `  table1789468745852List.resetSearch()`,
+      `  table1789468745852FilterPopup.value?.close()`,
+      `}`,
+      `function table1789468745852MoreOpen(row: Record<string, unknown>) {`,
+      `  table1789468745852MoreRow.value = row`,
+      `  table1789468745852MorePopup.value?.open()`,
+      `}`,
+      `function table1789468745852MoreTap(key: string, label: string) {`,
+      `  onButtonClick({ key, label, row: table1789468745852MoreRow.value })`,
+      `  table1789468745852MorePopup.value?.close()`,
+      `}`,
+      `function onRowClick(_row: Record<string, unknown>) {`,
+      `  // uni-tr 无行点击事件源：挂点保留供人工接管（可在模板自行接触发）`,
+      `}`,
+      `function onButtonClick(payload: { key: string; label: string; row: Record<string, unknown> | null }) {`,
+      `  const row = payload.row`,
+      `  switch (payload.key) {`,
+      `    case 'edit':`,
+      `      void openContainer(String(row?.id ?? ''), false, 'edit')`,
+      `      return`,
+      `    case 'delete':`,
+      `      if (row?.id != null) void table1789468745852List.removeRow(String(row.id))`,
+      `      return`,
+      `    case 'create':`,
+      `      void openContainer(String(row?.id ?? ''), false, 'create')`,
+      `      return`,
+      `    case 'view':`,
+      `      void openContainer(String(row?.id ?? ''), true, 'view')`,
+      `      return`,
+      `  }`,
+      `}`,
+      `function onSelectionChange(_rows: unknown) {`,
+      `  // selectionMode=none 无 selection 列：挂点保留（uni payload 形状 { detail: { value, index } }）`,
+      `}`,
+    ])
+  })
+
+  it('imports/unsupported：vue(onMounted,ref) + onReachBottom + useUniList；viewDetail/row-click/pageSizes 登记', () => {
+    const { node, ir } = tableOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.imports).toEqual([
+      `import { onMounted, ref } from 'vue'`,
+      `import { onReachBottom } from '@dcloudio/uni-app'`,
+      `import { useUniList } from '@lc/runtime-uni/list'`,
+    ])
+    expect(frag!.unsupported.map((u) => [u.key, u.path])).toEqual([
+      ['viewDetail', 'rule[0].props.viewDetail'],
+      ['row-click', 'rule[0]'],
+      ['pageSizes', 'rule[0].props.pageSizes'],
+    ])
+  })
+
+  it('selectionMode=multiple → uni-table type="selection" + @selection-change 绑定（handler 形参 uni payload 口径）', () => {
+    const schema = clone(testPage) as any
+    const table = schema.rule.find((r: any) => r.type === 'page-table')
+    table.props.selectionMode = 'multiple'
+    const ir = parseIr(schema, { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+    const node = ir.nodes.find((n) => n.artifact.type === 'page-table')!
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.template).toContain('<uni-table :data="table1789468745852Rows" type="selection"')
+    expect(frag!.template).toContain('@selection-change="onSelectionChange"')
+    expect(frag!.script.join('\n')).toContain('function onSelectionChange(_rows: unknown) {')
+  })
+
+  it('最小配置（detail_steps 语料）：无搜索/无按钮/无排序时模板收敛为纯表格；onButtonClick 空 switch 保留挂点', () => {
+    const ir = parseIr(clone(detailSteps), { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+    const node = ir.nodes.find((n) => n.artifact.type === 'page-table')!
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-table">',
+        '  <uni-table :data="custTable1Rows" :loading="custTable1Loading">',
+        '    <uni-tr>',
+        '      <uni-th>客户名称</uni-th>',
+        '      <uni-th>客户状态</uni-th>',
+        '      <uni-th>负责人</uni-th>',
+        '      <uni-th>联系电话</uni-th>',
+        '    </uni-tr>',
+        '    <uni-tr v-for="row in custTable1Rows" :key="row.id">',
+        "      <uni-td>{{ row['Fyczmv3ks22dabc'] }}</uni-td>",
+        "      <uni-td>{{ row['Ffxemv3ksch9aec_text'] }}</uni-td>",
+        "      <uni-td>{{ row['Fzgimv3kskiaahc'] }}</uni-td>",
+        "      <uni-td>{{ row['Fqgomv3ksnqrakc'] }}</uni-td>",
+        '    </uni-tr>',
+        '  </uni-table>',
+        `  <view class="lc-table__status">{{ custTable1Loading ? '加载中…' : custTable1Finished ? '没有更多了' : '' }}</view>`,
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script.join('\n')).toContain('function onButtonClick(payload: { key: string; label: string; row: Record<string, unknown> | null }) {')
+    expect(frag!.script.join('\n')).toContain('  switch (payload.key) {')
+  })
+
+  it('contentType=template/expression 列不渲染并登记（no-eval 纪律，同 cards 口径）', () => {
+    const schema = clone(testPage) as any
+    const table = schema.rule.find((r: any) => r.type === 'page-table')
+    table.props.columns.push({ prop: 'calc', label: '计算', contentType: 'expression', contentValue: 'row.a + row.b' })
+    const ir = parseIr(schema, { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+    const node = ir.nodes.find((n) => n.artifact.type === 'page-table')!
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.template).not.toContain("row['calc']")
+    expect(frag!.unsupported.some((u) => u.key === 'column-contentType' && u.path === 'rule[0].props.columns[3]')).toBe(true)
   })
 })
 

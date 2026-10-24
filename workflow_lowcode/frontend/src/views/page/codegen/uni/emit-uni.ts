@@ -22,7 +22,7 @@ import { buildReport } from '../report'
 import { PROFILES } from '../target-profile'
 import { emitContainerNode } from './emit-container'
 import { emitListNode } from './emit-list'
-import { emitWidgetNode } from './emit-widget'
+import { dedupeUniEchartsUse, emitWidgetNode } from './emit-widget'
 import { buildAppVue, buildManifestJson, buildPagesJson, type UniClientConfig } from './project-files'
 
 export function generatePageUni(
@@ -41,8 +41,12 @@ export function generatePageUni(
   const page = emitPage(ir)
   // uni 侧缺口（容器族语义/详情弹窗/未装配组件族）并入 manifest：报告与后续反读看到同一份真相
   const manifest = { ...base, unsupported: [...base.unsupported, ...page.unsupported] }
+  // 页面落点（Task 7.3）：启用清单里带 subRoot 的页面（图表页）落分包目录
+  // `src/<subRoot>/gen/<key>.vue`，主包页仍落 `src/pages/gen/<key>.vue`
+  const entry = meta.client.pages.find((p) => p.key === meta.pageKey)
+  const pagePath = entry?.subRoot ? `src/${entry.subRoot}/gen/${meta.pageKey}.vue` : `src/pages/gen/${meta.pageKey}.vue`
   const files: Record<string, string> = {
-    [`src/pages/gen/${meta.pageKey}.vue`]: page.source,
+    [pagePath]: page.source,
     'src/pages.json': buildPagesJson(meta.client),
     'src/manifest.json': buildManifestJson(meta.client),
     'src/App.vue': buildAppVue(),
@@ -163,11 +167,13 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
     S.push('}')
   }
   if (containerFrag) S.push(...containerFrag.script)
+  // 图表片段的 echarts.use 行按首现收敛为一行（7.3；仅滤该行，其余 script 行原样）
+  const dedupedScripts = dedupeUniEchartsUse(scripts)
   // 材料常量（script 白名单上下文的 uni 对位，运行期事件触发时求值，声明顺序无关）
   if (materials.scripts.has('message')) S.push('const message = uniMessage')
   if (materials.scripts.has('page')) S.push(`const page = { pageKey: '${ir.pageKey}' }`)
   if (materials.scripts.has('http')) S.push(`const http = uniHttpShim(uniRequest({ tenantHeader: 'X-Tenant-Id' }))`)
-  S.push(...scripts)
+  S.push(...dedupedScripts)
   // 脚本函数体（Task 5.3，对位 web emit.ts scripts 段）：正文照搬 schema 普通函数
   // （parse 白名单已把关），调用语句在片段脚本里（函数声明提升，位置无关）
   const seenFns = new Set<string>()

@@ -15,6 +15,11 @@ export interface UniClientPageEntry {
   title: string
   /** 条目级导航配置（navigation_json）：原样合并进该页 style */
   nav?: Record<string, unknown> | null
+  /**
+   * 分包根（Task 7.3）：非空 → 该页落 `pagesChart/gen/<key>`，进 subPackages 分组
+   * （图表页体积大——echarts 全家桶——分包避免拖慢主包启动；uni-shell pages.json 同款形状）
+   */
+  subRoot?: string
 }
 
 export interface UniClientConfig {
@@ -28,18 +33,32 @@ export interface UniClientConfig {
   pages: UniClientPageEntry[]
 }
 
-/** pages.json：页清单原样采用（清单即真相）+ globalStyle（client 名作标题） */
+/**
+ * pages.json：页清单原样采用（清单即真相）+ globalStyle（client 名作标题）。
+ * 分包（Task 7.3）：带 subRoot 的页面按 root 分组进 subPackages（保持清单顺序），
+ * 其余进主包 pages；主包页路径仍为 `pages/gen/<key>`。
+ */
 export function buildPagesJson(client: UniClientConfig): string {
-  const pages = client.pages.map((p) => ({
-    path: `pages/gen/${p.key}`,
+  const pageOf = (p: UniClientPageEntry) => ({
+    path: p.subRoot ? `${p.subRoot}/gen/${p.key}` : `pages/gen/${p.key}`,
     style: {
       navigationBarTitleText: p.title,
       ...(p.nav ?? {}),
     },
+  })
+  const mainPages = client.pages.filter((p) => !p.subRoot).map(pageOf)
+  const subRoots: string[] = []
+  for (const p of client.pages) {
+    if (p.subRoot && !subRoots.includes(p.subRoot)) subRoots.push(p.subRoot)
+  }
+  const subPackages = subRoots.map((root) => ({
+    root,
+    pages: client.pages.filter((p) => p.subRoot === root).map(pageOf),
   }))
   return JSON.stringify(
     {
-      pages,
+      pages: mainPages,
+      ...(subPackages.length ? { subPackages } : {}),
       globalStyle: {
         navigationBarTextStyle: 'black',
         navigationBarTitleText: client.name ?? client.key,
@@ -66,6 +85,8 @@ export function buildManifestJson(client: UniClientConfig): string {
         appid: client.appid ?? '',
         setting: { urlCheck: false },
         usingComponents: true,
+        // 分包优化（Task 7.3）：图表页落 subPackages 后按需注入
+        optimization: { subPackages: true },
       },
       h5: {
         title: name,

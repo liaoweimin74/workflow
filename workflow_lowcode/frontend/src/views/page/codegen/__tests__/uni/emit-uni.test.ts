@@ -11,6 +11,7 @@ import cardlist from '../fixtures/corpus/cardlist_test.json'
 import fcTablePlain from '../fixtures/fc-table/plain.json'
 import fcTableRich from '../fixtures/fc-table/rich.json'
 import detailSteps from '../fixtures/corpus/page_detail_steps_demo.json'
+import tmpSizeAlignVerify from '../fixtures/corpus/tmp_size_align_verify.json'
 import testPage from '../fixtures/test_page.schema.json'
 import { CLIENT } from './client-fixture'
 
@@ -182,18 +183,43 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
       client: CLIENT,
     })
     const richSfc = rich.files['src/pages/gen/fc_rich.vue']
-    // 7.2 起格内 dash-todo/dash-kpi/dash-notice 出片段；dash-chart 归 7.3 仍 todo；
+    // 7.3 起格内 dash-chart 出 .lc-dchart 片段（uni-echarts 载体），dash 四件全片段化；
     // 合并覆盖格（notice1 slot=2:2）归 home 2:0 块
     expect(richSfc).toContain('style="width: 200px; height: 120px"')
     expect(richSfc).toContain('class="lc-ftable__cell hero-cell"')
     expect(richSfc).toContain('<view class="lc-kpi">')
     expect(richSfc).toContain('<view class="lc-todo">')
     expect(richSfc).toContain('<view class="lc-notice">')
-    expect(richSfc).toMatch(/<!-- lc:todo node=n\d+\.\w+ type=dash-chart /)
-    expect(richSfc).not.toMatch(/<!-- lc:todo node=n\d+\.\w+ type=dash-(kpi|notice|todo) /)
+    expect(richSfc).toContain('<view class="lc-dchart">')
+    expect(richSfc).not.toMatch(/<!-- lc:todo node=n\d+\.\w+ type=dash-(chart|kpi|notice|todo) /)
     expect(richSfc).not.toContain('rowspan')
     // 几何视觉键节点级登记进报告（unsupported 有消费者：报告与产物同一份真相）
     expect(report.unsupported.some((u) => u.key === 'table-geometry')).toBe(true)
+  })
+
+  it('chart 语料装配（tmp_size_align_verify）：dash-chart 出 .lc-dchart、page-chart 出 .lc-pchart 与 config 常量', () => {
+    const corpus = clone(tmpSizeAlignVerify) as any
+    const { files, report } = generatePageUni(corpus, {
+      pageKey: 'chart_demo',
+      pageName: '图表演示',
+      client: CLIENT,
+    })
+    const sfc = files['src/pages/gen/chart_demo.vue']
+    // dash-chart（bar/count）：uni-echarts 载体 + useUniChart 接线
+    expect(sfc).toContain('<view class="lc-dchart">')
+    expect(sfc).toContain(`useUniChart({ refId: ds.refId, group: 'customer', agg: 'count' })`)
+    // page-chart（line）：config 常量（IR 顶层 consts 提名）+ useUniList 全量
+    expect(sfc).toContain('const pcChart = {')
+    expect(sfc).toContain("xField: 'customer'")
+    expect(sfc).toContain(`useUniList({ refId: ds.refId, pagination: false })`)
+    // echarts 按需注册只并一行（import 按源合并）；uni-echarts 组件 import 在册
+    expect((sfc.match(/echarts\.use\(/g) ?? []).length).toBe(1)
+    expect(sfc).toContain(`import UniEcharts from 'uni-echarts'`)
+    // 全部 chart 节点片段化，无 todo 挂点
+    expect(sfc).not.toMatch(/<!-- lc:todo node=n\d+\.\w+ type=(dash|page)-chart /)
+    // 图表节点 unsupported 汇入报告（size-mirror ×4）
+    const chartNodes = report.unsupported.filter((u) => u.type === 'dash-chart' || u.type === 'page-chart')
+    expect(chartNodes.filter((u) => u.key === 'size-mirror').length).toBe(4)
   })
 
   it('script 链装配（5.3）：函数体照搬普通函数 + 材料注入（message→uniMessage、page 常量）', () => {

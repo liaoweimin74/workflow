@@ -857,3 +857,301 @@ describe('emitWidgetNode → dash-todo 待办卡', () => {
     expect(frag!.script.join('\n')).toContain('useUniTodo({ view: \'todo\', limit: 8, userId: String(t0UserId ?? \'\') })')
   })
 })
+
+// ----- Task 7.3: dash-chart / page-chart → uni-echarts 图表片段 -----
+// 数据口径（web DashChart / PageDataChartPage 同源）：
+//  · dash-chart → .lc-dchart：aggregate 通道走 useUniChart（失败静默 rows 清空），
+//    option 走 buildUniAggregateOption（computed 包装，空 rows → null 走模板 v-if 空态）；
+//    系列名对位 DashChart.render seriesName = title || (count → 数量 | `${agg}(${metric})`)。
+//  · page-chart → .lc-pchart：config（PageChartConfigDialog 形态 {type, dimension, measures}）
+//    emit 期归一为 UniChartViewConfig 常量（measure.label 融为 yFields[].name），数据走
+//    useUniList(pagination: false)（size=-1 全量 + uniListRowsOf 扁平化，对位 web
+//    flattenRecords），option 走 buildUniDatasetOption（前端按维度聚合）。
+//  · 两类都出 uni-echarts + echarts/core 按需注册（echarts.use，uni-echarts vite 插件
+//    复用同款 echarts/core import 注入 provideEcharts）；scatter/heatmap/funnel/area
+//    首版回退 bar/line 并登记 chart-type（绝不静默）；span/height 尺寸镜像 → size-mirror。
+
+describe('emitWidgetNode → dash-chart 统计图', () => {
+  const chartOf = () =>
+    dashOf(
+      [
+        {
+          type: 'dash-chart',
+          field: 'cAuto',
+          title: '',
+          col: { span: 12 },
+          props: {
+            title: '自适应统计图',
+            chartType: 'bar',
+            group: 'customer',
+            timeGrain: null,
+            agg: 'count',
+            metric: null,
+            sort: 'key',
+            order: 'asc',
+            limit: 0,
+            dataSourceId: 'ds_a',
+            height: '',
+            span: 12,
+          },
+        },
+      ],
+      'dash-chart',
+    )
+
+  it('bar：.lc-dchart + uni-echarts（v-if option）+ 空态；useUniChart + computed option + echarts.use', () => {
+    const { node, ir } = chartOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-dchart">',
+        '  <text class="lc-dchart__title">自适应统计图</text>',
+        '  <uni-echarts v-if="cAutoOption" custom-style="width: 100%; height: 480rpx" :option="cAutoOption" />',
+        "  <text v-else class=\"lc-dchart__empty\">{{ cAutoLoading ? '加载中…' : '暂无数据' }}</text>",
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script.join('\n')).toBe(
+      [
+        'echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])',
+        `const cAuto = useUniChart({ refId: ds.refId, group: 'customer', agg: 'count' })`,
+        `const { rows: cAutoRows, loading: cAutoLoading } = cAuto`,
+        `const cAutoOption = computed(() => buildUniAggregateOption('bar', cAutoRows, '自适应统计图'))`,
+        `onMounted(() => void cAuto.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.imports).toEqual([
+      `import { computed, onMounted } from 'vue'`,
+      `import { BarChart, LineChart, PieChart } from 'echarts/charts'`,
+      `import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'`,
+      `import * as echarts from 'echarts/core'`,
+      `import { CanvasRenderer } from 'echarts/renderers'`,
+      `import UniEcharts from 'uni-echarts'`,
+      `import { useUniChart } from '@lc/runtime-uni/dash'`,
+      `import { buildUniAggregateOption } from '@lc/runtime-uni/charts'`,
+    ])
+    expect(frag!.unsupported.map((u) => u.key)).toEqual(['size-mirror'])
+  })
+
+  it('series 系列名对位 web：title 非空用 title；count 无 title → 数量；sum(metric) → sum(metric)', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-chart',
+          field: 'c0',
+          title: '',
+          col: { span: 12 },
+          props: { chartType: 'bar', group: 'customer', agg: 'count', metric: null, dataSourceId: 'ds_a', span: 12, height: '' },
+        },
+      ],
+      'dash-chart',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain(`buildUniAggregateOption('bar', c0Rows, '数量')`)
+
+    const { node: n2, ir: ir2 } = dashOf(
+      [
+        {
+          type: 'dash-chart',
+          field: 'c1',
+          title: '',
+          col: { span: 12 },
+          props: { chartType: 'bar', group: 'customer', agg: 'sum', metric: 'order_amount', dataSourceId: 'ds_a', span: 12, height: '' },
+        },
+      ],
+      'dash-chart',
+    )
+    const frag2 = emitWidgetNode(n2, ir2)
+    expect(frag2!.script.join('\n')).toContain(`buildUniAggregateOption('bar', c1Rows, 'sum(order_amount)')`)
+  })
+
+  it('非首源 refId 走 dataSources 登记；metric/sort/order/limit/timeGrain 有值才出 options', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-chart',
+          field: 'c1',
+          title: '',
+          col: { span: 24 },
+          props: {
+            title: '发起趋势',
+            chartType: 'line',
+            group: 'start_time',
+            agg: 'count',
+            dataSourceId: 'ds_inst',
+            span: 24,
+            height: '100%',
+          },
+        },
+      ],
+      'dash-chart',
+      [
+        { id: 'ds_a', refId: 'ref-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        { id: 'ds_inst', refId: 'ref-bbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      ],
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain(`const c1 = useUniChart({ refId: dataSources['ds_inst'], group: 'start_time', agg: 'count' })`)
+    expect(frag!.script.join('\n')).toContain(`buildUniAggregateOption('line', c1Rows, '发起趋势')`)
+    expect(frag!.template).toContain('<uni-echarts v-if="c1Option" custom-style="width: 100%; height: 100%"')
+  })
+
+  it('sum+metric+timeGrain+limit+filter 全量出 options；height 非空照用 custom-style', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-chart',
+          field: 'cF',
+          title: '',
+          col: { span: 24 },
+          props: {
+            title: '金额分布',
+            chartType: 'bar',
+            group: 'customer',
+            timeGrain: 'month',
+            agg: 'sum',
+            metric: 'order_amount',
+            sort: 'value',
+            order: 'desc',
+            limit: 10,
+            filter: '{"logic":"AND","conditions":[]}',
+            dataSourceId: 'ds_a',
+            height: '420px',
+            span: 24,
+          },
+        },
+      ],
+      'dash-chart',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toBe(
+      [
+        'echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])',
+        `const cF = useUniChart({ refId: ds.refId, group: 'customer', agg: 'sum', metric: 'order_amount', timeGrain: 'month', sort: 'value', order: 'desc', limit: 10, filter: '{"logic":"AND","conditions":[]}' })`,
+        `const { rows: cFRows, loading: cFLoading } = cF`,
+        `const cFOption = computed(() => buildUniAggregateOption('bar', cFRows, '金额分布'))`,
+        `onMounted(() => void cF.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.template).toContain('<uni-echarts v-if="cFOption" custom-style="width: 100%; height: 420px"')
+  })
+
+  it('scatter/heatmap/funnel 首版回退 bar、area 回退 line：chart-type 登记（绝不静默）', () => {
+    for (const [src, fallback] of [
+      ['scatter', 'bar'],
+      ['heatmap', 'bar'],
+      ['funnel', 'bar'],
+      ['area', 'line'],
+    ] as const) {
+      const { node, ir } = dashOf(
+        [
+          {
+            type: 'dash-chart',
+            field: 'cT',
+            title: '',
+            col: { span: 24 },
+            props: { chartType: src, group: 'customer', agg: 'count', dataSourceId: 'ds_a', span: 24, height: '' },
+          },
+        ],
+        'dash-chart',
+      )
+      const frag = emitWidgetNode(node, ir)
+      expect(frag!.script.join('\n')).toContain(`buildUniAggregateOption('${fallback}', cTRows, '数量')`)
+      const ct = frag!.unsupported.find((u) => u.key === 'chart-type')
+      expect(ct, `chartType=${src} 应登记 chart-type`).toBeTruthy()
+      expect(ct!.path).toBe(`${node.artifact.rulePath}.props.chartType`)
+      expect(ct!.type).toBe('dash-chart')
+    }
+  })
+})
+
+describe('emitWidgetNode → page-chart 图表页', () => {
+  it('config 归一常量 + useUniList(pagination:false) 全量 + buildUniDatasetOption computed；imports 含 echarts 按需注册', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'page-chart',
+          field: 'pc',
+          title: '',
+          col: { span: 12 },
+          props: {
+            dataSourceId: 'ds_a',
+            config: { type: 'line', dimension: 'customer', measures: [{ key: 'order_amount', agg: 'sum' }] },
+            height: '300px',
+            span: 12,
+          },
+        },
+      ],
+      'page-chart',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-pchart">',
+        '  <uni-echarts v-if="pcOption" custom-style="width: 100%; height: 300px" :option="pcOption" />',
+        "  <text v-else class=\"lc-pchart__empty\">{{ pcLoading ? '加载中…' : '暂无数据' }}</text>",
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script.join('\n')).toBe(
+      [
+        'echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])',
+        'const pcChart = {',
+        "  type: 'line',",
+        "  xField: 'customer',",
+        '  yFields: [',
+        '    {',
+        "      key: 'order_amount',",
+        "      agg: 'sum'",
+        '    }',
+        '  ],',
+        '  limit: 20',
+        '}',
+        `const pc = useUniList({ refId: ds.refId, pagination: false })`,
+        `const { rows: pcRows, loading: pcLoading } = pc`,
+        `const pcOption = computed(() => buildUniDatasetOption(pcChart.type, pcRows, pcChart))`,
+        `onMounted(() => void pc.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.imports).toEqual([
+      `import { computed, onMounted } from 'vue'`,
+      `import { BarChart, LineChart, PieChart } from 'echarts/charts'`,
+      `import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'`,
+      `import * as echarts from 'echarts/core'`,
+      `import { CanvasRenderer } from 'echarts/renderers'`,
+      `import UniEcharts from 'uni-echarts'`,
+      `import { useUniList } from '@lc/runtime-uni/list'`,
+      `import { buildUniDatasetOption } from '@lc/runtime-uni/charts'`,
+    ])
+    expect(frag!.unsupported.map((u) => u.key)).toEqual(['size-mirror'])
+  })
+
+  it('pie config：单指标归一；measure.label 融为 yFields[].name（emit 期静态化，no-eval）', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'page-chart',
+          field: 'pcP',
+          title: '',
+          col: { span: 12 },
+          props: {
+            dataSourceId: 'ds_a',
+            config: { type: 'pie', dimension: 'customer', measures: [{ key: 'order_amount', agg: 'sum', label: '金额' }] },
+            height: '',
+            span: 12,
+          },
+        },
+      ],
+      'page-chart',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain("type: 'pie',")
+    expect(frag!.script.join('\n')).toContain("key: 'order_amount',")
+    expect(frag!.script.join('\n')).toContain("name: '金额'")
+    expect(frag!.template).toContain('custom-style="width: 100%; height: 480rpx"')
+  })
+})

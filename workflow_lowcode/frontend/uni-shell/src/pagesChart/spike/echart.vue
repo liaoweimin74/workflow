@@ -4,6 +4,12 @@
     <view class="lc-spike__chart">
       <uni-echarts custom-style="width: 100%; height: 240px" :option="barOption" />
     </view>
+    <!-- 7.3 dash-chart 片段形状（.lc-dchart）：uni-echarts v-if option + 空态（emit 形状同构） -->
+    <view class="lc-dchart">
+      <text class="lc-dchart__title">发起趋势</text>
+      <uni-echarts v-if="chartAOption" custom-style="width: 100%; height: 480rpx" :option="chartAOption" />
+      <text v-else class="lc-dchart__empty">{{ chartALoading ? '加载中…' : '暂无数据' }}</text>
+    </view>
     <!-- 7.2 dash-kpi 片段形状（.lc-kpi）：value 唯一运行期绑定 + null 占位 -->
     <view class="lc-kpi">
       <view class="lc-kpi__head">
@@ -63,8 +69,9 @@ import { BarChart, LineChart, PieChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { onMounted, ref } from 'vue'
-import { useUniKpi, useUniNotice, useUniTodo } from '@lc/runtime-uni/dash'
+import { computed, onMounted, ref } from 'vue'
+import { useUniChart, useUniKpi, useUniNotice, useUniTodo } from '@lc/runtime-uni/dash'
+import { buildUniAggregateOption } from '@lc/runtime-uni/charts'
 import UniEcharts from 'uni-echarts'
 
 echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
@@ -81,6 +88,11 @@ const barOption = ref({
   ],
 })
 
+// 7.3 dash-chart 片段形状接线（emitDashChart 产物同构：useUniChart + computed option）
+const chartA = useUniChart({ refId: ds.refId, group: 'start_time', agg: 'count' })
+const { rows: chartARows, loading: chartALoading } = chartA
+const chartAOption = computed(() => buildUniAggregateOption('line', chartARows, '发起趋势'))
+
 // dash 片段形状接线（ds 常量为产物同形占位；404/无网时走静默降级）
 const ds = { id: 'ds_a', refId: 'ds-builtin-process-definitions' }
 const kpiAUnit = '元'
@@ -96,6 +108,7 @@ onMounted(() => {
   void kpiA.reload()
   void noticeA.reload()
   void todoA.reload()
+  void chartA.reload()
 })
 </script>
 
@@ -109,6 +122,23 @@ onMounted(() => {
 }
 .lc-spike__chart {
   margin-top: 16rpx;
+}
+.lc-dchart {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  background-color: #ffffff;
+  border-radius: 12rpx;
+}
+.lc-dchart__title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #303133;
+}
+.lc-dchart__empty {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #c0c4cc;
 }
 .lc-kpi {
   margin-top: 24rpx;

@@ -11,12 +11,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildUniChartQuery,
   buildUniKpiQuery,
   buildUniNoticeParams,
   buildUniTodoParams,
+  uniAggRowsOf,
   uniKpiValueOf,
   uniNoticeRowsOf,
   uniTodoRowsOf,
+  useUniChart,
   useUniKpi,
   useUniNotice,
   useUniTodo,
@@ -63,6 +66,27 @@ describe('@lc/runtime-uni/dash 纯函数', () => {
   it('uniTodoRowsOf：content/totalElements（对位 PageResponse）；无 data 回空', () => {
     expect(uniTodoRowsOf({ content: [{ taskId: 't1' }], totalElements: 3 })).toEqual({ rows: [{ taskId: 't1' }], total: 3 })
     expect(uniTodoRowsOf(undefined)).toEqual({ rows: [], total: 0 })
+  })
+
+  it('buildUniChartQuery：group/agg/sort/order 全带；metric/timeGrain/limit/filter 空值剔除', () => {
+    expect(
+      buildUniChartQuery({ group: 'dept', agg: 'sum', metric: 'amount', sort: 'value', order: 'desc', limit: 10 }),
+    ).toEqual({ group: 'dept', agg: 'sum', metric: 'amount', sort: 'value', order: 'desc', limit: 10 })
+    // count → metric 不带；timeGrain/filter/limit 空缺省剔除（对位 DashChart null 参数省略）
+    expect(buildUniChartQuery({ group: 'status', agg: 'count', sort: '', order: '', limit: 0 })).toEqual({
+      group: 'status',
+      agg: 'count',
+      sort: 'key',
+      order: 'asc',
+    })
+    expect(
+      buildUniChartQuery({ group: 'day', agg: 'count', timeGrain: 'month', filter: '{"a":1}', sort: 'key', order: 'asc' }),
+    ).toEqual({ group: 'day', agg: 'count', timeGrain: 'month', filter: '{"a":1}', sort: 'key', order: 'asc' })
+  })
+
+  it('uniAggRowsOf：rows 数组原样；无 data 回空数组', () => {
+    expect(uniAggRowsOf({ rows: [{ key: '研发', value: 3 }] })).toEqual([{ key: '研发', value: 3 }])
+    expect(uniAggRowsOf(undefined)).toEqual([])
   })
 })
 
@@ -133,8 +157,7 @@ describe('@lc/runtime-uni/dash useUniNotice（请求器接线）', () => {
   })
 })
 
-describe('@lc/runtime-uni/dash useUniTodo（请求器接线）', () => {
-  it('todo 视图：GET /v1/tasks（assignee=登录用户）', async () => {
+describe('@lc/runtime-uni/dash useUniTodo（请求器接线）', () => {  it('todo 视图：GET /v1/tasks（assignee=登录用户）', async () => {
     const seen: unknown[] = []
     const store = useUniTodo({
       view: 'todo',
@@ -197,5 +220,66 @@ describe('@lc/runtime-uni/dash useUniTodo（请求器接线）', () => {
     await store.reload()
     expect(store.rows.value).toEqual([])
     expect(store.empty.value).toBe('没有待办任务')
+  })
+})
+
+describe('@lc/runtime-uni/dash useUniChart（请求器接线）', () => {
+  it('reload：GET aggregate（group 维度聚合），rows 接线', async () => {
+    const seen: unknown[] = []
+    const store = useUniChart({
+      refId: 'ref_ds_1',
+      group: 'dept',
+      agg: 'sum',
+      metric: 'amount',
+      limit: 10,
+      request: async (call) => {
+        seen.push(call)
+        return { code: 200, data: { rows: [{ key: '研发', value: 120 }, { key: '市场', value: 50 }] } }
+      },
+    })
+    await store.reload()
+    expect(seen[0]).toEqual({
+      url: '/v1/data-sources/ref_ds_1/aggregate',
+      data: { group: 'dept', agg: 'sum', metric: 'amount', sort: 'key', order: 'asc', limit: 10 },
+      silent: true,
+    })
+    expect(store.rows.value).toEqual([{ key: '研发', value: 120 }, { key: '市场', value: 50 }])
+    expect(store.loading.value).toBe(false)
+  })
+
+  it('refId/group 空：不发请求（对位 DashChart sourceId/group 守卫）', async () => {
+    const seen: unknown[] = []
+    const store = useUniChart({
+      refId: '',
+      group: 'dept',
+      request: async (call) => {
+        seen.push(call)
+        return { code: 200, data: {} }
+      },
+    })
+    await store.reload()
+    expect(seen).toEqual([])
+    const store2 = useUniChart({
+      refId: 'ref_ds_1',
+      group: '',
+      request: async (call) => {
+        seen.push(call)
+        return { code: 200, data: {} }
+      },
+    })
+    await store2.reload()
+    expect(seen).toEqual([])
+  })
+
+  it('失败静默：rows 清空（对位 web catch rows=[]），不抛出', async () => {
+    const store = useUniChart({
+      refId: 'ref_ds_1',
+      group: 'dept',
+      request: async () => {
+        throw new Error('boom')
+      },
+    })
+    await store.reload()
+    expect(store.rows.value).toEqual([])
   })
 })

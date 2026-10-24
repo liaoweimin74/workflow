@@ -38,3 +38,34 @@ describe('project-files — pages.json（Task 3.1）', () => {
     expect(manifest['mp-weixin'].appid).toBe('wx1234')
   })
 })
+
+describe('project-files — 分包（Task 7.3：图表页落 pagesChart 分包）', () => {
+  it('buildPagesJson 按 root 分组：mainPages 出主包，subPackages 聚合分包', () => {
+    const client = {
+      ...CLIENT,
+      pages: [
+        { key: 'home', title: '首页' },
+        { key: 'chart_a', title: '图表A', subRoot: 'pagesChart' },
+        { key: 'chart_b', title: '图表B', subRoot: 'pagesChart' },
+      ],
+    }
+    const { files } = generatePageUni(EMPTY_SCHEMA, { ...META, client })
+    const pagesJson = JSON.parse(files['src/pages.json'])
+    expect(pagesJson.pages.map((p: any) => p.path)).toEqual(['pages/gen/home'])
+    expect(pagesJson.subPackages).toEqual([
+      {
+        root: 'pagesChart',
+        pages: [
+          { path: 'pagesChart/gen/chart_a', style: { navigationBarTitleText: '图表A' } },
+          { path: 'pagesChart/gen/chart_b', style: { navigationBarTitleText: '图表B' } },
+        ],
+      },
+    ])
+  })
+
+  it('manifest：mp-weixin.optimization.subPackages=true（分包优化随分包开启）', () => {
+    const { files } = generatePageUni(EMPTY_SCHEMA, META)
+    const manifest = JSON.parse(files['src/manifest.json'])
+    expect(manifest['mp-weixin'].optimization).toEqual({ subPackages: true })
+  })
+})

@@ -49,7 +49,7 @@
 
 - [x] 7.1 lime-echart spike：mp-weixin canvas 2d 兼容验证 + 分包落点结论（图表页 subpackage 规则），回填 design（design Risks 第 2 条）（可自动化部分已完成：uni-echarts@2.5.3 + echarts@5.6.0 双端构建通过、分包产物结构验证、design Risks/Open Questions 回填；mp-weixin 真机 canvas 渲染/触感实测归 10.3 人工清单）
 - [x] 7.2 dash-kpi / dash-notice / dash-todo 映射（自绘统计卡 / uni-notice-bar / 复用卡片列表）（实现口径：三件均自绘 .lc-kpi/.lc-notice/.lc-todo——uni-notice-bar 单行滚动不承载多条列表，数据面 @lc/runtime-uni/dash（aggregate /v1/notifications /v1/tasks），身份走 lc_user_id 本地存储（10.3 登录接线写入）；fcTable 格内同步装配）
-- [ ] 7.3 page-chart / dash-chart：复用 buildChartDataset/buildPieDataset 语义聚合与 option 构造，lime-echart 渲染；echarts 按需注册沿用 useEcharts 清单（spec: uniapp-codegen-target「图表语义层映射」）
+- [x] 7.3 page-chart / dash-chart：复用 buildChartDataset/buildPieDataset 语义聚合与 option 构造，lime-echart 渲染；echarts 按需注册沿用 useEcharts 清单（spec: uniapp-codegen-target「图表语义层映射」）（实现口径：图表载体为 uni-echarts@2.5.3（7.1 spike 结论），聚合/option 语义同源移植进 @lc/runtime-uni/charts（uniRowValueOf/computeAggregateUni/buildUniChartDataset/buildUniPieDataset/buildUniDatasetOption/buildUniAggregateOption，no-eval 静态字面量、空数据 null 走模板空态）；dash-chart 走 useUniChart aggregate 通道、page-chart 复用 useUniList(pagination:false) 全量前端聚合；散点/热力/漏斗/面积四型首版回退 bar/line 并登记 chart-type（绝不静默），真机 canvas 渲染实测归 10.3 人工清单）
 
 ## 8. 预览（M2/M3）
 

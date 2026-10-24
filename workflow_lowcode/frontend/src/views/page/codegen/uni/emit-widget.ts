@@ -3,6 +3,24 @@
  * Task 6.2：page-table → uni-table 简表（数据组件，接 useUniList）。
  * Task 6.3：fcTable → 纵向堆叠降级（放弃合并单元格语义，非空 home 格按 (row,col) 纵排）。
  * Task 7.2：dash-kpi / dash-notice / dash-todo → 自绘 uni 组件（@lc/runtime-uni/dash 取数）。
+ * Task 7.3：dash-chart / page-chart → uni-echarts 图表片段（@lc/runtime-uni/charts option + dash/list 取数）。
+ *
+ * chart 通道（7.3）：
+ *  · dash-chart → .lc-dchart：aggregate 通道走 useUniChart（对位 web DashChart.fetchData，
+ *    失败静默 rows 清空），option 走 buildUniAggregateOption（computed 包装，空 rows → null
+ *    由模板 v-if 走空态）；seriesName 对位 DashChart.render（title || (count → 数量 |
+ *    `${agg}(${metric})`)）。bar/line/pie 直出；scatter/heatmap/funnel 回退 bar、area 回退
+ *    line 并登记 chart-type（绝不静默）。
+ *  · page-chart → .lc-pchart：config（PageChartConfigDialog 形态 {type, dimension,
+ *    measures:[{key,agg,label?}]}）emit 期归一为 UniChartViewConfig 常量（measure.label 融为
+ *    yFields[].name，运行期零解释），数据走 useUniList(pagination: false)（size=-1 全量 +
+ *    uniListRowsOf 扁平化，对位 web PageDataChartPage flattenRecords），option 走
+ *    buildUniDatasetOption（前端按维度聚合）。
+ *  · 两类都出 `<uni-echarts>` + echarts/core 按需注册（echarts.use 清单沿用 web
+ *    useEcharts.ts 图表子集 Bar/Line/Pie + Grid/Tooltip/Legend + Canvas；uni-echarts vite
+ *    插件见模板含 `<uni-echarts` 时自动注入 provideEcharts，SFC 已有 echarts/core import
+ *    则复用——imports 与 echarts.use 不冲突）。归一 config/option 全静态对象字面量
+ *    （no-eval：产物运行期零解释）；span/height 尺寸镜像 → size-mirror（7.2 同口径）。
  *
  * spec「组件映射保真口径」：page-detail→堆叠详情、page-steps→uni-steps、
  * page-data-container→uni-popup 弹层；page-table→uni-table 简表（Task 6.1 spike 回填：
@@ -103,6 +121,10 @@ export function emitWidgetNode(node: IrNode, ir: IrPage): UniWidgetFragment | nu
       return emitNotice(node, ir)
     case 'dash-todo':
       return emitTodo(node, ir)
+    case 'dash-chart':
+      return emitDashChart(node, ir)
+    case 'page-chart':
+      return emitPageChart(node, ir)
     default:
       return null
   }
@@ -808,6 +830,179 @@ function emitTodo(node: IrNode, ir: IrPage): UniWidgetFragment {
       },
       sizeMirrorUnsupported(node),
     ],
+  }
+}
+
+// ==================== dash-chart / page-chart → uni-echarts 图表片段（Task 7.3） ====================
+
+/** uni-echarts 按需注册（web useEcharts.ts 图表子集同款；多片段同页重复 use 幂等无害） */
+export const UNI_ECHARTS_IMPORTS = [
+  `import { BarChart, LineChart, PieChart } from 'echarts/charts'`,
+  `import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'`,
+  `import * as echarts from 'echarts/core'`,
+  `import { CanvasRenderer } from 'echarts/renderers'`,
+  `import UniEcharts from 'uni-echarts'`,
+]
+
+const UNI_ECHARTS_USE_LINE =
+  'echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])'
+
+/**
+ * echarts.use 行装配级去重（首现保留）：多图表片段同页各带一行 use（重复注册因
+ * echarts.use set 语义本无害），装配层收敛为一行——产物更干净且避免阅读噪音。
+ * 只滤该行，其余 script 行原样（不同片段同名行即命名冲突 bug，不该在这里吞）。
+ */
+export function dedupeUniEchartsUse(scripts: string[]): string[] {
+  let seen = false
+  return scripts.filter((l) => {
+    if (l !== UNI_ECHARTS_USE_LINE) return true
+    if (seen) return false
+    seen = true
+    return true
+  })
+}
+
+/** bar/line/pie 直出；scatter/heatmap/funnel → bar、area → line（uni 首版子集） */
+function uniChartTypeOf(chartType: string): 'bar' | 'line' | 'pie' {
+  if (chartType === 'pie') return 'pie'
+  if (chartType === 'line' || chartType === 'area') return 'line'
+  return 'bar'
+}
+
+/** 画布高度：组件 height 非空照用（web 契约的 css 值），空 = 自适应缺省 480rpx */
+function uniChartHeight(height: unknown): string {
+  return typeof height === 'string' && height ? height : '480rpx'
+}
+
+/**
+ * dash-chart → .lc-dchart：uni-echarts 载体 + useUniChart aggregate 通道。
+ * 空数据/失败（rows=[]）→ option computed 为 null → 模板 v-else 空态（对位 web hasData 门）。
+ */
+function emitDashChart(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const p = camelField(node.artifact.field)
+  const unsupported: Unsupported[] = []
+  const title = textOr(propOf(node, ir, 'title'), '')
+  const rawType = textOr(propOf(node, ir, 'chartType'), 'bar')
+  const chartType = uniChartTypeOf(rawType)
+  if (rawType !== chartType) {
+    unsupported.push({
+      path: `${node.artifact.rulePath}.props.chartType`,
+      type: node.artifact.type,
+      key: 'chart-type',
+      message: `chartType=${rawType}：uni 首版仅 bar/line/pie，回退 ${chartType}（scatter/heatmap/funnel/area 语义不渲染）`,
+    })
+  }
+  const group = textOr(propOf(node, ir, 'group'), '')
+  const agg = textOr(propOf(node, ir, 'agg'), 'count')
+  const metric = propOf(node, ir, 'metric')
+  const timeGrain = propOf(node, ir, 'timeGrain')
+  const sort = propOf(node, ir, 'sort')
+  const order = propOf(node, ir, 'order')
+  const limit = propOf(node, ir, 'limit')
+  const filter = propOf(node, ir, 'filter')
+
+  // 系列名对位 DashChart.render seriesName：title || (count → 数量 | `${agg}(${metric})`)
+  const seriesName =
+    title || (agg === 'count' ? '数量' : `${agg}(${typeof metric === 'string' ? metric : ''})`)
+
+  // options：缺省项不出（sort=key/order=asc 是 useUniChart 缺省；count 不带 metric）
+  const opts = [`refId: ${dsRefIdExpr(node, ir)}`]
+  if (group) opts.push(`group: ${sq(group)}`)
+  opts.push(`agg: ${sq(agg)}`)
+  if (metric !== null && metric !== undefined && metric !== '') opts.push(`metric: ${sq(String(metric))}`)
+  if (typeof timeGrain === 'string' && timeGrain) opts.push(`timeGrain: ${sq(timeGrain)}`)
+  if (typeof sort === 'string' && sort && sort !== 'key') opts.push(`sort: ${sq(sort)}`)
+  if (typeof order === 'string' && order && order !== 'asc') opts.push(`order: ${sq(order)}`)
+  if (typeof limit === 'number' && limit > 0) opts.push(`limit: ${limit}`)
+  if (typeof filter === 'string' && filter) opts.push(`filter: ${sq(filter)}`)
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    '<view class="lc-dchart">',
+  ]
+  if (title) T.push(`  <text class="lc-dchart__title">${title}</text>`)
+  T.push(
+    `  <uni-echarts v-if="${p}Option" custom-style="width: 100%; height: ${uniChartHeight(propOf(node, ir, 'height'))}" :option="${p}Option" />`,
+    `  <text v-else class="lc-dchart__empty">{{ ${p}Loading ? '加载中…' : '暂无数据' }}</text>`,
+    '</view>',
+  )
+
+  return {
+    template: T.join('\n'),
+    script: [
+      UNI_ECHARTS_USE_LINE,
+      `const ${p} = useUniChart({ ${opts.join(', ')} })`,
+      `const { rows: ${p}Rows, loading: ${p}Loading } = ${p}`,
+      `const ${p}Option = computed(() => buildUniAggregateOption('${chartType}', ${p}Rows, ${sq(seriesName)}))`,
+      `onMounted(() => void ${p}.reload())`,
+    ],
+    imports: [
+      `import { computed, onMounted } from 'vue'`,
+      ...UNI_ECHARTS_IMPORTS,
+      `import { useUniChart } from '@lc/runtime-uni/dash'`,
+      `import { buildUniAggregateOption } from '@lc/runtime-uni/charts'`,
+    ],
+    unsupported: [...unsupported, sizeMirrorUnsupported(node)],
+  }
+}
+
+/**
+ * page-chart → .lc-pchart：config（PAGE 轨形态）emit 期归一为 UniChartViewConfig 常量，
+ * 数据走 useUniList(pagination: false) 全量（对位 web PageDataChartPage size=-1 前端聚合）。
+ */
+function emitPageChart(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const p = camelField(node.artifact.field)
+  const raw = (propOf(node, ir, 'config') ?? {}) as {
+    type?: unknown
+    dimension?: unknown
+    measures?: unknown
+  }
+  const rawType = typeof raw.type === 'string' ? raw.type : 'bar'
+  const chartType = uniChartTypeOf(rawType)
+  const dimension = typeof raw.dimension === 'string' ? raw.dimension : ''
+  const measures = Array.isArray(raw.measures) ? raw.measures : []
+  // 归一（web PageDataChartPage.normalizeMeasures 同口径）：剔空 key、非法 agg 回退 sum；
+  // measure.label 融为 yFields[].name（emit 期静态化，运行期零解释）
+  const yFields = measures
+    .map((m) => m as { key?: unknown; agg?: unknown; label?: unknown })
+    .filter((m) => typeof m.key === 'string' && m.key)
+    .map((m) => {
+      const agg = m.agg === 'avg' || m.agg === 'count' || m.agg === 'max' || m.agg === 'min' ? m.agg : 'sum'
+      return typeof m.label === 'string' && m.label ? { key: m.key, agg, name: m.label } : { key: m.key, agg }
+    })
+  const chartConstName = `${p}Chart`
+  const chartConst: Record<string, unknown> = {
+    type: chartType,
+    xField: dimension,
+    yFields,
+    limit: 20,
+  }
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    '<view class="lc-pchart">',
+    `  <uni-echarts v-if="${p}Option" custom-style="width: 100%; height: ${uniChartHeight(propOf(node, ir, 'height'))}" :option="${p}Option" />`,
+    `  <text v-else class="lc-pchart__empty">{{ ${p}Loading ? '加载中…' : '暂无数据' }}</text>`,
+    '</view>',
+  ]
+
+  return {
+    template: T.join('\n'),
+    script: [
+      UNI_ECHARTS_USE_LINE,
+      `const ${chartConstName} = ${jsonToTs(chartConst)}`,
+      `const ${p} = useUniList({ refId: ${dsRefIdExpr(node, ir)}, pagination: false })`,
+      `const { rows: ${p}Rows, loading: ${p}Loading } = ${p}`,
+      `const ${p}Option = computed(() => buildUniDatasetOption(${chartConstName}.type, ${p}Rows, ${chartConstName}))`,
+      `onMounted(() => void ${p}.reload())`,
+    ],
+    imports: [
+      `import { computed, onMounted } from 'vue'`,
+      ...UNI_ECHARTS_IMPORTS,
+      `import { useUniList } from '@lc/runtime-uni/list'`,
+      `import { buildUniDatasetOption } from '@lc/runtime-uni/charts'`,
+    ],
+    unsupported: [sizeMirrorUnsupported(node)],
   }
 }
 

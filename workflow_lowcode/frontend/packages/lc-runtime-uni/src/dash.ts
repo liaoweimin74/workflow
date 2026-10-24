@@ -212,3 +212,100 @@ export function useUniTodo(options: UniTodoOptions) {
 
   return { rows, total, loading, empty, reload }
 }
+
+// ==================== dash-chart（Task 7.3） ====================
+
+export interface UniChartQueryInput {
+  /** 分组维度（列 key 或逗号分隔多维度）；空 → 不发请求（DashChart 守卫同款） */
+  group: string
+  agg: string
+  /** count 聚合不需要指标列（DashChart：agg===count → metric=null） */
+  metric?: string | null
+  /** 时间粒度（仅日期维度生效） */
+  timeGrain?: string | null
+  /** 排序键（key/value） */
+  sort?: string | null
+  /** 排序方向 */
+  order?: string | null
+  /** 取前 N 组；0/空 → 不带（服务端全量） */
+  limit?: number | null
+  /** 结构化 filter JSON */
+  filter?: string | null
+}
+
+/**
+ * dash-chart aggregate 查询参数（纯函数，对位 DashChart.fetchData 参数契约）：
+ * group 固定带；sort/order 缺省回 key/asc；metric（count 时不带）/timeGrain/limit/filter 空值剔除
+ * （对位 axios params 省略 null——后端 null 与缺省同义，省略让 URL 更短、语义一致）。
+ */
+export function buildUniChartQuery(input: UniChartQueryInput): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    group: input.group,
+    agg: input.agg || 'count',
+    sort: input.sort || 'key',
+    order: input.order || 'asc',
+  }
+  const isCount = (input.agg || 'count') === 'count'
+  const metric = isCount ? null : input.metric
+  if (metric !== null && metric !== undefined && metric !== '') out.metric = metric
+  if (input.timeGrain !== null && input.timeGrain !== undefined && input.timeGrain !== '') out.timeGrain = input.timeGrain
+  if (input.limit !== null && input.limit !== undefined && Number(input.limit) > 0) out.limit = Number(input.limit)
+  if (input.filter) out.filter = input.filter
+  return out
+}
+
+/** aggregate 响应 → rows（纯函数）：无 data 回空数组 */
+export function uniAggRowsOf(data: unknown): Array<{ key: unknown; value: unknown }> {
+  const d = (data ?? {}) as { rows?: unknown[] }
+  const rows = Array.isArray(d.rows) ? d.rows : []
+  return rows as Array<{ key: unknown; value: unknown }>
+}
+
+export interface UniChartOptions {
+  refId: string
+  group: string
+  agg: string
+  metric?: string | null
+  timeGrain?: string | null
+  sort?: string | null
+  order?: string | null
+  limit?: number | null
+  filter?: string | null
+  request?: UniDashRequest
+}
+
+/** dash-chart 数据 composable（对位 DashChart.fetchData）：aggregate 通道，失败静默 rows 清空 */
+export function useUniChart(options: UniChartOptions) {
+  const request = options.request ?? uniRequest({ tenantHeader: 'X-Tenant-Id' })
+  const rows = ref<Array<{ key: unknown; value: unknown }>>([])
+  const loading = ref(false)
+
+  /** 重取：refId/group 空（未配置数据源或维度）不发请求；失败静默不抛出（对位 web catch rows=[]） */
+  async function reload(): Promise<void> {
+    if (!options.refId || !options.group) return
+    loading.value = true
+    try {
+      const res = await request<{ rows?: unknown[] }>({
+        url: `/v1/data-sources/${options.refId}/aggregate`,
+        data: buildUniChartQuery({
+          group: options.group,
+          agg: options.agg,
+          metric: options.metric,
+          timeGrain: options.timeGrain,
+          sort: options.sort,
+          order: options.order,
+          limit: options.limit,
+          filter: options.filter,
+        }),
+        silent: true,
+      })
+      rows.value = uniAggRowsOf(res.data)
+    } catch {
+      rows.value = []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { rows, loading, reload }
+}

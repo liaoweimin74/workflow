@@ -214,8 +214,10 @@ export function uniPreviewPlugin(rootDir: string): Plugin {
   }
 }
 
-/** 产物 H5 静态服务根：uni build（h5）的输出目录 */
-const H5_DIST_REL = path.join('dist', 'build', 'h5')
+/** 产物 H5 静态服务根：uni build（h5）在 uni-shell/ 里跑 → 输出 <rootDir>/uni-shell/dist/build/h5。
+ * 必须与 runUniBuild 的工作目录（<rootDir>/uni-shell）同口径——少一段就会 serve 一个空目录，
+ * 5301 上恒回 404「产物未构建」（e2e 只看 iframe src 是看不出这一类静默失效的）。 */
+const H5_DIST_REL = path.join(UNI_SHELL_DIR_REL, 'dist', 'build', 'h5')
 
 const MIME_BY_EXT: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

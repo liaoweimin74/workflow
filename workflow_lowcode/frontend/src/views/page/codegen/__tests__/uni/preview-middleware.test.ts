@@ -72,14 +72,20 @@ describe('vite.uni-preview 中间件（Task 8.2）', () => {
     expect(PREVIEW_PORT).toBe(5301)
   })
 
-  it('startUniPreviewServer：serve dist/build/h5，/ 回 index.html，未命中路径回 404', async () => {
-    const dist = mkdtempSync(path.join(tmpdir(), 'lc-uni-preview-'))
-    const h5 = path.join(dist, 'dist', 'build', 'h5')
+  it('startUniPreviewServer：serve <rootDir>/uni-shell/dist/build/h5，/ 回 index.html，未命中路径回 404', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'lc-uni-preview-'))
+    // 同一 rootDir 口径：planUniPreviewWrite 写 uni-shell/src/、runUniBuild 在 uni-shell/ 里跑，
+    // 产物落在 <rootDir>/uni-shell/dist/build/h5。这里再放一份同名干扰产物在 <rootDir>/dist/build/h5，
+    // 钉住服务的是「uni build 真正会写的那个目录」，而不是少一段的旧路径（否则 5301 上永远 404「产物未构建」）
+    const h5 = path.join(root, 'uni-shell', 'dist', 'build', 'h5')
     mkdirSync(h5, { recursive: true })
     writeFileSync(path.join(h5, 'index.html'), '<html>uni-h5-index</html>', 'utf8')
     mkdirSync(path.join(h5, 'assets'), { recursive: true })
     writeFileSync(path.join(h5, 'assets', 'demo.js'), 'console.log(1)', 'utf8')
-    const server = startUniPreviewServer(dist, PREVIEW_PORT)
+    const decoy = path.join(root, 'dist', 'build', 'h5')
+    mkdirSync(decoy, { recursive: true })
+    writeFileSync(path.join(decoy, 'index.html'), '<html>decoy</html>', 'utf8')
+    const server = startUniPreviewServer(root, PREVIEW_PORT)
     try {
       const get = (p: string) =>
         fetch(`http://127.0.0.1:${PREVIEW_PORT}${p}`).then(async (r) => ({
@@ -90,6 +96,7 @@ describe('vite.uni-preview 中间件（Task 8.2）', () => {
       const index = await get('/')
       expect(index.status).toBe(200)
       expect(index.body).toContain('uni-h5-index')
+      expect(index.body).not.toContain('decoy')
       expect(index.type).toContain('text/html')
 
       const asset = await get('/assets/demo.js')
@@ -100,7 +107,7 @@ describe('vite.uni-preview 中间件（Task 8.2）', () => {
       expect(missing.status).toBe(404)
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
-      rmSync(dist, { recursive: true, force: true })
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

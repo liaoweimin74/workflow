@@ -47,6 +47,12 @@ public class AppRelease {
     private String artifactUrl;
 
     /**
+     * 最近一次构建/上传失败原因（FAILED 可追溯；成功构建后清空）。
+     */
+    @Column(name = "error", length = 1024)
+    private String error;
+
+    /**
      * 状态：CREATED / BUILDING / BUILT / UPLOADED / FAILED。
      */
     @Column(name = "status", length = 32, nullable = false)
@@ -89,6 +95,9 @@ public class AppRelease {
 
     public String getArtifactUrl() { return artifactUrl; }
     public void setArtifactUrl(String artifactUrl) { this.artifactUrl = artifactUrl; }
+
+    public String getError() { return error; }
+    public void setError(String error) { this.error = error; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

@@ -77,21 +77,6 @@
                 :get-schema="canvasSchema"
               />
             </el-tab-pane>
-            <!-- 产物预览（Task 8.1）：uniapp 页才有 uni 产物，构建成功后手机壳 iframe 加载 -->
-            <el-tab-pane
-              v-if="pageDesignType === 'uniapp' && UniArtifactPreviewPane"
-              name="uni-artifact"
-              label="产物预览"
-              lazy
-            >
-              <component
-                :is="UniArtifactPreviewPane"
-                :active="status === 'uni-artifact'"
-                :page-key="pageKey"
-                :page-name="pageName || pageKey"
-                :get-schema="canvasSchema"
-              />
-            </el-tab-pane>
           </template>
         </fc-designer>
       </div>
@@ -474,16 +459,6 @@ const codegenBusy = ref(false)
  */
 const CodegenPreviewPane = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./codegen/CodegenPreviewPane.vue'))
-  : null
-
-/**
- * 预览弹窗的「产物预览」页签（Task 8.1）同样 dev-only，且只对 uniapp 页面渲染：
- * 产物预览走 generatePageUni + 落盘构建链（uni emit 栈 + vite 中间件），web 页面
- * 没有对应产物。DEV 三元与 CodegenPreviewPane 同口径：静态引会把 uni 出码栈拖进
- * 生产 chunk；DEV 为假时折叠成 null，页签整块不渲染。
- */
-const UniArtifactPreviewPane = import.meta.env.DEV
-  ? defineAsyncComponent(() => import('./codegen/UniArtifactPreviewPane.vue'))
   : null
 
 // ========== 挂接菜单（多挂接 + 列表管理） ==========

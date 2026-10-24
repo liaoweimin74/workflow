@@ -821,10 +821,15 @@ export const listOf = (type: string): TypeContract['list'] | undefined => TYPE_C
 /** 展示组件（仪表盘组件族）：出栅格列，不出 v-model 也不挂 ref */
 export const widgetOf = (type: string): boolean => !!TYPE_CONTRACTS[type]?.widget
 
-/** 产物能否给该类型挂 ref：没 defineExpose 的组件挂了也取不到方法，那是假接线 */
-export const refableOf = (type: string): boolean => {
+/** 产物能否给该类型挂 ref：没 defineExpose 的组件挂了也取不到方法，那是假接线。
+ * uniapp 端（Task 5.3）：page-list-cards 的 useUniList 实例方法（reload/applyFilter/gotoPage…）
+ * 等价 web defineExpose 面，ref 名义挂在节点上、实例方法寻址在 emit 侧对位——按端放开
+ * list-ref gate；其余 expose=none 类型两端一致不放。 */
+export const refableOf = (type: string, target: 'web' | 'uniapp' = 'web'): boolean => {
   const c = TYPE_CONTRACTS[type]
-  return !!c?.runtime && !c.widget && c.list?.expose !== 'none'
+  if (!c?.runtime || c.widget) return false
+  if (c.list?.expose === 'none') return target === 'uniapp' && type === 'page-list-cards'
+  return true
 }
 
 /** 列表组件的固定事件出口（when='chain' 的出口要该载体真配了链才绑，由 chains 阶段追加） */

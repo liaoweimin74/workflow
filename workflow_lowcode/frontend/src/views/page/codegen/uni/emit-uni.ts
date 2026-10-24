@@ -8,11 +8,14 @@
  *    模板缩 2 格、script/import/unsupported 并入页面；其余组件族以 lc:todo 注释挂点
  *    占位，族装配按任务落地（6.x 表格族、7.x 字段族）；
  *  · pages.json / manifest.json / App.vue（project-files，清单即真相）；
+ *  · 脚本链装配（Task 5.3）：script 函数体照搬（scriptFunction 复用 web 同款）+ 材料
+ *    注入（message→uniMessage、page→pageKey 常量、http→uniHttpShim）；
  *  · 报告（Task 2.4 per-target，uniapp 维度）：uni 片段的 unsupported 合并进 manifest
  *    后喂报告——「按端不支持」与「共享 parse 拒绝」在同一份清单里可见。
  */
 
 import { emitManifest } from '../emit'
+import { materialsOf, scriptFunction } from '../chain-emit'
 import type { GenerateResult, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
 import { buildReport } from '../report'
@@ -26,7 +29,14 @@ export function generatePageUni(
   schema: { rule: any[]; option: any; dataSources: any[]; actions: any[] },
   meta: { pageKey: string; pageName: string; client: UniClientConfig },
 ): GenerateResult {
-  const ir = parseIr(schema, { pageKey: meta.pageKey, pageName: meta.pageName, exportedAt: 'emit-uni' })
+  // target=uniapp：parse 按端放开 list-ref gate（page-list-cards 走 useUniList 实例方法等价面，
+  // Task 5.3）；web 路径不传 target，行为不变
+  const ir = parseIr(schema, {
+    pageKey: meta.pageKey,
+    pageName: meta.pageName,
+    exportedAt: 'emit-uni',
+    target: 'uniapp',
+  })
   const base = emitManifest(ir)
   const page = emitPage(ir)
   // uni 侧缺口（容器族语义/详情弹窗/未装配组件族）并入 manifest：报告与后续反读看到同一份真相
@@ -133,6 +143,14 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
   }
   T.push('</view>')
 
+  // 脚本材料（Task 5.3，对位 web emit.ts 464-465 consts + 213-220 imports）：script 链步骤
+  // 的白名单上下文在 uni 产物里的对位——message → uniMessage（uni.showToast 包装）、
+  // page → pageKey 常量、http → uniHttpShim 薄壳走 uniRequest（租户头与 data.ts 装配同口径）。
+  // import 行先并入 imports（随 mergeImports 按源合并），常量在容器段后、片段脚本前插入
+  const materials = materialsOf(ir.chains)
+  if (materials.scripts.has('message')) imports.push(`import { uniMessage } from '@lc/runtime-uni/actions'`)
+  if (materials.scripts.has('http')) imports.push(`import { uniRequest, uniHttpShim } from '@lc/runtime-uni/http'`)
+
   // script：imports 按源合并（多片段共享同一组 import）→ 数据源常量 → 容器段 → 片段脚本
   const S: string[] = [...mergeImports(imports)]
   // 数据源常量：对位 web emit.ts 227-233（ds 恒出，登记表有源才出）
@@ -145,7 +163,21 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
     S.push('}')
   }
   if (containerFrag) S.push(...containerFrag.script)
+  // 材料常量（script 白名单上下文的 uni 对位，运行期事件触发时求值，声明顺序无关）
+  if (materials.scripts.has('message')) S.push('const message = uniMessage')
+  if (materials.scripts.has('page')) S.push(`const page = { pageKey: '${ir.pageKey}' }`)
+  if (materials.scripts.has('http')) S.push(`const http = uniHttpShim(uniRequest({ tenantHeader: 'X-Tenant-Id' }))`)
   S.push(...scripts)
+  // 脚本函数体（Task 5.3，对位 web emit.ts scripts 段）：正文照搬 schema 普通函数
+  // （parse 白名单已把关），调用语句在片段脚本里（函数声明提升，位置无关）
+  const seenFns = new Set<string>()
+  for (const c of ir.chains) {
+    for (const s of c.steps) {
+      if (!s.script || seenFns.has(s.script.fn)) continue
+      seenFns.add(s.script.fn)
+      S.push(...scriptFunction(c, s))
+    }
+  }
 
   return {
     source: [

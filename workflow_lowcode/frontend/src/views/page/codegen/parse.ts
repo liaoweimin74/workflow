@@ -100,6 +100,9 @@ interface Ctx {
   injections: Map<string, IrInjection>
   /** 动作链判定的页面事实（载体寻址、链与列链改判）：在节点规划之前建好，两边口径一致 */
   chain: ChainPage
+  /** 出码目标端（Task 5.3）：链 gate 与节点 ref 判定按端放开（page-list-cards 走 useUniList
+   * 实例方法等价面）；缺省 web，行为不变 */
+  target: 'web' | 'uniapp'
 }
 
 /**
@@ -240,7 +243,7 @@ function kindOf(type: string, contract: TypeContract): IrKind {
 
 export function parseIr(
   schema: { rule: any[]; option: any; dataSources: any[]; actions: any[] },
-  meta: { pageKey: string; pageName: string; exportedAt: string },
+  meta: { pageKey: string; pageName: string; exportedAt: string; target?: 'web' | 'uniapp' },
 ): IrPage {
   // 页面主体（列表组件）：容器展示方式与两处尺寸冲突都以它的 viewDetail 为准
   const listNode = (schema.rule || []).find((r) => listOf(r?.type))
@@ -265,6 +268,7 @@ export function parseIr(
     writes: new Map(),
     injections: new Map(),
     chain,
+    target: meta.target ?? 'web',
   }
   // 链的 implementedBy 要指认产物文件：文件名归 ctx，链侧不重算一遍命名规则
   chain.file = ctx.file
@@ -459,7 +463,9 @@ function planNode(node: any, rulePath: string, id: string, ctx: Ctx, env: Env = 
   // 展示组件（dash-* / page-*）确实暴露了 refresh/setFilter，但产物侧还没有取用方
   // （现网靠 ready 上报进 dashInstances/componentRefs 由渲染器寻址，产物没有那张登记表），
   // 挂 ref 只会多一个没人调的变量；要接就先消对应的 requires 语义债。
-  const refable = refableOf(node.type)
+  // uniapp 端（Task 5.3）page-list-cards 走 useUniList 实例方法等价面：ref 名义挂在节点上，
+  // 链 gate 按端放开；uni emit 不消费 host.ref（实例方法用页面本地名寻址），不产生假接线。
+  const refable = refableOf(node.type, ctx.target)
   const plan: IrNode = {
     artifact: {
       id,

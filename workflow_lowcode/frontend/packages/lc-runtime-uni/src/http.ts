@@ -118,3 +118,18 @@ export function uniRequest(options: UniRequestOptions) {
     })
   }
 }
+
+/**
+ * 脚本上下文的 http 薄壳（Task 5.3）：对位 web 产物脚本里 axios 实例的调用面
+ * （get/post/put/delete），内部走 uniRequest 请求器。返回 R 包装原样放行
+ * （与 web 拦截器 return data 同约定：await http.get(...) 取到的就是 { code, msg, data }）。
+ * 产物装配：`const http = uniHttpShim(uniRequest({ tenantHeader: 'X-Tenant-Id' }))`。
+ */
+export function uniHttpShim(request: (call: UniRequestCall) => Promise<R<unknown>>) {
+  return {
+    get: <T = unknown>(url: string) => request<T>({ url }),
+    post: <T = unknown>(url: string, data?: unknown) => request<T>({ url, method: 'POST', data }),
+    put: <T = unknown>(url: string, data?: unknown) => request<T>({ url, method: 'PUT', data }),
+    delete: <T = unknown>(url: string) => request<T>({ url, method: 'DELETE' }),
+  }
+}

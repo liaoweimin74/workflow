@@ -148,4 +148,110 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(sfc).toContain("{{ custDetail1Data['Fyczmv3ks22dabc'] }}")
     expect(sfc).toMatch(/<!-- lc:todo node=n\d+ type=page-table/)
   })
+
+  it('script 链装配（5.3）：函数体照搬普通函数 + 材料注入（message→uniMessage、page 常量）', () => {
+    const schema = {
+      rule: [
+        {
+          type: 'page-list-cards',
+          field: 'tasks',
+          props: {
+            dataSourceId: 'ds_task',
+            columns: [{ prop: 'title', label: '标题' }],
+            viewActions: {
+              buttons: [
+                {
+                  key: 'audit',
+                  label: '提交',
+                  placement: 'toolbar',
+                  style: 'button',
+                  events: [
+                    {
+                      trigger: 'click',
+                      actions: [
+                        {
+                          type: 'script',
+                          params: [{ key: 'source', value: "message({ message: page.pageKey, type: 'success' })" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      option: {},
+      dataSources: [{ id: 'ds_task', refId: 'ref_task_1' }],
+      actions: [],
+    }
+    const { files, manifest } = generatePageUni(schema as any, {
+      pageKey: 'uni_script',
+      pageName: 'uni_script',
+      client: CLIENT,
+    })
+    const sfc = files['src/pages/gen/uni_script.vue']
+    // 材料注入：message → uniMessage 包装（uni.showToast 映射）；page → pageKey 常量
+    expect(sfc).toContain(`import { uniMessage } from '@lc/runtime-uni/actions'`)
+    expect(sfc).toContain('const message = uniMessage')
+    expect(sfc).toContain("const page = { pageKey: 'uni_script' }")
+    // 函数体照搬（普通 async function；no-eval Gate：产物无 new Function/eval）
+    expect(sfc).toContain('async function scriptAudit(_row?: any) {')
+    expect(sfc).toContain("  message({ message: page.pageKey, type: 'success' })")
+    // case 里调用（按钮链 hasRow=true → 传 row；uses 不含 row → 形参 _row?: any）
+    expect(sfc).toContain('      void scriptAudit(row)')
+    expect(sfc).not.toContain('new Function')
+    expect(sfc).not.toContain('eval(')
+    // script 步骤真执行，不再登记 unsupported
+    expect(manifest.unsupported.some((u) => u.key === 'script')).toBe(false)
+  })
+
+  it('script 用 http → uniHttpShim 薄壳接线（get/post 对位 axios 实例方法）', () => {
+    const schema = {
+      rule: [
+        {
+          type: 'page-list-cards',
+          field: 'tasks',
+          props: {
+            dataSourceId: 'ds_task',
+            columns: [{ prop: 'title', label: '标题' }],
+            viewActions: {
+              buttons: [
+                {
+                  key: 'sync',
+                  label: '同步',
+                  placement: 'toolbar',
+                  style: 'button',
+                  events: [
+                    {
+                      trigger: 'click',
+                      actions: [
+                        {
+                          type: 'script',
+                          params: [{ key: 'source', value: "const res = await http.get('/v1/ping')" }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      option: {},
+      dataSources: [{ id: 'ds_task', refId: 'ref_task_1' }],
+      actions: [],
+    }
+    const { files } = generatePageUni(schema as any, {
+      pageKey: 'uni_http',
+      pageName: 'uni_http',
+      client: CLIENT,
+    })
+    const sfc = files['src/pages/gen/uni_http.vue']
+    expect(sfc).toContain(`import { uniRequest, uniHttpShim } from '@lc/runtime-uni/http'`)
+    expect(sfc).toContain("const http = uniHttpShim(uniRequest({ tenantHeader: 'X-Tenant-Id' }))")
+    expect(sfc).toContain("  const res = await http.get('/v1/ping')")
+  })
 })

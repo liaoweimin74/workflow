@@ -82,7 +82,7 @@ export interface ChainPage {
 
 export function chainPageFacts(
   schema: any,
-  meta: { pageKey: string },
+  meta: { pageKey: string; target?: 'web' | 'uniapp' },
   sink: ChainPage['unsupported'],
 ): ChainPage {
   const rules: any[] = schema.rule || []
@@ -98,7 +98,7 @@ export function chainPageFacts(
       field: String(x.n.field ?? ''),
       ds: String(x.n.props?.dataSourceId ?? ''),
       type: x.n.type as string,
-      ref: refableOf(x.n.type) ? `${x.id}Ref` : null,
+      ref: refableOf(x.n.type, meta.target) ? `${x.id}Ref` : null,
     }))
   return {
     pageKey: meta.pageKey,

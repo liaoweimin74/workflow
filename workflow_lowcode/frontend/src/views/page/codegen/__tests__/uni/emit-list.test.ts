@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import type { IrNode, IrPage, IrChainStep, Unsupported } from '../../ir'
 import { parseIr } from '../../parse'
 import { PROFILES } from '../../target-profile'
-import { emitListNode, stepStatementsUni } from '../../uni/emit-list'
+import { emitListNode, stepStatementsUni, type UniStepCtx } from '../../uni/emit-list'
 import cardlist from '../fixtures/corpus/cardlist_test.json'
 
 const clone = (v: unknown) => JSON.parse(JSON.stringify(v))
@@ -270,7 +270,7 @@ describe('emitListNode — 合成页（角色列 + 搜索抽屉 + 按钮链）',
 
 describe('stepStatementsUni — 链步骤出口表（5.1 子集，直测语句形状）', () => {
   const sink = () => ({ unsupported: [] as Unsupported[] })
-  const ctx = { list: 'tasksList', type: 'page-list-cards' }
+  const ctx = { list: 'tasksList', type: 'page-list-cards' } as UniStepCtx
 
   it('refresh → 页面本地 reload；set-filter → applyFilter 对象', () => {
     const s1 = sink()
@@ -316,25 +316,33 @@ describe('stepStatementsUni — 链步骤出口表（5.1 子集，直测语句�
     expect(stepStatementsUni(link, ctx, '  ', sink())).toEqual(["  uni.navigateTo({ url: '/pages/gen/x' })"])
   })
 
-  it('未适配 op：行内 todo 注释 + unsupported 登记（容器族/导出/脚本）', () => {
+  it('未适配 op：行内 todo 注释 + unsupported 登记（export/set-sort/clear-selection）', () => {
+    const s1 = sink()
+    const exp = { op: 'export', args: [], path: 'a[0].steps[1]' } as IrChainStep
+    expect(stepStatementsUni(exp, ctx, '  ', s1)).toEqual([
+      '  // lc:todo op=export ← a[0].steps[1]：浏览器 Blob/ObjectURL 下载在小程序无对位能力，该步不执行',
+    ])
+    expect(s1.unsupported[0].key).toBe('export')
+    const s2 = sink()
+    const sort = { op: 'set-sort', args: [], path: 'a[0].steps[2]' } as IrChainStep
+    stepStatementsUni(sort, ctx, '  ', s2)
+    expect(s2.unsupported[0].key).toBe('set-sort')
+    const s3 = sink()
+    const sel = { op: 'clear-selection', args: [], path: 'a[0].steps[3]' } as IrChainStep
+    stepStatementsUni(sel, ctx, '  ', s3)
+    expect(s3.unsupported[0].key).toBe('clear-selection')
+  })
+
+  it('容器族 op：真实现（5.3）——open/load/close/save 直调容器段函数', () => {
     const s1 = sink()
     const oc = { op: 'open-container', args: [], path: 'a[0].steps[0]' } as IrChainStep
-    expect(stepStatementsUni(oc, ctx, '  ', s1)).toEqual([
-      '  // lc:todo op=open-container ← a[0].steps[0]：uni 容器适配 Task 5.2/5.3 落地',
-    ])
-    expect(s1.unsupported).toEqual([
-      {
-        path: 'a[0].steps[0]',
-        type: 'page-list-cards',
-        key: 'open-container',
-        message: 'open-container 要容器语义：uni 容器适配 Task 5.2/5.3 落地，该步暂不执行',
-      },
-    ])
+    expect(stepStatementsUni(oc, ctx, '  ', s1)).toEqual(["  void openContainer('', false, 'create')"])
+    expect(s1.unsupported).toEqual([])
     const s2 = sink()
-    const exp = { op: 'export', args: [], path: 'a[0].steps[1]' } as IrChainStep
-    expect(stepStatementsUni(exp, ctx, '  ', s2)).toEqual([
-      '  // lc:todo op=export ← a[0].steps[1]：uni 出口适配 Task 5.3 落地',
-    ])
-    expect(s2.unsupported[0].key).toBe('export')
+    const cc = { op: 'close-container', args: [], path: 'a[0].steps[1]' } as IrChainStep
+    expect(stepStatementsUni(cc, ctx, '  ', s2)).toEqual(['  closeContainer()'])
+    const s3 = sink()
+    const sv = { op: 'save-container', args: [], path: 'a[0].steps[2]' } as IrChainStep
+    expect(stepStatementsUni(sv, ctx, '  ', s3)).toEqual(['  void confirmSave()'])
   })
 })

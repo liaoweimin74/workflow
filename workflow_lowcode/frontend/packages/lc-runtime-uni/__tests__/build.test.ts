@@ -11,9 +11,9 @@ import { createRequire } from 'node:module'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-import { uniRequest } from '../src/http'
+import { uniRequest, uniHttpShim } from '../src/http'
 import { useUniForm } from '../src/form'
-import { runAction } from '../src/actions'
+import { runAction, uniMessage } from '../src/actions'
 import { buildChartOption } from '../src/charts'
 import { parseFormula, FormulaParseError } from '../src/formula-eval'
 import { LcFormula } from '../src/formula'
@@ -128,8 +128,41 @@ describe('@lc/runtime-uni — 四入口骨架行为（Task 3.2/3.3）', () => {
     expect(validate()).toBe(true)
   })
 
-  it('form.useUniForm：init 初值预填 model（嵌套按形态 []/{}）+ reset 复位（Task 5.2 容器段）', () => {
-    const form = useUniForm([
+  it('actions.uniMessage：脚本上下文 message 包装（ElMessage 形状 → uni.showToast 映射）', () => {
+    const calls = stubUni()
+    uniMessage({ message: '已保存', type: 'success' })
+    expect(calls.showToast).toEqual([{ title: '已保存', icon: 'success' }])
+    uniMessage({ message: '出错了', type: 'error' })
+    uniMessage({ message: '提示' })
+    uniMessage({ message: '警告', type: 'warning' })
+    expect(calls.showToast).toEqual([
+      { title: '已保存', icon: 'success' },
+      { title: '出错了', icon: 'error' },
+      { title: '提示', icon: 'none' },
+      { title: '警告', icon: 'none' },
+    ])
+  })
+
+  it('http.uniHttpShim：脚本上下文 http 薄壳（get/post/put/delete → uni.request 方法映射）', async () => {
+    const calls = stubUni()
+    ;(globalThis as any).uni.request = (opt: any) => {
+      ;(calls.request ??= []).push(opt)
+      opt.success({ statusCode: 200, data: { code: 200, msg: 'ok', data: 1 } })
+    }
+    const http = uniHttpShim(uniRequest({ tenantHeader: 'X-Tenant-Id' }))
+    await http.get('/v1/ping')
+    await http.post('/v1/things', { name: 'x' })
+    await http.put('/v1/things/1', { name: 'y' })
+    await http.delete('/v1/things/1')
+    expect(calls.request.map((c: any) => [c.url, c.method, c.data])).toEqual([
+      ['/v1/ping', 'GET', undefined],
+      ['/v1/things', 'POST', { name: 'x' }],
+      ['/v1/things/1', 'PUT', { name: 'y' }],
+      ['/v1/things/1', 'DELETE', undefined],
+    ])
+  })
+
+  it('form.useUniForm：init 初值预填 model（嵌套按形态 []/{}）+ reset 复位（Task 5.2 容器段）', () => {    const form = useUniForm([
       { field: 'name', title: '姓名', props: { required: true } },
       { field: 'amount', title: '金额', init: 0 },
       { field: 'items', title: '明细', init: [] },

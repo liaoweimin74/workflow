@@ -41,3 +41,14 @@ export async function runAction(op: UniActionOp, _ctx: UniActionCtx = {}): Promi
       return false
   }
 }
+
+/**
+ * 脚本上下文的 message 材料（Task 5.3）：对位 web 产物 `const message = ElMessage` 的调用面
+ * （{ message, type } 对象与裸字符串都收），映射 uni.showToast——success/error 之外图标取
+ * none（ElMessage 无图标语义，语义不投机增）。
+ */
+export function uniMessage(opts: { message?: string; type?: string } | string): void {
+  const o = typeof opts === 'string' ? { message: opts } : opts
+  const icon = o.type === 'success' ? 'success' : o.type === 'error' ? 'error' : 'none'
+  uni.showToast({ title: String(o.message ?? ''), icon })
+}

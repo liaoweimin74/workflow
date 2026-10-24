@@ -7,16 +7,18 @@
  *    的 role 取法原样镜像（title/subtitle/tag/metric 只按 role，其余列都是字段行）；
  *  · 卡片动作按钮 payload 与 web 组件一致（{ key, label, row }），toolbar 按钮在列表
  *    上方、其余按钮在卡底（actionsPlacement 视觉降级为卡底，不做右侧栏）。
- * 链出口（stepStatementsUni，5.1 子集）：message/open-link → uni API；refresh/set-filter/
- * set-page/delete → 页面本地 useUniList 函数。web 契约 list.expose=none 使 cards 的
- * list-ref 步骤在 parse 被拒（IR 是 web 形状），出口表先行直测——5.3 parse 侧按端放开
- * gate 后这些 op 才会从链里到达。容器族（open-container/load-record/...）与
- * export/script 的端语义 5.2/5.3 落地：这里出 lc:todo 注释 + unsupported 登记，绝不静默。
+ * 链出口（stepStatementsUni）：message/open-link → uni API（$param 段债登记）；refresh/
+ * set-filter/set-page/delete → 页面本地 useUniList 函数；容器族（open-container/load-record/
+ * close-container/save-container）→ 容器段函数（5.3，镜像 web containerCall）；script →
+ * 调用语句（函数体装配侧照搬）。web 契约 list.expose=none 使 cards 的 list-ref 步骤在
+ * parse 被拒（web 端不变），uniapp 端 5.3 按端放开 gate（refableOf target 分支）后这些
+ * op 从链里到达。export/set-sort/clear-selection 端语义 uni 首版无对位：lc:todo 注释 +
+ * unsupported 登记，绝不静默。
  * 首行无缩进、嵌套行相对缩进，页面装配（emit-uni.ts）统一加页内缩进。
  */
 import { argOf, exprOf, keyText, literalOf, needsBlock } from '../chain-emit'
 import { camelField } from '../ir'
-import type { IrChainStep, IrNode, IrPage, Unsupported } from '../ir'
+import type { IrChain, IrChainStep, IrNode, IrPage, Unsupported } from '../ir'
 import type { TargetProfile } from '../target-profile'
 
 export interface UniListFragment {
@@ -30,10 +32,14 @@ export interface UniListFragment {
   unsupported: Unsupported[]
 }
 
-/** 链步骤出口的上下文：页面本地列表实例名 + 载体类型（unsupported.type） */
+/** 链步骤出口的上下文：页面本地列表实例名 + 载体类型（unsupported.type）。
+ * chain：容器族 op 的 mode/readonly 生成期定死（5.3，缺省按 recordId 兜底）；
+ * hasRow：script 调用是否传 row（按钮链/行链 true，view 链 false——web chain.hasRow 同构）。 */
 export interface UniStepCtx {
   list: string
   type: string
+  chain?: Pick<IrChain, 'mode' | 'readonly'>
+  hasRow?: boolean
 }
 
 interface CardColumn {
@@ -91,8 +97,18 @@ export function stepStatementsUni(
       const icon = typeLit === 'success' ? "'success'" : typeLit === 'error' ? "'error'" : "'none'"
       return [line(`uni.showToast({ title: ${exprOf(argOf(step, 'message'))}, icon: ${icon} })`)]
     }
-    case 'open-link':
-      return [line(`uni.navigateTo({ url: ${exprOf(argOf(step, 'url'))} })`)]
+    case 'open-link': {
+      const url = argOf(step, 'url')
+      if (url.some((p) => p.kind === 'param')) {
+        // $param 段在 web 产物里展开成 route.query（useRoute），uni 产物没有 route 上下文——
+        // 不投机 onLoad shim（需要人工接线的页面级改造），整支登记债
+        return todo(
+          'open-link 的 url 参数引用 $param（页面路由 query）：web 走 useRoute，uni 产物无 route 上下文（onLoad query 需人工接线），该步不执行',
+          '参数引用 $param（页面路由 query），uni 产物无 route 上下文',
+        )
+      }
+      return [line(`uni.navigateTo({ url: ${exprOf(url)} })`)]
+    }
     case 'refresh':
       return [line(`void ${L}.reload()`)]
     case 'set-filter':
@@ -115,18 +131,34 @@ export function stepStatementsUni(
     case 'delete':
       return [line(`if (row?.id != null) void ${L}.removeRow(String(row.id))`)]
     case 'open-container':
-    case 'load-record':
+    case 'load-record': {
+      // 镜像 web containerCall：recordId 走链参数（exprOf 已把 $row.id 展开成 String(row?.id ?? '')），
+      // 无参数出 ''；mode/readonly 生成期定死，缺省按 recordId 兜底（有 id edit / 无 id create）
+      const recordId = argOf(step, 'recordId')
+      const hasId = recordId.length > 0
+      const mode = ctx.chain?.mode ?? (hasId ? 'edit' : 'create')
+      const readonly = ctx.chain?.readonly ?? false
+      return [line(`void openContainer(${hasId ? exprOf(recordId) : "''"}, ${readonly}, '${mode}')`)]
+    }
     case 'close-container':
+      return [line('closeContainer()')]
     case 'save-container':
-      return todo(
-        `${step.op} 要容器语义：uni 容器适配 Task 5.2/5.3 落地，该步暂不执行`,
-        'uni 容器适配 Task 5.2/5.3 落地',
-      )
+      return [line('void confirmSave()')]
     case 'set-sort':
     case 'clear-selection':
+      return todo(
+        `${step.op} 的对位方法 useUniList 未提供（服务端排序/多选清理 uni 首版无），产物该步不执行`,
+        'useUniList 无对位方法，该步不执行',
+      )
     case 'export':
-    case 'script':
-      return todo(`${step.op} 的 uni 出口适配未落地（Task 5.3），产物该步不执行`, 'uni 出口适配 Task 5.3 落地')
+      return todo(
+        'export 依赖浏览器 Blob/ObjectURL 下载，uni 端（小程序）无对位能力，该步不执行',
+        '浏览器 Blob/ObjectURL 下载在小程序无对位能力，该步不执行',
+      )
+    case 'script': {
+      // 调用语句（hasRow 同 web chain.hasRow）；函数体由装配侧照搬展开（scriptFunction），材料由装配注入
+      return [line(`void ${step.script!.fn}(${ctx.hasRow === false ? '' : 'row'})`)]
+    }
     default:
       return todo(`${step.op} 的 uni 出口适配未落地（Task 5.3），产物该步不执行`, 'uni 出口适配 Task 5.3 落地')
   }
@@ -310,7 +342,9 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
     const rowChains = ir.chains.filter(
       (c) => c.nodeId === node.artifact.id && c.outlet === rowHandler && (c.kind === 'bus' || c.kind === 'view'),
     )
-    const body = rowChains.flatMap((c) => c.steps.flatMap((s) => stepStatementsUni(s, { list: `${p}List`, type }, '  ', sink)))
+    const body = rowChains.flatMap((c) =>
+      c.steps.flatMap((s) => stepStatementsUni(s, { list: `${p}List`, type, chain: c, hasRow: true }, '  ', sink)),
+    )
     if (body.length) {
       S.push(`function ${rowHandler}(${usesRow(body) ? 'row' : '_row'}: Record<string, unknown>) {`)
       S.push(...body)
@@ -330,7 +364,9 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
       if (sc.kind === 'chain') {
         const chain = ir.chains.find((c) => c.kind === 'button' && c.nodeId === sc.nodeId && c.key === sc.key)
         if (!chain) continue
-        const body = chain.steps.flatMap((s) => stepStatementsUni(s, { list: `${p}List`, type }, '      ', sink))
+        const body = chain.steps.flatMap((s) =>
+          stepStatementsUni(s, { list: `${p}List`, type, chain, hasRow: true }, '      ', sink),
+        )
         if (!body.length) continue
         // case 体里有 const/let 要包块（set-page 的守卫变量）：switch 各 case 共享函数作用域
         caseLines.push(

@@ -124,6 +124,9 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
     expect(frag.script).toEqual([
       `const cards1792036403314List = useUniList({ refId: ds.refId })`,
       `const { rows: cards1792036403314Rows, loading: cards1792036403314Loading, finished: cards1792036403314Finished } = cards1792036403314List`,
+      // 首屏加载（对位表格侧 emit-widget.ts:476）：触底只在 finished 为假时才有意义，
+      // 而 pagination 列表的 finished 初始就是 rows>=total（0>=0）→ 没有首载则列表永远空
+      `onMounted(() => void cards1792036403314List.reload())`,
       `onReachBottom(() => cards1792036403314List.loadMore())`,
       `function onRowClick(_row: Record<string, unknown>) {`,
       `  // schema.actions 无 row-click 触发的动作链 → 空实现，保留挂点供人工接管`,
@@ -146,6 +149,7 @@ describe('emitListNode — 语料卡列表（cardlist_test.json）', () => {
     const { node, ir } = corpus()
     const frag = emitListNode(node, ir, PROFILES.uniapp)
     expect(frag.imports).toEqual([
+      `import { onMounted } from 'vue'`,
       `import { onReachBottom } from '@dcloudio/uni-app'`,
       `import { useUniList } from '@lc/runtime-uni/list'`,
     ])
@@ -212,6 +216,7 @@ describe('emitListNode — 合成页（角色列 + 搜索抽屉 + 按钮链）',
       `const tasksList = useUniList({ refId: ds.refId, pageSize: 10, searchFields: tasksSearchFields })`,
       `const { rows: tasksRows, loading: tasksLoading, finished: tasksFinished, keyword: tasksSearch, fieldValues: tasksFieldValues } = tasksList`,
       `const tasksFilterPopup = ref<{ open: () => void; close: () => void } | null>(null)`,
+      `onMounted(() => void tasksList.reload())`,
       `onReachBottom(() => tasksList.loadMore())`,
       `function tasksOnSearch() {`,
       `  tasksList.onSearch()`,
@@ -247,7 +252,7 @@ describe('emitListNode — 合成页（角色列 + 搜索抽屉 + 按钮链）',
     const { node, ir } = synthetic()
     const frag = emitListNode(node, ir, PROFILES.uniapp)
     expect(frag.imports).toEqual([
-      `import { ref } from 'vue'`,
+      `import { onMounted, ref } from 'vue'`,
       `import { onReachBottom } from '@dcloudio/uni-app'`,
       `import { useUniList } from '@lc/runtime-uni/list'`,
     ])

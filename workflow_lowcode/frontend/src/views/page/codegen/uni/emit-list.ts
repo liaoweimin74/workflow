@@ -2,7 +2,9 @@
  * uni 列表族出码（Task 5.1）：page-list-cards → uni-card 卡片列表片段。
  *
  * 对位 web ListCards 语义（列角色渲染 / searchFields 搜索 / set-filter 注入），差异点：
- *  · 分页条 → 触底加载（onReachBottom + useUniList.loadMore），pagination=false → 全量；
+ *  · 分页条 → 首屏 onMounted reload + 触底加载（onReachBottom + useUniList.loadMore），
+ *    pagination=false → 全量（对位表格侧 emit-widget.ts:475-476；此前只有触底，而
+ *    pagination 列表 finished 初值即真 → 首屏永远空，属 5.1 遗留，10.1 真跑撞出后补齐）；
  *  · 卡片列静态展开（emit 期逐列出 label/value 行，无运行时渲染函数）——web ListCards
  *    的 role 取法原样镜像（title/subtitle/tag/metric 只按 role，其余列都是字段行）；
  *  · 卡片动作按钮 payload 与 web 组件一致（{ key, label, row }），toolbar 按钮在列表
@@ -318,6 +320,7 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
   if (searchUi) destructure.push(`keyword: ${p}Search`, `fieldValues: ${p}FieldValues`)
   S.push(`const { ${destructure.join(', ')} } = ${p}List`)
   if (searchUi) S.push(`const ${p}FilterPopup = ref<{ open: () => void; close: () => void } | null>(null)`)
+  S.push(`onMounted(() => void ${p}List.reload())`)
   S.push(`onReachBottom(() => ${p}List.loadMore())`)
   if (searchUi) {
     S.push(`function ${p}OnSearch() {`)
@@ -405,9 +408,9 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
     S.push('}')
   }
 
-  // —— imports：vue ref（抽屉弹层）→ onReachBottom（触底）→ useUniList（数据层），顺序确定 ——
+  // —— imports：vue（ref 抽屉弹层 / onMounted 首载）→ onReachBottom（触底）→ useUniList（数据层），顺序确定 ——
   const imports = [
-    ...(searchUi ? [`import { ref } from 'vue'`] : []),
+    `import { onMounted${searchUi ? ', ref' : ''} } from 'vue'`,
     `import { onReachBottom } from '@dcloudio/uni-app'`,
     `import { useUniList } from '@lc/runtime-uni/list'`,
   ]

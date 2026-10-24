@@ -152,8 +152,8 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
       client: CLIENT,
     })
     const sfc = files['src/pages/gen/merge.vue']
-    // import 按源合并：列表搜索弹层与容器各出一份 `import { ref } from 'vue'` → 单行
-    expect(sfc.match(/import \{[^}]*\} from 'vue'/g)).toEqual(["import { ref } from 'vue'"])
+    // import 按源合并：列表片段的 onMounted 首载 + 容器段的 ref 各出一份 vue import → 单行
+    expect(sfc.match(/import \{[^}]*\} from 'vue'/g)).toEqual(["import { onMounted, ref } from 'vue'"])
     // 脚本顺序 LOCK：ds 常量 → 容器段（formRules）→ 列表片段（tasksSearchFields）
     const dsAt = sfc.indexOf("const ds = { id: 'ds_task'")
     const containerAt = sfc.indexOf('const formRules = [')

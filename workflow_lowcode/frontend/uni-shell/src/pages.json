@@ -8,6 +8,19 @@
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pagesChart",
+      "pages": [
+        {
+          "path": "spike/echart",
+          "style": {
+            "navigationBarTitleText": "图表 spike"
+          }
+        }
+      ]
+    }
+  ],
   "easycom": {
     "autoscan": true,
     "custom": {

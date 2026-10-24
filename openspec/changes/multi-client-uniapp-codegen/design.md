@@ -130,7 +130,7 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 - [echarts 体积撑爆主包] → 图表页强制 subpackage + 按需注册；仍超则对 dash-kpi 类简单图形降级 uCharts（语义层在，引擎可换）
 - [「Web 能配、移动不支持」的隐形坑] → 双 Gate：设计器能力矩阵硬过滤 + 出码报告 per-target 分桶，不支持项必须显式登记而非静默丢弃
 - [并行开发期间 Flyway 版本号冲突] → 迁移号取合并时 main 最新 +1；rebase 按 AGENTS.md lockfile 规则处理
-- [lime-echart 在 mp-weixin canvas 2d 的兼容性未知] → 列入首日 spike；fallback uCharts
+- [lime-echart 在 mp-weixin canvas 2d 的兼容性未知] → 列入首日 spike；fallback uCharts → **【Task 7.1 spike 已回填】** npm 分发定案：lime-echart 不发布 npm（registry 404，插件市场/uni_modules 分发），改用 **uni-echarts@2.5.3**（Vue3 专用 Uni ECharts，鸣谢 lime-echart，即本设计所称「Uni ECharts」）+ **echarts@5.6.0 exact**（heatmap 在 echarts 6.1+ 有兼容问题）；声明式 `:option` API 对自动生成产物 SFC 友好，vite 插件 `UniEcharts()` 自动 optimizeDeps 排除 + 注入 provideEcharts；mp-weixin canvas 2d 官方支持（virtualHost + zrender canvas），已知约束：class/style 失效须走 `custom-style`、tooltip 需 `textShadowBlur:1`、不支持 SVG renderer/saveAsImage/series-map/heatmap@6.1+；uni-shell 双端 `uni build`（h5 + mp-weixin）均通过，mp-weixin 分包产物四件套 + `node-modules/uni-echarts` 组件编译产物齐整；真机 canvas 渲染/触感实测归 10.3 人工清单，体积超限时 uCharts 预案仍保留（语义层在，引擎可换）。
 - [@lc/ui-mobile 皮肤克隆与真实 uni-ui 漂移] → 锁定 uni-ui 版本、主题 token 单一来源；产物级预览 + 真机二维码作发布前核对
 - [页面设计类型选错返工] → 创建入口按进入上下文给默认值；「复制为另一类型」留 V1.1 评估
 - [V1 体量 6–8 人周] → 里程碑分批：M1 数据模型+设计器端维度（可演示）；M2 字段族+列表/详情出码闭环（H5 产物可跑）；M3 图表+uni-table/降级件+发布链路
@@ -146,7 +146,7 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 ## Open Questions
 
 1. uni-table 版本选型与固定列/横向滚动真机表现（首日 spike 定）。→ **已定（Task 6.1）**：锁定 uni-shell 的 uni-ui@1.5.12；横向滚动可行、固定列无实现（收窄为精简列 + 操作弹层）；真机触感归 10.3。
-2. lime-echart 按需注册与分包落点（图表页 subpackage 切分规则）。
+2. lime-echart 按需注册与分包落点（图表页 subpackage 切分规则）。→ **已定（Task 7.1）**：按需注册沿用 web `useEcharts.ts` 清单（图表页子集 Bar/Line/Pie + Grid/Tooltip/Legend + CanvasRenderer，dashboard 面再按需追加 Title/VisualMap/Scatter/Heatmap/Funnel）；分包切分：pages.json `subPackages`（root=`pagesChart`）+ manifest `mp-weixin.optimization.subPackages: true`，图表页强制落分包（design 决策 3），uni-shell 实测 app.json 正确声明、分包目录独立；`project-files.ts` 的 `buildPagesJson` 需扩展 subPackages 输出（7.3 落地）。
 3. rpx 换算基准：设计器 375 画布 ↔ 小程序 750 设计稿的映射细则。
 4. `WechatMiniprogramClient` 从单 appId Bean 改按 Client 配置多实例的方式（配置表驱动 vs Bean 工厂）。
 5. @lc/ui-mobile 组件清单与 uni-ui 版本锁定（按 component-map uniapp 侧范围在实现期定）。

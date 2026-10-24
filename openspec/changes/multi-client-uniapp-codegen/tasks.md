@@ -47,7 +47,7 @@
 
 ## 7. 图表（M3）
 
-- [ ] 7.1 lime-echart spike：mp-weixin canvas 2d 兼容验证 + 分包落点结论（图表页 subpackage 规则），回填 design（design Risks 第 2 条）
+- [x] 7.1 lime-echart spike：mp-weixin canvas 2d 兼容验证 + 分包落点结论（图表页 subpackage 规则），回填 design（design Risks 第 2 条）（可自动化部分已完成：uni-echarts@2.5.3 + echarts@5.6.0 双端构建通过、分包产物结构验证、design Risks/Open Questions 回填；mp-weixin 真机 canvas 渲染/触感实测归 10.3 人工清单）
 - [ ] 7.2 dash-kpi / dash-notice / dash-todo 映射（自绘统计卡 / uni-notice-bar / 复用卡片列表）
 - [ ] 7.3 page-chart / dash-chart：复用 buildChartDataset/buildPieDataset 语义聚合与 option 构造，lime-echart 渲染；echarts 按需注册沿用 useEcharts 清单（spec: uniapp-codegen-target「图表语义层映射」）
 

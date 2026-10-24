@@ -51,35 +51,35 @@
       </div>
     </div>
 
-    <!-- 设计器主体：FcDesigner 画布（uniapp 页面套 375×667 设备壳，契约渲染见 Task 2.2） -->
+    <!-- 设计器主体：FcDesigner 三栏一体（组件面板 | 画布 | 属性面板）。
+         uniapp 页面不套整壳——vendor device=mobile 只收窄画布列（._fc-m-drag.mobile 375px），
+         工具栏与属性栏天然在画布之外（Task 2.2 布局修正：DeviceFrame 整壳方案废弃） -->
     <div class="designer-body" v-loading="loading">
-      <DeviceFrame :design-type="pageDesignType">
-        <div
-          class="lc-canvas"
-          :class="pageDesignType === 'uniapp' ? 'lc-canvas--uniapp' : ''"
-          :style="pageDesignType === 'uniapp' ? uniCssVars : undefined"
+      <div
+        class="lc-canvas"
+        :class="pageDesignType === 'uniapp' ? 'lc-canvas--uniapp' : ''"
+        :style="pageDesignType === 'uniapp' ? uniCssVars : undefined"
+      >
+        <fc-designer
+          ref="designerRef"
+          :height="designerHeight"
+          :config="designerConfig"
         >
-          <fc-designer
-            ref="designerRef"
-            :height="designerHeight"
-            :config="designerConfig"
-          >
-            <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
-                 vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
-            <template #previewTabs="{ status }">
-              <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
-                <component
-                  :is="CodegenPreviewPane"
-                  :active="status === 'codegen'"
-                  :page-key="pageKey"
-                  :page-name="pageName || pageKey"
-                  :get-schema="canvasSchema"
-                />
-              </el-tab-pane>
-            </template>
-          </fc-designer>
-        </div>
-      </DeviceFrame>
+          <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
+               vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
+          <template #previewTabs="{ status }">
+            <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
+              <component
+                :is="CodegenPreviewPane"
+                :active="status === 'codegen'"
+                :page-key="pageKey"
+                :page-name="pageName || pageKey"
+                :get-schema="canvasSchema"
+              />
+            </el-tab-pane>
+          </template>
+        </fc-designer>
+      </div>
     </div>
 
     <!-- 数据源/动作配置弹窗 -->
@@ -366,7 +366,6 @@ import { useAuthStore } from '@/stores/auth'
 import { storeToRefs } from 'pinia'
 import { useDesignerStore } from '@/stores/designerStore'
 import { appsApi, type AppDTO } from '@/api/apps'
-import DeviceFrame from './components/DeviceFrame.vue'
 import { resolveComponent, UNIAPP_COMPONENT_MAP, type CanvasDesignType } from './codegen/component-map'
 import { UNI_CSS_VARS } from '@lc/ui-mobile'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
@@ -767,10 +766,12 @@ function confirmDsConfig() {
 }
 const dsTab = ref('ds')
 
-/** FcDesigner 配置：隐藏表单专用面板，保留组件/属性 */
+/** FcDesigner 配置：隐藏表单专用面板与设备切换（页面类型由 designType 单一来源决定，
+ *  画布内不允许再切 pc/pad/mobile——已确定 web/移动端后切换无意义），保留组件/属性 */
 const designerConfig = {
   fieldReadonly: false,
   disabledFormConfig: ['formCreateFormName'],
+  showDevice: false,
 }
 
 const designerHeight = '100%'
@@ -1853,6 +1854,9 @@ onMounted(async () => {
     registerPageComponents()
     // 契约组件注册先于 setRule：画布节点按注册表解析，await 保证时序；失败回落宿主渲染
     await registerUniAppCanvasComponents().catch(() => {})
+    // 布局修正：uniapp 页面画布列走 vendor device=mobile（仅画布收窄 375px，三栏面板不动）。
+    // device 是 vendor setup 一次性读 config 的初始值，此时已错过，只能走 methods.setDevice
+    designerRef.value?.setDevice(pageDesignType.value === 'uniapp' ? 'mobile' : 'pc')
     let parsedRule: any[] = []
     let parsedOption: Record<string, unknown> = {}
     if (def.schema) {
@@ -1887,8 +1891,10 @@ onMounted(async () => {
     if (formStatus.value === 'PUBLISHED') {
       await loadMountedMenus()
     }
-  } catch {
-    // http 拦截器已弹出错误消息
+  } catch (e) {
+    // http 拦截器已弹出错误消息；这里补 console 兜底——loadDef 链路里任何一步
+    // 抛错都会静默吞掉，画布空白且无任何线索（本次布局修正排查中实测踩坑）
+    console.error('[PageDesigner] loadDef failed:', e)
   } finally {
     loading.value = false
   }
@@ -2064,9 +2070,21 @@ function statusLabel(status: string): string {
   display: flex;
   overflow: hidden;
 }
+/* 画布包装层：占满 designer-body（DeviceFrame 整壳方案废弃后，宽度由这里接手） */
+.lc-canvas {
+  flex: 1;
+  min-width: 0;
+}
 .designer-body :deep(.el-container._fc-designer) {
   flex: 1 !important;
   min-width: 0;
+}
+/* 布局修正：uniapp 画布列锁 375 手机宽——vendor 原生 ._fc-m-drag.mobile 是 400px，
+   与设计器 375 手机壳口径不一致，就地覆盖；面板列（_fc-l 266 / _fc-r 320）不动，
+   工具栏与属性栏保持在画布之外。 */
+.lc-canvas--uniapp :deep(._fc-m-drag.mobile) {
+  width: 375px;
+  margin: 0 auto;
 }
 /* Task 2.3：面板能力过滤——uniapp 页面将 Web 专属组件置灰并提示原因（spec 场景：
    「iframe、Excel 导入导出、树/树表族置灰并提示『仅 Web 端可设计』」；Excel 导入导出

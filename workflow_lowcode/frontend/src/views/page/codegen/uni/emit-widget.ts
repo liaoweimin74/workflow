@@ -2,6 +2,7 @@
  * uni 展示组件族出码（Task 5.2）：page-steps / page-detail / page-data-container。
  * Task 6.2：page-table → uni-table 简表（数据组件，接 useUniList）。
  * Task 6.3：fcTable → 纵向堆叠降级（放弃合并单元格语义，非空 home 格按 (row,col) 纵排）。
+ * Task 7.2：dash-kpi / dash-notice / dash-todo → 自绘 uni 组件（@lc/runtime-uni/dash 取数）。
  *
  * spec「组件映射保真口径」：page-detail→堆叠详情、page-steps→uni-steps、
  * page-data-container→uni-popup 弹层；page-table→uni-table 简表（Task 6.1 spike 回填：
@@ -96,6 +97,12 @@ export function emitWidgetNode(node: IrNode, ir: IrPage): UniWidgetFragment | nu
       return emitTable(node, ir)
     case 'fcTable':
       return emitFcTable(node, ir)
+    case 'dash-kpi':
+      return emitKpi(node, ir)
+    case 'dash-notice':
+      return emitNotice(node, ir)
+    case 'dash-todo':
+      return emitTodo(node, ir)
     default:
       return null
   }
@@ -572,6 +579,238 @@ function emitTable(node: IrNode, ir: IrPage): UniWidgetFragment {
   return { template: T.join('\n'), script: S, imports, unsupported }
 }
 
+// ==================== dash-kpi / dash-notice / dash-todo → 自绘组件（Task 7.2） ====================
+
+/** 文本字面量进模板（title/subtitle 类静态配置；未配置回退，对位 web withDefaults） */
+const textOr = (v: unknown, fallback: string): string => (typeof v === 'string' && v ? v : fallback)
+
+/** 尺寸镜像（span/height）节点级一条 unsupported（6.3 table-geometry 同口径：节点级决策不逐键散报） */
+function sizeMirrorUnsupported(node: IrNode): Unsupported {
+  return {
+    path: node.artifact.rulePath,
+    type: node.artifact.type,
+    key: 'size-mirror',
+    message: 'span/height 尺寸镜像（web 栅格留白/固定高）uni 布局无对位：卡片恒满宽、高度自适应内容',
+  }
+}
+
+/** 数据源寻址（与 emitPdc/emitTable 同规则：首源走 ds.refId，其余查登记表） */
+function dsRefIdExpr(node: IrNode, ir: IrPage): string {
+  const dsProp = node.props.find((x) => x.name === 'ds-ref-id')
+  const sourceId = dsProp && dsProp.value.kind === 'dsRef' ? String(dsProp.value.sourceId ?? '') : ''
+  const firstDsId = String(ir.dataSources[0]?.id ?? '')
+  return sourceId && sourceId !== firstDsId ? `dataSources['${sourceId}']` : 'ds.refId'
+}
+
+/** dash-kpi → 自绘统计卡 .lc-kpi：web 契约 aggregate（group=__all__ 单行）→ rows[0].value，
+ *  走 useUniKpi（失败静默 value=null）；title/subtitle/unit 出静态文本，value 唯一运行期
+ *  绑定（null = 失败/空值，模板统一 -- 占位）；trend 系/sparkline/numberFormat/filter 登记。 */
+function emitKpi(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const p = camelField(node.artifact.field)
+  const unsupported: Unsupported[] = []
+  const title = textOr(propOf(node, ir, 'title'), '指标')
+  const subtitle = propOf(node, ir, 'subtitle')
+  const unit = propOf(node, ir, 'unit')
+  const agg = textOr(propOf(node, ir, 'agg'), 'count')
+  const metric = propOf(node, ir, 'metric')
+  const filter = propOf(node, ir, 'filter')
+
+  if (propOf(node, ir, 'trendEnabled') === true || propOf(node, ir, 'trendField')) {
+    unsupported.push({
+      path: node.artifact.rulePath,
+      type: 'dash-kpi',
+      key: 'trend',
+      message: '同比/环比（trendEnabled/trendGrain/trendField）uni 首版无对位：上期区间聚合与趋势箭头不渲染',
+    })
+  }
+  if (propOf(node, ir, 'sparkline') === true) {
+    unsupported.push({
+      path: node.artifact.rulePath,
+      type: 'dash-kpi',
+      key: 'sparkline',
+      message: '迷你趋势图（sparkline，SVG Sparkline）uni 首版无对位：分桶序列不渲染',
+    })
+  }
+  if (typeof propOf(node, ir, 'numberFormat') === 'string' && propOf(node, ir, 'numberFormat')) {
+    unsupported.push({
+      path: `${node.artifact.rulePath}.props.numberFormat`,
+      type: 'dash-kpi',
+      key: 'numberFormat',
+      message: '数字格式化（numberFormat=thousand 千分位）uni 首版无对位：原值直出',
+    })
+  }
+  if (typeof filter === 'string' && filter) {
+    unsupported.push({
+      path: `${node.artifact.rulePath}.props.filter`,
+      type: 'dash-kpi',
+      key: 'kpi-filter',
+      message: '组件级固定过滤（filter JSON）随 useUniKpi 请求透传，dash-filter 广播联动产物无实例登记表（web 同债 requires.autoBroadcast）',
+    })
+  }
+  unsupported.push(sizeMirrorUnsupported(node))
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    '<view class="lc-kpi">',
+    '  <view class="lc-kpi__head">',
+    `    <text class="lc-kpi__title">${title}</text>`,
+    '  </view>',
+  ]
+  if (typeof subtitle === 'string' && subtitle) T.push(`  <text class="lc-kpi__subtitle">${subtitle}</text>`)
+  T.push('  <view class="lc-kpi__value-row">')
+  T.push(`    <text v-if="${p}Value === null" class="lc-kpi__value">--</text>`)
+  T.push(`    <text v-else class="lc-kpi__value">{{ ${p}Value ?? '--' }}</text>`)
+  if (typeof unit === 'string' && unit) {
+    T.push(`    <text v-if="${p}Unit" class="lc-kpi__unit">{{ ${p}Unit }}</text>`)
+  }
+  T.push('  </view>')
+  T.push('</view>')
+
+  // options：metric 空值不出（count 不需要度量列）；filter 有值才出（单引号字面量照落）
+  const opts = [`refId: ${dsRefIdExpr(node, ir)}`, `agg: '${agg.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`]
+  if (metric !== null && metric !== undefined && metric !== '') opts.push(`metric: ${sq(String(metric))}`)
+  if (typeof filter === 'string' && filter) opts.push(`filter: ${sq(filter)}`)
+  const unitConst = typeof unit === 'string' && unit ? [`const ${p}Unit = '${unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`] : []
+  return {
+    template: T.join('\n'),
+    script: [
+      ...unitConst,
+      `const ${p} = useUniKpi({ ${opts.join(', ')} })`,
+      `const { value: ${p}Value } = ${p}`,
+      `onMounted(() => void ${p}.reload())`,
+    ],
+    imports: [
+      typeof unit === 'string' && unit ? `import { onMounted } from 'vue'` : `import { onMounted } from 'vue'`,
+      `import { useUniKpi } from '@lc/runtime-uni/dash'`,
+    ],
+    unsupported,
+  }
+}
+
+/** dash-notice → 自绘公告卡 .lc-notice：数据来自 /v1/notifications（无数据源键，useUniNotice
+ *  不吃 refId）；display=list 纵排行 / carousel=swiper 自动轮播（interval 透传，缺省 4000）。
+ *  未读标记 = readStatus !== 'SENT'（PENDING=未读，列表接口回填）；详情弹层/已读标记
+ *  （markAsRead）uni 首版不渲染 → notice-detail 一条登记。 */
+function emitNotice(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const p = camelField(node.artifact.field)
+  const title = textOr(propOf(node, ir, 'title'), '公告')
+  const display = propOf(node, ir, 'display') === 'carousel' ? 'carousel' : 'list'
+  const limit = typeof propOf(node, ir, 'limit') === 'number' ? (propOf(node, ir, 'limit') as number) : 6
+  const interval = typeof propOf(node, ir, 'interval') === 'number' ? (propOf(node, ir, 'interval') as number) : 4000
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    '<view class="lc-notice">',
+    '  <view class="lc-notice__head">',
+    `    <text class="lc-notice__title">${title}</text>`,
+    `    <text v-if="${p}Total" class="lc-notice__count">{{ ${p}Total }}</text>`,
+    '  </view>',
+  ]
+  if (display === 'carousel') {
+    T.push(`  <swiper v-if="${p}Rows.length" class="lc-notice__swiper" :interval="${interval}" autoplay circular>`)
+    T.push(`    <swiper-item v-for="row in ${p}Rows" :key="row.id" class="lc-notice__item">`)
+    T.push('      <view class="lc-notice__item-line">')
+    T.push('        <text class="lc-notice__item-title">{{ row.title }}</text>')
+    T.push(`        <text v-if="row.readStatus !== 'SENT'" class="lc-notice__tag">未读</text>`)
+    T.push('      </view>')
+    T.push(`      <text class="lc-notice__item-meta">{{ String(row.createdAt ?? '').replace('T', ' ').slice(0, 16) }}</text>`)
+    T.push('    </swiper-item>')
+    T.push('  </swiper>')
+  } else {
+    T.push(`  <view v-if="${p}Rows.length" class="lc-notice__list">`)
+    T.push(`    <view v-for="row in ${p}Rows" :key="row.id" class="lc-notice__item">`)
+    T.push('      <view class="lc-notice__item-line">')
+    T.push('        <text class="lc-notice__item-title">{{ row.title }}</text>')
+    T.push(`        <text v-if="row.readStatus !== 'SENT'" class="lc-notice__tag">未读</text>`)
+    T.push('      </view>')
+    T.push(`      <text class="lc-notice__item-meta">{{ String(row.createdAt ?? '').replace('T', ' ').slice(0, 16) }}</text>`)
+    T.push('    </view>')
+    T.push('  </view>')
+  }
+  T.push(`  <text v-else class="lc-notice__empty">{{ ${p}Loading ? '加载中…' : '暂无公告' }}</text>`)
+  T.push('</view>')
+
+  return {
+    template: T.join('\n'),
+    script: [
+      `const ${p} = useUniNotice({ limit: ${limit} })`,
+      `const { rows: ${p}Rows, total: ${p}Total, loading: ${p}Loading } = ${p}`,
+      `onMounted(() => void ${p}.reload())`,
+    ],
+    imports: [`import { onMounted } from 'vue'`, `import { useUniNotice } from '@lc/runtime-uni/dash'`],
+    unsupported: [
+      {
+        path: node.artifact.rulePath,
+        type: 'dash-notice',
+        key: 'notice-detail',
+        message: '公告详情弹层与未读已读标记（openDetail/markAsRead）uni 首版不渲染：列表仅展示 title/时间/未读',
+      },
+      sizeMirrorUnsupported(node),
+    ],
+  }
+}
+
+/** dash-todo → 待办清单卡 .lc-todo：待办 /v1/tasks（assignee）、已办 /v1/tasks/historic
+ *  （userId，端点在 useUniTodo 内按 view 分派）；身份硬约束——产物从本地存储 lc_user_id
+ *  取（Task 10.3 登录接线写入），未登录走 empty 文案不发请求。优先级 ≥100 加急/≥75 重要
+ *  标签与 meta 行对位 web priorityLabel/metaText；行点击进任务详情 uni 无对位（登记）。 */
+function emitTodo(node: IrNode, ir: IrPage): UniWidgetFragment {
+  const p = camelField(node.artifact.field)
+  const view = propOf(node, ir, 'view') === 'done' ? 'done' : 'todo'
+  const title = textOr(propOf(node, ir, 'title'), view === 'done' ? '我的已办' : '我的待办')
+  const limit = typeof propOf(node, ir, 'limit') === 'number' ? (propOf(node, ir, 'limit') as number) : 8
+  const orderBy = propOf(node, ir, 'orderBy')
+  const timeKey = view === 'done' ? 'row.endTime' : 'row.createTime'
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    '<view class="lc-todo">',
+    '  <view class="lc-todo__head">',
+    `    <text class="lc-todo__title">${title}</text>`,
+    `    <text v-if="${p}Total" class="lc-todo__count">{{ ${p}Total }}</text>`,
+    '  </view>',
+    `  <view v-if="${p}Rows.length" class="lc-todo__list">`,
+    `    <view v-for="row in ${p}Rows" :key="row.taskId" class="lc-todo__item">`,
+    '      <view class="lc-todo__item-main">',
+    '        <text class="lc-todo__item-title">{{ row.processName }}</text>',
+    '        <text v-if="(row.priority ?? 0) >= 100" class="lc-todo__tag lc-todo__tag--urgent">加急</text>',
+    '        <text v-else-if="(row.priority ?? 0) >= 75" class="lc-todo__tag">重要</text>',
+    '        <text v-if="row.reminded" class="lc-todo__tag">已催办</text>',
+    '      </view>',
+  ]
+  // meta 行：发起人/节点名/时间（已办取 endTime，待办取 createTime）——对位 web metaText
+  T.push(
+    `      <text class="lc-todo__item-meta">{{ [row.initiatorName ? \`发起人\${row.initiatorName}\` : '', row.currentNodeName ? \`节点\${row.currentNodeName}\` : '', ${timeKey} ? String(${timeKey}).replace('T', ' ').slice(0, 16) : ''].filter(Boolean).join(' · ') }}</text>`,
+  )
+  T.push('    </view>')
+  T.push('  </view>')
+  T.push(`  <text v-else class="lc-todo__empty">{{ ${p}Empty || (${p}Loading ? '加载中…' : '') }}</text>`)
+  T.push('</view>')
+
+  const opts = [`view: '${view}'`, `limit: ${limit}`]
+  if (view === 'todo' && typeof orderBy === 'string' && orderBy) opts.push(`orderBy: '${orderBy.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+  opts.push(`userId: String(${p}UserId ?? '')`)
+  return {
+    template: T.join('\n'),
+    script: [
+      `const ${p}UserId = uni.getStorageSync('lc_user_id')`,
+      `const ${p} = useUniTodo({ ${opts.join(', ')} })`,
+      `const { rows: ${p}Rows, total: ${p}Total, empty: ${p}Empty } = ${p}`,
+      `onMounted(() => void ${p}.reload())`,
+    ],
+    imports: [`import { onMounted } from 'vue'`, `import { useUniTodo } from '@lc/runtime-uni/dash'`],
+    unsupported: [
+      {
+        path: node.artifact.rulePath,
+        type: 'dash-todo',
+        key: 'todo-row-click',
+        message: '行点击进任务详情（web router.push /process/todo/:taskId）uni 首版无任务详情页：行点击不接线',
+      },
+      sizeMirrorUnsupported(node),
+    ],
+  }
+}
+
 /**
  * fcTable → 纵向堆叠降级（Task 6.3，design 决策 2）：web 静态 <table> 还原 row/col/合并
  * 几何（IrTable.cells 只含可见 home 格，被合并覆盖格的子归 home），uni 放弃合并单元格
@@ -610,7 +849,7 @@ function emitFcTable(node: IrNode, ir: IrPage): UniWidgetFragment {
       if (frag) {
         T.push(...frag.template.split('\n').map((l) => `    ${l}`))
         scripts.push(...frag.script)
-        imports.push(...frag.imports)
+        for (const line of frag.imports) if (!imports.includes(line)) imports.push(line)
         unsupported.push(...frag.unsupported)
       } else {
         T.push(`    <!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`)

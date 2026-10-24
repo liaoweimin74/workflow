@@ -421,23 +421,49 @@ describe('emitWidgetNode — fcTable → 纵向堆叠降级（Task 6.3）', () =
     const [cellA, cellB] = node.table!.cells
     const childA = cellA.children[0]
     const childB = cellB.children[0]
-    // dash-* 无 uni 装配（7.x）→ emitWidgetNode 返回 null → lc:todo 挂点（同 5.2 顶层口径：
-    // 锚点寻址信息进 todo 注释，不另出独立锚点行）
+    // 7.2 起格内 dash-kpi 走 emitKpi 片段（.lc-kpi 统计卡；语料 ds_def 是首源 → ds.refId）；
+    // script/imports 并入 fcTable 片段（6.3 顺修的收集口）
     expect(frag!.template).toBe(
       [
         `<!-- ${node.artifact.anchor} -->`,
         '<view class="lc-ftable">',
         '  <view class="lc-ftable__cell">',
-        `    <!-- lc:todo node=${childA.artifact.id} type=dash-kpi field=kpiA 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`,
+        `    <!-- ${childA.artifact.anchor} -->`,
+        '    <view class="lc-kpi">',
+        '      <view class="lc-kpi__head">',
+        '        <text class="lc-kpi__title">A</text>',
+        '      </view>',
+        '      <view class="lc-kpi__value-row">',
+        '        <text v-if="kpiAValue === null" class="lc-kpi__value">--</text>',
+        "        <text v-else class=\"lc-kpi__value\">{{ kpiAValue ?? '--' }}</text>",
+        '      </view>',
+        '    </view>',
         '  </view>',
         '  <view class="lc-ftable__cell">',
-        `    <!-- lc:todo node=${childB.artifact.id} type=dash-kpi field=kpiB 组件族 uniapp 装配按任务落地（dash-* 归 7.x） -->`,
+        `    <!-- ${childB.artifact.anchor} -->`,
+        '    <view class="lc-kpi">',
+        '      <view class="lc-kpi__head">',
+        '        <text class="lc-kpi__title">B</text>',
+        '      </view>',
+        '      <view class="lc-kpi__value-row">',
+        '        <text v-if="kpiBValue === null" class="lc-kpi__value">--</text>',
+        "        <text v-else class=\"lc-kpi__value\">{{ kpiBValue ?? '--' }}</text>",
+        '      </view>',
+        '    </view>',
         '  </view>',
         '</view>',
       ].join('\n'),
     )
-    expect(frag!.script).toEqual([])
-    expect(frag!.imports).toEqual([])
+    // 格内 KPI 脚本/导入并入 fcTable 片段（6.3 顺修的收集口）
+    expect(frag!.script).toEqual([
+      `const kpiA = useUniKpi({ refId: ds.refId, agg: 'count' })`,
+      `const { value: kpiAValue } = kpiA`,
+      `onMounted(() => void kpiA.reload())`,
+      `const kpiB = useUniKpi({ refId: ds.refId, agg: 'count' })`,
+      `const { value: kpiBValue } = kpiB`,
+      `onMounted(() => void kpiB.reload())`,
+    ])
+    expect(frag!.imports).toEqual([`import { onMounted } from 'vue'`, `import { useUniKpi } from '@lc/runtime-uni/dash'`])
   })
 
   it('rich：合并格的子节点归 home 格出块（覆盖格无独立块）；逐格 style/class 落格 view', () => {
@@ -468,11 +494,12 @@ describe('emitWidgetNode — fcTable → 纵向堆叠降级（Task 6.3）', () =
     expect(geo[0].type).toBe('fcTable')
   })
 
-  it('脚本/导入透传：格内 list 族片段的 script/imports 并入（无则空数组）', () => {
+  it('脚本/导入透传：格内子片段 script 并入、imports 全行去重（6.3 收集口 + 7.2 顺修）', () => {
     const { node, ir } = fcOf(fcTablePlain)
     const frag = emitWidgetNode(node, ir)
-    expect(frag!.script).toEqual([])
-    expect(frag!.imports).toEqual([])
+    // 两个 KPI 各出一套脚本（变量名按字段区分，不冲突）；imports 两个格重复出同源行 → 去重后 2 行
+    expect(frag!.script).toHaveLength(6)
+    expect(frag!.imports).toEqual([`import { onMounted } from 'vue'`, `import { useUniKpi } from '@lc/runtime-uni/dash'`])
   })
 })
 
@@ -494,5 +521,339 @@ describe('extractPdcFields — childRules 可提取字段（纯函数）', () =>
     expect(extractPdcFields(undefined)).toEqual([])
     expect(extractPdcFields('x')).toEqual([])
     expect(extractPdcFields([])).toEqual([])
+  })
+})
+
+// ----- Task 7.2: dash-kpi / dash-notice / dash-todo → 自绘 uni 组件（emit-widget 装配） -----
+// golden 即规格。三件数据口径（spec uniapp-codegen-target「组件映射保真口径」7.2 落地）：
+//  · dash-kpi → 自绘统计卡 .lc-kpi：web 契约 GET aggregate（group=__all__ 单行）→ rows[0].value，
+//    走 @lc/runtime-uni/dash useUniKpi（失败静默）；title/unit 出配置常量（静态文本），
+//    value 唯一运行期绑定（{{ pValue ?? '--' }}，失败/空值同款占位）；trend*/sparkline/
+//    numberFormat/filter uni 首版无对位 → 登记 unsupported（绝不静默）。
+//  · dash-notice → 自绘列表/轮播 .lc-notice：数据来自 /v1/notifications（无数据源键，
+//    走 useUniNotice）；display=list 纵排行 / carousel=swiper 自动轮播（interval 透传）；
+//    详情弹层/未读标记 uni 首版不渲染（登记）。
+//  · dash-todo → 待办清单卡 .lc-todo：待办 /v1/tasks（assignee）、已办 /v1/tasks/historic
+//    （userId，无 orderBy），走 useUniTodo；身份硬约束——产物从本地存储 lc_user_id 取
+//    （Task 10.3 登录接线写入）；行点击进详情 uni 无对位（登记）。
+// 共有：span/height 尺寸镜像 uni 布局无对位 → 节点级一条 unsupported（key=size-mirror，
+// 不逐键散报，同 6.3 table-geometry 口径）。
+
+const dashSchema = (rules: unknown[], dataSources?: unknown[]): any => ({
+  rule: rules as any[],
+  option: {},
+  dataSources: (dataSources ?? [{ id: 'ds_a', refId: 'ref-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }]) as any[],
+  actions: [],
+})
+
+const dashOf = (rules: unknown[], type: string, dataSources?: unknown[]) => {
+  const ir = parseIr(dashSchema(rules, dataSources), { pageKey: 'golden', pageName: 'golden', exportedAt: 'emit-widget', target: 'uniapp' })
+  const node = ir.nodes.find((n) => n.artifact.type === type)
+  if (!node) throw new Error(`页面应含 ${type} 节点`)
+  return { node, ir }
+}
+
+const kpiOf = () =>
+  dashOf(
+    [
+      {
+        type: 'dash-kpi',
+        field: 'kpiA',
+        title: '',
+        col: { span: 12 },
+        props: { title: '发货金额', subtitle: '近 30 天', unit: '元', agg: 'sum', metric: 'order_amount', dataSourceId: 'ds_a', span: 12, height: '100%' },
+      },
+    ],
+    'dash-kpi',
+  )
+
+describe('emitWidgetNode → dash-kpi 统计卡', () => {
+  it('模板：.lc-kpi 头 + 值行（value 唯一运行期绑定，失败/空值同款 -- 占位）', () => {
+    const { node, ir } = kpiOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-kpi">',
+        '  <view class="lc-kpi__head">',
+        '    <text class="lc-kpi__title">发货金额</text>',
+        '  </view>',
+        '  <text class="lc-kpi__subtitle">近 30 天</text>',
+        '  <view class="lc-kpi__value-row">',
+        '    <text v-if="kpiAValue === null" class="lc-kpi__value">--</text>',
+        "    <text v-else class=\"lc-kpi__value\">{{ kpiAValue ?? '--' }}</text>",
+        '    <text v-if="kpiAUnit" class="lc-kpi__unit">{{ kpiAUnit }}</text>',
+        '  </view>',
+        '</view>',
+      ].join('\n'),
+    )
+  })
+
+  it('脚本：useUniKpi 接线（agg/metric 走 options，filter 有值才出）+ onMounted 首载；imports 对位', () => {
+    const { node, ir } = kpiOf()
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toBe(
+      [
+        `const kpiAUnit = '元'`,
+        `const kpiA = useUniKpi({ refId: ds.refId, agg: 'sum', metric: 'order_amount' })`,
+        `const { value: kpiAValue } = kpiA`,
+        `onMounted(() => void kpiA.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.imports).toEqual([`import { onMounted } from 'vue'`, `import { useUniKpi } from '@lc/runtime-uni/dash'`])
+  })
+
+  it('非首源：refId 走 dataSources 登记表寻址（web propText dsRef 同规则）', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-kpi',
+          field: 'kpiB',
+          title: '',
+          col: { span: 24 },
+          props: { title: '备件数', agg: 'count', metric: null, dataSourceId: 'ds_b', span: 24, height: '' },
+        },
+      ],
+      'dash-kpi',
+      [
+        { id: 'ds_a', refId: 'ref-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        { id: 'ds_b', refId: 'ref-bbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      ],
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain(`const kpiB = useUniKpi({ refId: dataSources['ds_b'], agg: 'count' })`)
+  })
+
+  it('filter 配置 → useUniKpi options 带 filter（字符串字面量照落）；unsupported：trend/sparkline/numberFormat/kpi-filter/size-mirror', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-kpi',
+          field: 'kpiB',
+          title: '',
+          col: { span: 24 },
+          props: {
+            title: '告警数',
+            agg: 'count',
+            metric: null,
+            filter: '{"logic":"AND","conditions":[]}',
+            numberFormat: 'thousand',
+            trendEnabled: true,
+            trendField: 'createdAt',
+            sparkline: true,
+            dataSourceId: 'ds_a',
+            span: 24,
+            height: '420px',
+          },
+        },
+      ],
+      'dash-kpi',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain(
+      `const kpiB = useUniKpi({ refId: ds.refId, agg: 'count', filter: '{"logic":"AND","conditions":[]}' })`,
+    )
+    const keys = frag!.unsupported.map((u) => u.key)
+    expect(keys).toEqual(['trend', 'sparkline', 'numberFormat', 'kpi-filter', 'size-mirror'])
+    // 逐键 path 精确（numberFormat/filter 是具体 props 键），节点级键（trend/sparkline/size-mirror）落节点
+    const byKey = Object.fromEntries(frag!.unsupported.map((u) => [u.key, u.path]))
+    expect(byKey['numberFormat']).toBe(`${node.artifact.rulePath}.props.numberFormat`)
+    expect(byKey['kpi-filter']).toBe(`${node.artifact.rulePath}.props.filter`)
+    expect(byKey['trend']).toBe(node.artifact.rulePath)
+    expect(byKey['size-mirror']).toBe(node.artifact.rulePath)
+    expect(frag!.unsupported.every((u) => u.type === 'dash-kpi')).toBe(true)
+  })
+
+  it('count 聚合（metric=null）不出 metric；subtitle 落卡片副标题行', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-kpi',
+          field: 'kpiC',
+          title: '',
+          col: { span: 24 },
+          props: { title: '客户数', subtitle: '全量', agg: 'count', metric: null, dataSourceId: 'ds_a', span: 24, height: '' },
+        },
+      ],
+      'dash-kpi',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toBe(
+      [
+        `const kpiC = useUniKpi({ refId: ds.refId, agg: 'count' })`,
+        `const { value: kpiCValue } = kpiC`,
+        `onMounted(() => void kpiC.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.template).toContain('<text class="lc-kpi__subtitle">全量</text>')
+    expect(frag!.template).not.toContain('lc-kpi__unit')
+    // height 空 = 自适应：尺寸镜像仍登记（span 24 也无 uni 对位）
+    expect(frag!.unsupported.map((u) => u.key)).toEqual(['size-mirror'])
+  })
+})
+
+describe('emitWidgetNode → dash-notice 公告卡', () => {
+  it('list 形态：.lc-notice 头 + v-for 行（title/时间/未读）；脚本 useUniNotice；imports 对位', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-notice',
+          field: 'noticeList',
+          title: '',
+          col: { span: 12 },
+          props: { title: '公告（列表）', limit: 5, display: 'list', interval: 4000, span: 12, height: '' },
+        },
+      ],
+      'dash-notice',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-notice">',
+        '  <view class="lc-notice__head">',
+        '    <text class="lc-notice__title">公告（列表）</text>',
+        '    <text v-if="noticeListTotal" class="lc-notice__count">{{ noticeListTotal }}</text>',
+        '  </view>',
+        '  <view v-if="noticeListRows.length" class="lc-notice__list">',
+        '    <view v-for="row in noticeListRows" :key="row.id" class="lc-notice__item">',
+        '      <view class="lc-notice__item-line">',
+        '        <text class="lc-notice__item-title">{{ row.title }}</text>',
+        `        <text v-if="row.readStatus !== 'SENT'" class="lc-notice__tag">未读</text>`,
+        '      </view>',
+        `      <text class="lc-notice__item-meta">{{ String(row.createdAt ?? '').replace('T', ' ').slice(0, 16) }}</text>`,
+        '    </view>',
+        '  </view>',
+        "  <text v-else class=\"lc-notice__empty\">{{ noticeListLoading ? '加载中…' : '暂无公告' }}</text>",
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script.join('\n')).toBe(
+      [`const noticeList = useUniNotice({ limit: 5 })`, `const { rows: noticeListRows, total: noticeListTotal, loading: noticeListLoading } = noticeList`, `onMounted(() => void noticeList.reload())`].join('\n'),
+    )
+    expect(frag!.imports).toEqual([`import { onMounted } from 'vue'`, `import { useUniNotice } from '@lc/runtime-uni/dash'`])
+    // 无数据源键：不出现 ds-ref-id / dataSources 寻址
+    expect(frag!.script.join('\n')).not.toContain('dataSources')
+    const keys = frag!.unsupported.map((u) => u.key)
+    expect(keys).toEqual(['notice-detail', 'size-mirror'])
+  })
+
+  it('carousel 形态：swiper 自动轮播（interval/圆形指示点），行内容同 list', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-notice',
+          field: 'noticeCarousel',
+          title: '',
+          col: { span: 12 },
+          props: { title: '公告（轮播）', limit: 5, display: 'carousel', interval: 3000, span: 12, height: '200px' },
+        },
+      ],
+      'dash-notice',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.template).toContain('<swiper')
+    expect(frag!.template).toContain(':interval="3000"')
+    expect(frag!.template).toContain('autoplay')
+    expect(frag!.template).toContain('circular')
+    expect(frag!.template).toContain('<swiper-item v-for="row in noticeCarouselRows" :key="row.id"')
+  })
+
+  it('interval 缺省 4000（display=list 不出 swiper）；title 空回退「公告」', () => {
+    const { node, ir } = dashOf(
+      [{ type: 'dash-notice', field: 'n0', title: '', col: { span: 24 }, props: { display: 'list', span: 24, height: '' } }],
+      'dash-notice',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain('useUniNotice({ limit: 6 })')
+    expect(frag!.template).toContain('<text class="lc-notice__title">公告</text>')
+  })
+})
+
+describe('emitWidgetNode → dash-todo 待办卡', () => {
+  it('todo 视图：.lc-todo 头（计数）+ v-for 行（流程名/优先级/催办/元信息）；useUniTodo 接线（userId 走本地存储）', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-todo',
+          field: 'todoList',
+          title: '',
+          col: { span: 24 },
+          props: { title: '我的待办', view: 'todo', limit: 5, orderBy: 'priority', span: 24, height: '' },
+        },
+      ],
+      'dash-todo',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag).not.toBeNull()
+    expect(frag!.template).toBe(
+      [
+        `<!-- ${node.artifact.anchor} -->`,
+        '<view class="lc-todo">',
+        '  <view class="lc-todo__head">',
+        '    <text class="lc-todo__title">我的待办</text>',
+        '    <text v-if="todoListTotal" class="lc-todo__count">{{ todoListTotal }}</text>',
+        '  </view>',
+        '  <view v-if="todoListRows.length" class="lc-todo__list">',
+        '    <view v-for="row in todoListRows" :key="row.taskId" class="lc-todo__item">',
+        '      <view class="lc-todo__item-main">',
+        '        <text class="lc-todo__item-title">{{ row.processName }}</text>',
+        '        <text v-if="(row.priority ?? 0) >= 100" class="lc-todo__tag lc-todo__tag--urgent">加急</text>',
+        '        <text v-else-if="(row.priority ?? 0) >= 75" class="lc-todo__tag">重要</text>',
+        '        <text v-if="row.reminded" class="lc-todo__tag">已催办</text>',
+        '      </view>',
+        '      <text class="lc-todo__item-meta">{{ [row.initiatorName ? `发起人${row.initiatorName}` : \'\', row.currentNodeName ? `节点${row.currentNodeName}` : \'\', row.createTime ? String(row.createTime).replace(\'T\', \' \').slice(0, 16) : \'\'].filter(Boolean).join(\' · \') }}</text>',
+        '    </view>',
+        '  </view>',
+        "  <text v-else class=\"lc-todo__empty\">{{ todoListEmpty || (todoListLoading ? '加载中…' : '') }}</text>",
+        '</view>',
+      ].join('\n'),
+    )
+    expect(frag!.script.join('\n')).toBe(
+      [
+        `const todoListUserId = uni.getStorageSync('lc_user_id')`,
+        `const todoList = useUniTodo({ view: 'todo', limit: 5, orderBy: 'priority', userId: String(todoListUserId ?? '') })`,
+        `const { rows: todoListRows, total: todoListTotal, empty: todoListEmpty } = todoList`,
+        `onMounted(() => void todoList.reload())`,
+      ].join('\n'),
+    )
+    expect(frag!.imports).toEqual([
+      `import { onMounted } from 'vue'`,
+      `import { useUniTodo } from '@lc/runtime-uni/dash'`,
+    ])
+    const keys = frag!.unsupported.map((u) => u.key)
+    expect(keys).toEqual(['todo-row-click', 'size-mirror'])
+  })
+
+  it('done 视图：useUniTodo view=done（historic 端点在 runtime 内分派），meta 取 endTime', () => {
+    const { node, ir } = dashOf(
+      [
+        {
+          type: 'dash-todo',
+          field: 'doneList',
+          title: '',
+          col: { span: 24 },
+          props: { title: '我的已办', view: 'done', limit: 8, span: 24, height: '' },
+        },
+      ],
+      'dash-todo',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.script.join('\n')).toContain(`useUniTodo({ view: 'done', limit: 8, userId: String(doneListUserId ?? '') })`)
+    expect(frag!.template).toContain('row.endTime')
+    expect(frag!.template).not.toContain('orderBy')
+    expect(frag!.unsupported.map((u) => u.key)).toEqual(['todo-row-click', 'size-mirror'])
+  })
+
+  it('title 空回退「我的待办/我的已办」；limit 缺省 8', () => {
+    const { node, ir } = dashOf(
+      [{ type: 'dash-todo', field: 't0', title: '', col: { span: 24 }, props: { view: 'todo', span: 24, height: '' } }],
+      'dash-todo',
+    )
+    const frag = emitWidgetNode(node, ir)
+    expect(frag!.template).toContain('<text class="lc-todo__title">我的待办</text>')
+    expect(frag!.script.join('\n')).toContain('useUniTodo({ view: \'todo\', limit: 8, userId: String(t0UserId ?? \'\') })')
   })
 })

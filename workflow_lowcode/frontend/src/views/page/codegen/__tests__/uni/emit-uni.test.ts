@@ -170,7 +170,10 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     const sfc = files['src/pages/gen/fc_plain.vue']
     expect(sfc).toContain('<view class="lc-ftable">')
     expect(sfc).toContain('<view class="lc-ftable__cell">')
-    expect(sfc).toMatch(/<!-- lc:todo node=n1\.f1 type=dash-kpi field=kpiA /)
+    // 7.2 起格内 dash-kpi 出 .lc-kpi 统计卡片段（不再 todo 挂点）
+    expect(sfc).toContain('<view class="lc-kpi">')
+    expect(sfc).toContain("const kpiA = useUniKpi({ refId: ds.refId, agg: 'count' })")
+    expect(sfc).not.toMatch(/<!-- lc:todo node=n1\.f1 type=dash-kpi field=kpiA /)
     expect(sfc).not.toMatch(/<!-- lc:todo node=n1 type=fcTable/)
 
     const rich = generatePageUni(clone(fcTableRich) as any, {
@@ -179,9 +182,15 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
       client: CLIENT,
     })
     const richSfc = rich.files['src/pages/gen/fc_rich.vue']
-    // 非 7.x 子件（无）→ 全部 todo；合并覆盖格（notice1 slot=2:2）归 home 2:0 块
+    // 7.2 起格内 dash-todo/dash-kpi/dash-notice 出片段；dash-chart 归 7.3 仍 todo；
+    // 合并覆盖格（notice1 slot=2:2）归 home 2:0 块
     expect(richSfc).toContain('style="width: 200px; height: 120px"')
     expect(richSfc).toContain('class="lc-ftable__cell hero-cell"')
+    expect(richSfc).toContain('<view class="lc-kpi">')
+    expect(richSfc).toContain('<view class="lc-todo">')
+    expect(richSfc).toContain('<view class="lc-notice">')
+    expect(richSfc).toMatch(/<!-- lc:todo node=n\d+\.\w+ type=dash-chart /)
+    expect(richSfc).not.toMatch(/<!-- lc:todo node=n\d+\.\w+ type=dash-(kpi|notice|todo) /)
     expect(richSfc).not.toContain('rowspan')
     // 几何视觉键节点级登记进报告（unsupported 有消费者：报告与产物同一份真相）
     expect(report.unsupported.some((u) => u.key === 'table-geometry')).toBe(true)

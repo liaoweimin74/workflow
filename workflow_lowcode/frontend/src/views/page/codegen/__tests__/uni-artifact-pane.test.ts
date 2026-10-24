@@ -34,7 +34,7 @@ const OK_OUT = {
   report: { pageKey: 'test_page', codegenRate: { totalNodes: 8, registeredNodes: 8, emittableNodes: 8, rate: 1 }, buckets: { A: 6, B: 2, C: 0 } },
   version: 2,
   builtAt: '2026-10-24T06:00:00.000Z',
-  previewUrl: 'http://localhost:5301/#/pages/gen/test_page?v=2',
+  previewUrl: '/__lc-codegen/uni-static/#/pages/gen/test_page?v=2',
 }
 
 const open = (props: Record<string, any> = {}) =>
@@ -90,23 +90,23 @@ describe('UniArtifactPreviewPane', () => {
     expect(runUniArtifactPreviewSpy).toHaveBeenCalledTimes(2)
   })
 
-  it('构建成功：iframe src 就是带版本令牌的 previewUrl', async () => {
+  it('构建成功：iframe src 就是带版本令牌的 previewUrl（同源相对路径）', async () => {
     const wrapper = open()
     await flushPromises()
     const frame = wrapper.find('iframe')
     expect(frame.exists()).toBe(true)
-    expect(frame.attributes('src')).toBe('http://localhost:5301/#/pages/gen/test_page?v=2')
+    expect(frame.attributes('src')).toBe('/__lc-codegen/uni-static/#/pages/gen/test_page?v=2')
   })
 
   it('重复构建版本令牌递增：iframe 元素被替换（重挂），陈旧产物不许残留', async () => {
     const wrapper = open()
     await flushPromises()
     const first = wrapper.find('iframe').element
-    runUniArtifactPreviewSpy.mockResolvedValue({ ...OK_OUT, version: 3, previewUrl: 'http://localhost:5301/#/pages/gen/test_page?v=3' })
+    runUniArtifactPreviewSpy.mockResolvedValue({ ...OK_OUT, version: 3, previewUrl: '/__lc-codegen/uni-static/#/pages/gen/test_page?v=3' })
     await wrapper.find('.uni-artifact-pane__build').trigger('click')
     await flushPromises()
     const frame = wrapper.find('iframe')
-    expect(frame.attributes('src')).toBe('http://localhost:5301/#/pages/gen/test_page?v=3')
+    expect(frame.attributes('src')).toBe('/__lc-codegen/uni-static/#/pages/gen/test_page?v=3')
     // :key=version 变了 → Vue 销毁重建 iframe 元素（而不是原地改 src）
     expect(frame.element).not.toBe(first)
   })

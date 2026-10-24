@@ -9,7 +9,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import cardlistSchema from '../codegen/__tests__/fixtures/corpus/cardlist_test.json'
-import { PREVIEW_BUILD_PATH, PREVIEW_PORT, runUniArtifactPreview } from '../codegen/uni-preview-run'
+import { PREVIEW_BUILD_PATH, runUniArtifactPreview } from '../codegen/uni-preview-run'
+import { UNI_PREVIEW_BASE, uniPreviewUrl } from '../../../../vite.uni-preview'
 
 const SOURCE = readFileSync(resolve(__dirname, '../PageDesigner.vue'), 'utf8')
 
@@ -54,7 +55,7 @@ describe('runUniArtifactPreview（uni-preview-run 客户端通道）', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, version: 3, builtAt: '2026-10-24T00:00:00.000Z', previewUrl: `http://localhost:${PREVIEW_PORT}/#/pages/gen/cardlist_test?v=3`, pageKey: 'cardlist_test' }),
+      json: async () => ({ ok: true, version: 3, builtAt: '2026-10-24T00:00:00.000Z', previewUrl: uniPreviewUrl('cardlist_test', 3), pageKey: 'cardlist_test' }),
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -77,9 +78,10 @@ describe('runUniArtifactPreview（uni-preview-run 客户端通道）', () => {
       client: { key: 'member', pages: [{ key: 'cardlist_test', title: '卡片列表' }] },
     })
     expect(body.files).toEqual(gen.files)
-    // 版本令牌与预览 URL 原样带出（iframe 重挂的依据）
+    // 版本令牌与预览 URL 原样带出（iframe 重挂的依据）——URL 是同源相对路径（Task 10.1 路线 1）
     expect(out.version).toBe(3)
-    expect(out.previewUrl).toContain(`http://localhost:${PREVIEW_PORT}/#/pages/gen/cardlist_test?v=3`)
+    expect(out.previewUrl).toBe(uniPreviewUrl('cardlist_test', 3))
+    expect(out.previewUrl.startsWith(UNI_PREVIEW_BASE)).toBe(true)
   })
 
   it('中间件非 2xx：带状态码与服务端归因抛出，不给预览 URL', async () => {

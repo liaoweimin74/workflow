@@ -17,7 +17,7 @@ export interface UniRequestOptions {
   tenantHeader: string
   /** 租户 id（缺省 default，与 web 端同口径） */
   tenantId?: string
-  /** 网关基址（缺省空 = 同源相对路径） */
+  /** 网关基址（缺省 /api = 平台业务 API 前缀，见 plan:18；产物请求落 /api/v1/**，部署与预览同源经反向代理） */
   baseURL?: string
   /** token 在本地存储的键名（缺省 access_token，与 web 端 localStorage 键一致） */
   tokenKey?: string
@@ -57,7 +57,7 @@ export function uniRequest(options: UniRequestOptions) {
   const {
     tenantHeader,
     tenantId = 'default',
-    baseURL = '',
+    baseURL = '/api',
     tokenKey = 'access_token',
     timeout = 15000,
     loginPath,

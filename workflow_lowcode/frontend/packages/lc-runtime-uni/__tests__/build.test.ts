@@ -64,6 +64,13 @@ describe('@lc/runtime-uni — 四入口骨架行为（Task 3.2/3.3）', () => {
     expect(res).toEqual({ code: 200, msg: 'ok', data: { ok: 1 } })
   })
 
+  it('http.uniRequest：baseURL 缺省对齐平台前缀 /api（产物请求落到 /api/v1/**，对位 plan:18 与前端 /api 代理）', async () => {
+    const calls = stubUni()
+    const request = uniRequest({ tenantHeader: 'X-Tenant-Id' })
+    await request({ url: '/v1/data-sources/1/data', method: 'GET' })
+    expect(calls.request[0].url).toBe('/api/v1/data-sources/1/data')
+  })
+
   it('http：R 包装 code===200 原样放行整个信封（对位 web 拦截器 return data）', async () => {
     const calls = stubUni()
     const envelope = { code: 200, msg: 'ok', data: { id: 7 } }
@@ -155,10 +162,10 @@ describe('@lc/runtime-uni — 四入口骨架行为（Task 3.2/3.3）', () => {
     await http.put('/v1/things/1', { name: 'y' })
     await http.delete('/v1/things/1')
     expect(calls.request.map((c: any) => [c.url, c.method, c.data])).toEqual([
-      ['/v1/ping', 'GET', undefined],
-      ['/v1/things', 'POST', { name: 'x' }],
-      ['/v1/things/1', 'PUT', { name: 'y' }],
-      ['/v1/things/1', 'DELETE', undefined],
+      ['/api/v1/ping', 'GET', undefined],
+      ['/api/v1/things', 'POST', { name: 'x' }],
+      ['/api/v1/things/1', 'PUT', { name: 'y' }],
+      ['/api/v1/things/1', 'DELETE', undefined],
     ])
   })
 

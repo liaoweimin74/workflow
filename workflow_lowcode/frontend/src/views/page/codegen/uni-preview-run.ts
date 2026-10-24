@@ -29,7 +29,8 @@ export interface UniPreviewRunOutput {
   /** 版本令牌：随本次构建递增，iframe 用它强制重挂 */
   version: number
   builtAt: string
-  /** 产物 H5 页面地址（http://localhost:5301/#/pages/gen/<key>?v=<version>） */
+  /** 产物 H5 页面地址：同源相对路径 /__lc-codegen/uni-static/#/pages/gen/<key>?v=<version>
+   * （iframe 与宿主同源 → 宿主的 /api 代理与登录态可用，产物取到活数据） */
   previewUrl: string
 }
 

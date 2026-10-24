@@ -57,11 +57,24 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
     },
     {
-      // 产物级预览（Task 8.1/8.2）：uni 产物落盘 + uni build h5 + 5301 iframe 重挂。
-      // 构建是分钟级贵操作，默认不进常规 project；真跑归 10.1 uni-dual-render（plan Task 10.1）
+      // 产物级预览（Task 8.1/8.2，同源托管 Task 10.1）：uni 产物落盘 + uni build h5 +
+      // dev server 在 /__lc-codegen/uni-static/ 同源托管 → iframe 加载并渲染（含活数据）。
+      // 构建是分钟级贵操作，默认不进常规 project；只看这一条时 `--project=uni-preview`。
       name: 'uni-preview',
       testMatch: /uni-preview\.spec\.ts/,
-      dependencies: ['designer-codegen'],
+      dependencies: ['login'],
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
+    },
+    {
+      // 双渲染·多端（Task 10.1，design D5 延伸）：宿主 /page/<key>?preview=true
+      // vs uni H5 产物（8.2 中间件构建 → 10.1 同源子路径托管 → iframe）。三用例（列表 /
+      // 表单容器 / dashboard）沿用 P2 双渲染的语料口径：产物侧定义取仓库语料 fixture
+      // （与 /codegen-probe 同源，已核对与活库逐字节等价），宿主侧取活库（preview=true）。
+      // 只依赖 login（不驱动设计器），但与其它 e2e 一样是「重写磁盘产物」的用例：
+      // uni build 分钟级，默认不进常规回归，真跑显式 `--project=uni-dual-render`。
+      name: 'uni-dual-render',
+      testMatch: /uni-dual-render\.spec\.ts/,
+      dependencies: ['login'],
       use: { ...devices['Desktop Chrome'], storageState: AUTH_STATE },
     },
   ],

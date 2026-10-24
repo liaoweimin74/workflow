@@ -3,14 +3,14 @@ import path from 'node:path'
 import { expect, test } from '@playwright/test'
 
 /**
- * 产物级预览（Task 8.1/8.2）：设计器预览弹窗的「产物预览」页签 → 画布定义 →
- * generatePageUni → dev 中间件落盘 uni-shell/src/ → uni build h5 → 5301 静态服务 →
- * 手机壳 iframe 加载（版本令牌重挂）。
+ * 产物级预览（Task 8.1/8.2，同源托管口径 Task 10.1）：设计器预览弹窗的「产物预览」页签 →
+ * 画布定义 → generatePageUni → dev 中间件落盘 uni-shell/src/ → uni build h5 →
+ * dev server 在 /__lc-codegen/uni-static/ 同源托管 → 手机壳 iframe 加载（版本令牌重挂）。
  *
- * 这条用例真跑时依赖：后端 8080 + 活库（页 id 按 key 从接口取）、5301 端口空闲、
- * uni build 能出 h5 产物。构建是贵操作（分钟级），真跑归 10.1 uni-dual-render
- * project（plan Task 10.1），与 designer.spec 的出码落盘用例一样放最后跑——
- * 它会重写 uni-shell/src/ 下的壳文件，快照进退保证退出时还原。
+ * 这条用例真跑时依赖：后端 8080 + 活库（页 id 按 key 从接口取）、uni build 能出 h5 产物。
+ * 构建是贵操作（分钟级），真跑归 10.1 uni-dual-render project（plan Task 10.1），
+ * 与 designer.spec 的出码落盘用例一样放最后跑——它会重写 uni-shell/src/ 下的壳文件，
+ * 快照进退保证退出时还原。
  */
 
 const UNI_SHELL_SRC = path.resolve('uni-shell/src')
@@ -81,11 +81,17 @@ test('产物预览：构建后手机壳 iframe 加载产物页，版本令牌随
     // 构建是分钟级操作：等版本元信息出现（构建成功返回版本令牌）
     await expect(dialog.locator('.uni-artifact-pane__meta')).toContainText('构建版本 v', { timeout: 180_000 })
 
-    // iframe 加载 5301 产物页，src 带版本令牌（preview=true 口径的重挂依据）
+    // iframe 加载同源托管的产物页，src 带版本令牌（preview=true 口径的重挂依据）。
+    // 相对路径（不带 host:port）就是同源口径本身：产物请求要靠宿主的 /api 代理与登录态。
     const frame = dialog.locator('iframe.uni-artifact-pane__frame')
     await expect(frame).toBeVisible()
     const src = (await frame.getAttribute('src')) ?? ''
-    expect(src).toMatch(/^http:\/\/localhost:5301\/#\/pages\/gen\/.+\?v=\d+$/)
+    expect(src).toMatch(/^\/__lc-codegen\/uni-static\/#\/pages\/gen\/.+\?v=\d+$/)
+
+    // 静默失效闸门：iframe 里必须真的渲染出产物页（资产 + hash 路由基路径都对才可能）。
+    // 只断言 src 形状时，基路径配错（资产指回宿主根）也会「通过」——那时 iframe 是白屏。
+    const uniFrame = page.frameLocator('iframe.uni-artifact-pane__frame')
+    await expect(uniFrame.locator('.lc-page')).toBeVisible({ timeout: 120_000 })
 
     // 右侧同屏可见出码报告与产物源码（发布前核对口径）
     await expect(dialog.locator('.uni-artifact-pane__report')).toContainText(/可出码 \d+\/\d+/)

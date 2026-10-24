@@ -97,7 +97,7 @@ export default defineConfig({
     materialImportMap(),
     // 出码按钮的落盘通道（dev-only：configureServer 钩子只在 `vite dev` 执行，build 不带）
     codegenProbeWriter(__dirname),
-    // uni 产物预览通道（Task 8.2，dev-only 同上）：落盘 + 构建 + 5301 静态服务
+    // uni 产物预览通道（Task 8.2/10.1，dev-only 同上）：落盘 + 构建 + 同源子路径托管
     uniPreviewPlugin(__dirname)
   ],
   build: {
@@ -141,7 +141,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true
       }
     }

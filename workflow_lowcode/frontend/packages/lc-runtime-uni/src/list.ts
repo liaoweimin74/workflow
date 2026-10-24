@@ -67,7 +67,7 @@ export interface UniListOptions {
   pagination?: boolean
   /** 搜索条关键字命中的字段面（emit 侧从契约 searchFields 生成） */
   searchFields?: UniListSearchField[]
-  /** 请求器注入（缺省 uniRequest 缺省配置：token + 租户头，baseURL 同源） */
+  /** 请求器注入（缺省 uniRequest 缺省配置：token + 租户头，baseURL=/api 平台前缀） */
   request?: <T>(call: UniRequestCall) => Promise<R<T>>
 }
 

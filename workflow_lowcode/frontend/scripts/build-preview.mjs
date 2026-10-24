@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   PREVIEW_PORT,
+  UNI_PREVIEW_BASE,
   planUniPreviewWrite,
   writeUniPreviewFiles,
   runUniBuild,
@@ -79,7 +80,8 @@ try {
 
   if (!noServe) {
     startUniPreviewServer(frontendRoot, PREVIEW_PORT)
-    console.log(`[build-preview] 预览服务：http://localhost:${PREVIEW_PORT}/#/pages/gen/${pageKey}`)
+    console.log(`[build-preview] 预览服务：http://localhost:${PREVIEW_PORT}${UNI_PREVIEW_BASE}/#/pages/gen/${pageKey}`)
+    console.log('[build-preview] 旁路服务没有 /api 代理与登录态 → 能渲染但取不到活数据；带数据看设计器「产物预览」')
     console.log('[build-preview] Ctrl+C 退出')
     // 保持进程挂着 serve（stdin 消费掉避免某些终端立即退出）
     process.stdin.resume()

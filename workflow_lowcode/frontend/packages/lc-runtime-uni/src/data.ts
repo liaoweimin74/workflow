@@ -37,7 +37,7 @@ export function buildUniDataCalls(refId: string): UniDataCalls {
 
 export interface UniDataApiOptions {
   refId: string
-  /** 请求器注入（缺省 uniRequest 缺省配置：token + 租户头，baseURL 同源） */
+  /** 请求器注入（缺省 uniRequest 缺省配置：token + 租户头，baseURL=/api 平台前缀） */
   request?: <T>(call: UniRequestCall) => Promise<R<T>>
 }
 

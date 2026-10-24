@@ -126,7 +126,7 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 
 ## Risks / Trade-offs
 
-- [uni-table 能力不足（固定列/复杂表头/横向滚动真机表现未知）] → 实现首日先做 1 天 spike 实测；不足则收窄为「精简列 + 操作弹层」，语料 A/B 只对验证过的形态负责
+- [uni-table 能力不足（固定列/复杂表头/横向滚动真机表现未知）] → 实现首日先做 1 天 spike 实测；不足则收窄为「精简列 + 操作弹层」，语料 A/B 只对验证过的形态负责 → **【Task 6.1 spike 已回填】** uni-ui@1.5.12 源码核查（uni-shell 锁定版本）：横向滚动 ✓（`.uni-table-scroll{overflow-x:auto}` + uni-tr 动态汇总 th 宽算 minWidth，H5 真 `<table>` / 非 H5 view 堆叠双端可行）；**固定列 ✗**（uni-th/uni-tr 无 fixed 实现，仅注释残留）→ 触发预案：page-table 收窄为「精简列 + 操作收 ··· 弹层」，不出固定列；selection 多选 ✓（type="selection" + toggleRowSelection/clearSelection/toggleAllSelection 方法面 + selection-change 事件，6.2 批量列与 clear-selection 链 op 有对位）。mp-weixin 真机触感归 10.3 人工清单。
 - [echarts 体积撑爆主包] → 图表页强制 subpackage + 按需注册；仍超则对 dash-kpi 类简单图形降级 uCharts（语义层在，引擎可换）
 - [「Web 能配、移动不支持」的隐形坑] → 双 Gate：设计器能力矩阵硬过滤 + 出码报告 per-target 分桶，不支持项必须显式登记而非静默丢弃
 - [并行开发期间 Flyway 版本号冲突] → 迁移号取合并时 main 最新 +1；rebase 按 AGENTS.md lockfile 规则处理
@@ -145,7 +145,7 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 
 ## Open Questions
 
-1. uni-table 版本选型与固定列/横向滚动真机表现（首日 spike 定）。
+1. uni-table 版本选型与固定列/横向滚动真机表现（首日 spike 定）。→ **已定（Task 6.1）**：锁定 uni-shell 的 uni-ui@1.5.12；横向滚动可行、固定列无实现（收窄为精简列 + 操作弹层）；真机触感归 10.3。
 2. lime-echart 按需注册与分包落点（图表页 subpackage 切分规则）。
 3. rpx 换算基准：设计器 375 画布 ↔ 小程序 750 设计稿的映射细则。
 4. `WechatMiniprogramClient` 从单 appId Bean 改按 Client 配置多实例的方式（配置表驱动 vs Bean 工厂）。

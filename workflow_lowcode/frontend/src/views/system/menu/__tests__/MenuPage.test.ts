@@ -19,19 +19,38 @@ vi.mock('@/api/page', () => ({
   pageApi: { getPages: vi.fn(() => Promise.resolve({ data: { content: [] } })) },
 }))
 
-import MenuPage from '../MenuPage.vue'
-import { createMenu, getMenuTree, updateMenu } from '@/api/menu'
+// Task 8：端 Tab 数据源 + 路由（?clientId= 保持 / 去新建端跳转）
+const routerPush = vi.fn()
+const routerReplace = vi.fn()
+const mockRoute = { path: '/system/menu', query: {} as Record<string, string> }
+vi.mock('vue-router', () => ({
+  useRoute: () => mockRoute,
+  useRouter: () => ({ push: routerPush, replace: routerReplace }),
+}))
 
-/** SearchTable 桩：捕获 props 与 openFormDialog 预填值 */
+vi.mock('@/api/client', () => ({
+  clientOptions: vi.fn(),
+}))
+
+import MenuPage from '../MenuPage.vue'
+import { createMenu, getMenuTree, moveMenu, updateMenu } from '@/api/menu'
+import { clientOptions } from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
+import type { MenuTree } from '@/types/menu'
+
+/** SearchTable 桩：捕获 props/slots 与 openFormDialog 预填值 */
 let capturedProps: any = null
+let capturedSlots: Record<string, (params: any) => any> = {}
 let openFormPayload: any = null
+const stubFetchList = vi.fn()
 const SearchTableStub = defineComponent({
   name: 'SearchTableStub',
   props: ['searchFields', 'columns', 'actionButtons', 'fetchApi', 'formConfig', 'treeProps', 'showSearch'],
-  setup(props, { expose }) {
+  setup(props, { expose, slots }) {
     capturedProps = props
+    capturedSlots = slots as any
     expose({
-      fetchList: vi.fn(),
+      fetchList: stubFetchList,
       openFormDialog: (values: any) => {
         openFormPayload = values
       },
@@ -39,6 +58,14 @@ const SearchTableStub = defineComponent({
     return () => h('div', { class: 'search-table-stub' })
   },
 })
+
+/** 单独渲染某列插槽（zone 根行等需要看真实 DOM）。 */
+function renderColumnSlot(slotName: string, row: Record<string, unknown>) {
+  return mount(
+    defineComponent({ setup: () => () => h('div', capturedSlots[slotName]?.({ row }) as any) }),
+    { global: { plugins: [ElementPlus] } },
+  )
+}
 
 function ruleOf(field: string) {
   return capturedProps.formConfig.rule.find((r: any) => r.field === field)
@@ -304,5 +331,98 @@ describe('MenuPage 表单校验', () => {
     expect(run(0, null)).toBeUndefined()
     expect(run(0, 20)).toBeUndefined()
     expect(run(0, 10)).toContain('目录只能放在根级或其他目录下')
+  })
+})
+
+// ----- Task 8: A3 菜单管理端作用域切换与移动端分区（tasks.md 2.3/2.4）-----
+describe('MenuPage 端作用域 Tab', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRoute.query = {}
+    ;(getMenuTree as any).mockResolvedValue({ data: [] })
+    ;(clientOptions as any).mockResolvedValue({
+      data: [
+        { id: 1, code: 'portal', name: '平台端', channelTypes: ['WEB'], status: 1 },
+        { id: 7, code: 'driver', name: '司机端', channelTypes: ['H5', 'MP'], status: 1 },
+      ],
+    })
+  })
+
+  it('端 Tab 来自 clientOptions，含「去新建端」入口并跳 A1', async () => {
+    const wrapper = await createWrapper()
+    expect(clientOptions).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('平台端')
+    expect(wrapper.text()).toContain('司机端')
+    const goBtn = wrapper.findAll('button').find((b) => b.text().includes('去新建端'))
+    expect(goBtn).toBeDefined()
+    await goBtn!.trigger('click')
+    expect(routerPush).toHaveBeenCalledWith('/system/client')
+    wrapper.unmount()
+  })
+
+  it('缺省按 portal(1) 拉树；URL ?clientId= 优先（消费 A1 的 ☰菜单 跳转）', async () => {
+    const w1 = await createWrapper()
+    await capturedProps.fetchApi({})
+    expect(getMenuTree).toHaveBeenLastCalledWith(1)
+    w1.unmount()
+
+    mockRoute.query = { clientId: '7' }
+    const w2 = await createWrapper()
+    await capturedProps.fetchApi({})
+    expect(getMenuTree).toHaveBeenLastCalledWith(7)
+    w2.unmount()
+  })
+
+  it('切换端：带 clientId 重拉树（二次请求）并写回 URL query', async () => {
+    stubFetchList.mockClear()
+    const wrapper = await createWrapper()
+    await capturedProps.fetchApi({})
+    const vm = wrapper.vm as any
+    await vm.switchClient(7)
+    expect(routerReplace).toHaveBeenCalledWith({ query: { clientId: '7' } })
+    expect(stubFetchList).toHaveBeenCalled()
+    await capturedProps.fetchApi({})
+    expect(getMenuTree).toHaveBeenLastCalledWith(7)
+    wrapper.unmount()
+  })
+})
+
+describe('MenuPage 移动端分区带与 move 回滚', () => {
+  const zoneRoot: MenuTree = {
+    id: 900, parentId: null, menuName: '底部Tab区', menuType: 0,
+    path: '', component: 'mzone:tabs', permission: '', icon: '', sortOrder: 1, status: 1, children: [],
+  } as MenuTree
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRoute.query = {}
+    ;(getMenuTree as any).mockResolvedValue({ data: [] })
+    ;(clientOptions as any).mockResolvedValue({ data: [] })
+  })
+
+  it('zone 根行渲染分区带标题且不渲染拖拽把手；普通行仍有把手（需 update 权限）', async () => {
+    const wrapper = await createWrapper()
+    useAuthStore().permissions = ['system:menu:update']
+    await wrapper.vm.$nextTick()
+
+    const zoneCell = renderColumnSlot('menuName', zoneRoot)
+    expect(zoneCell.text()).toContain('底部Tab区')
+    expect(zoneCell.find('.menu-drag-handle').exists()).toBe(false)
+
+    const normalCell = renderColumnSlot('menuName', {
+      ...zoneRoot, id: 901, menuName: '工作台', menuType: 1, component: 'page/PageRenderer',
+    })
+    expect(normalCell.find('.menu-drag-handle').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('move 被服务端拒绝：不抛出（后端消息由 http 拦截器 toast），以服务端重取回滚', async () => {
+    stubFetchList.mockClear()
+    const wrapper = await createWrapper()
+    const vm = wrapper.vm as any
+    ;(moveMenu as any).mockRejectedValue(Object.assign(new Error('底部 Tab 区只能放菜单'), { code: 500 }))
+    await expect(vm.handleMoveDrop(901, { parentId: 900, index: 0 })).resolves.toBeUndefined()
+    expect(stubFetchList).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 })

@@ -27,6 +27,15 @@ export function normalizeParentId(parentId?: number | null): number | null {
   return parentId === undefined || parentId === null || parentId === 0 ? null : parentId
 }
 
+/**
+ * 移动端形态的分区根（V50 约定）：component='mzone:tabs'（底部 Tab 区）/
+ * 'mzone:grid'（工作台宫格区）。服务端 locked 拒绝其改名/移动/删除（Task 4），
+ * 前端据此把它渲染为分区带标题且不给拖拽把手。
+ */
+export function isZoneRoot(node: { component?: string | null }): boolean {
+  return typeof node.component === 'string' && node.component.startsWith('mzone:')
+}
+
 export function findNode(tree: MenuTree[], id: number): MenuTree | null {
   for (const node of tree) {
     if (node.id === id) return node
@@ -75,6 +84,7 @@ export function resolveDrop(
   const hover = findNode(tree, hoverId)
   if (!drag || !hover) return { ok: false, message: '菜单数据已变化，请刷新后重试' }
   if (dragId === hoverId) return { ok: false, message: '不能把菜单放到它自己上' }
+  if (isZoneRoot(drag)) return { ok: false, message: '系统分区目录已锁定，不可移动' }
   if (containsNode(drag, hoverId)) return { ok: false, message: '不能把菜单移动到自己的子节点之下' }
 
   const parentId = band === 'into' ? hover.id : normalizeParentId(hover.parentId)

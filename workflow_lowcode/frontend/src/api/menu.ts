@@ -2,8 +2,9 @@ import http from '@/utils/http'
 import type { R } from '@/types/common'
 import type { MenuTree, MenuCreateForm, MenuUpdateForm, MenuMoveForm } from '@/types/menu'
 
-export function getMenuTree() {
-  return http.get<any, R<MenuTree[]>>('/menus/tree')
+/** 按端取树（Task 8 A3）：clientId=端 Tab 当前选中；缺省由服务端按请求端上下文归一 portal。 */
+export function getMenuTree(clientId?: number) {
+  return http.get<any, R<MenuTree[]>>('/menus/tree', { params: clientId ? { clientId } : undefined })
 }
 
 export function createMenu(data: MenuCreateForm) {

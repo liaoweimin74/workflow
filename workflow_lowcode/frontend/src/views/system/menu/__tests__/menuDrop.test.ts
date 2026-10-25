@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { MenuTree } from '@/types/menu'
 import {
+  isZoneRoot,
   normalizeParentId,
   placementError,
   resolveDrop,
@@ -94,6 +95,36 @@ describe('resolveDrop 位置带语义', () => {
 
   it('跨父级同位置不算 noop', () => {
     expect(targetOf(10, 20, 'after')).toMatchObject({ ok: true, noop: false, target: { parentId: 2, index: 1 } })
+  })
+})
+
+// ----- Task 8: 移动端 zone 根（分区带，locked）-----
+describe('zone 根识别与拖拽保护', () => {
+  function zoneNode(): MenuTree {
+    return { ...node(900, null, 0, [node(901, 900, 1)]), component: 'mzone:tabs' }
+  }
+
+  it('isZoneRoot：component=mzone:* 即分区根，普通节点为 false', () => {
+    expect(isZoneRoot(zoneNode())).toBe(true)
+    expect(isZoneRoot({ ...node(902, null, 0), component: 'mzone:grid' })).toBe(true)
+    expect(isZoneRoot(node(1, null, 0))).toBe(false)
+  })
+
+  it('resolveDrop 拒绝拖动 zone 根自身（locked handle-disabled 的兜底防线）', () => {
+    const tree = [zoneNode(), node(2, null, 0)]
+    const res = resolveDrop(tree, 900, 2, 'into')
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.message).toContain('不可移动')
+  })
+
+  it('zone 根作为落点父级仍放行（细分形态合法性由服务端裁决）', () => {
+    const tree = [zoneNode(), node(40, null, 0, [node(41, 40, 1)])]
+    const res = resolveDrop(tree, 41, 901, 'into')
+    // 41(菜单) → into 901(菜单)：WEB 规则菜单必须挂目录下 → 前端先拦
+    expect(res.ok).toBe(false)
+    const res2 = resolveDrop(tree, 41, 900, 'into')
+    // 41(菜单) → into 900(zone 根目录)：parentType=目录 放行，TAB 位数量等交服务端
+    expect(res2).toMatchObject({ ok: true, target: { parentId: 900, index: 1 } })
   })
 })
 

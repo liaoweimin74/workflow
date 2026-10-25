@@ -2,12 +2,15 @@
 defineOptions({ name: 'MenuManagement' })
 
 import { ref, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { SearchTable } from '@/components/business'
-import { FolderAdd, Rank } from '@element-plus/icons-vue'
+import { FolderAdd, Plus, Rank } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getMenuTree, createMenu, updateMenu, deleteMenu, moveMenu } from '@/api/menu'
+import { clientOptions } from '@/api/client'
+import type { ClientOptionVO } from '@/types/client'
 import { pageApi, type PageDefinitionDTO } from '@/api/page'
 import type { MenuTree } from '@/types/menu'
 import { useAuthStore } from '@/stores/auth'
@@ -17,9 +20,11 @@ import {
   MENU_TYPE_MENU,
   defaultChildType,
   findNode,
+  isZoneRoot,
   normalizeParentId,
   placementError,
   resolveDrop,
+  type DropTarget,
 } from './menuDrop'
 import { useMenuTreeDrag } from './useMenuTreeDrag'
 
@@ -30,6 +35,38 @@ const authStore = useAuthStore()
 const canDrag = computed(() => authStore.hasPermission('system:menu:update'))
 /** 弹窗态：编辑时「上级菜单」只做展示（层级由拖动调整） */
 const dialogMode = ref<'create' | 'edit'>('create')
+
+// ---------- 端作用域（Task 8 A3，tasks.md 2.3）----------
+const route = useRoute()
+const router = useRouter()
+const clients = ref<ClientOptionVO[]>([])
+// 初值：URL ?clientId=（消费 A1「☰菜单」跳转）优先，缺省 portal(1)
+const initialClientId = Number(route.query?.clientId)
+const activeClientId = ref<number>(
+  Number.isFinite(initialClientId) && initialClientId > 0 ? initialClientId : 1,
+)
+
+async function loadClients(): Promise<void> {
+  try {
+    const res = await clientOptions()
+    clients.value = res.data
+  } catch {
+    clients.value = [] // 端列表拉取失败只降级 Tab 区，不阻塞 WEB 树（portal 恒可用）
+  }
+}
+loadClients()
+
+/** 切端：更新作用域、写回 URL query（可刷新/可分享）并按端重拉树。 */
+function switchClient(id: number): void {
+  if (!Number.isFinite(id) || id <= 0 || id === activeClientId.value) return
+  activeClientId.value = id
+  router.replace({ query: { ...route.query, clientId: String(id) } })
+  void searchTableRef.value?.fetchList()
+}
+
+function goCreateClient(): void {
+  router.push('/system/client')
+}
 
 const menuTypeMap: Record<number, string> = { 0: '目录', 1: '菜单', 2: '按钮' }
 const menuTypeOptions = [
@@ -50,9 +87,9 @@ const columns: TableColumn[] = [
   { prop: 'sortOrder', label: '排序', width: 70, align: 'center' },
 ]
 
-// ---------- fetchApi（树形无分页） ----------
+// ---------- fetchApi（树形无分页；按当前端作用域取数） ----------
 async function fetchApi(_params: any) {
-  const res = await getMenuTree()
+  const res = await getMenuTree(activeClientId.value)
   list.value = res.data
   // tbody 可能因表格重建而更换节点，每次取数后重新绑定把手
   initRowDrag()
@@ -63,18 +100,26 @@ async function fetchApi(_params: any) {
 const { init: initRowDrag } = useMenuTreeDrag({
   getTbody: () => searchTableRef.value?.$el?.querySelector('.el-table__body-wrapper tbody'),
   judge: (dragId, hoverId, band) => resolveDrop(list.value, dragId, hoverId, band),
-  onDrop: async (dragId, target) => {
-    try {
-      await moveMenu(dragId, target)
-      ElMessage.success('层级/排序已更新')
-    } finally {
-      // 服务端会重排相关兄弟节点的排序号，无论如何都以服务端为准重取
-      await searchTableRef.value?.fetchList()
-    }
-  },
+  onDrop: handleMoveDrop,
   onRejected: (message) => ElMessage.warning(message),
   disabled: () => !canDrag.value,
 })
+
+/**
+ * 提交移动：服务端按端形态/locked 裁决落点（Task 4）。
+ * 被拒时 http 拦截器统一 toast 后端消息；本地不做乐观更新，
+ * finally 恒以服务端重取 = 天然回滚（顺序回原状）。
+ */
+async function handleMoveDrop(dragId: number, target: DropTarget): Promise<void> {
+  try {
+    await moveMenu(dragId, target)
+    ElMessage.success('层级/排序已更新')
+  } catch {
+    // 拒绝提示已由拦截器呈现，这里只负责回滚取数
+  } finally {
+    await searchTableRef.value?.fetchList()
+  }
+}
 
 /** 已发布页面列表（关联页面下拉候选） */
 const publishedPages = ref<PageDefinitionDTO[]>([])
@@ -271,6 +316,19 @@ function stripClientOnly(data: any, dropParentId = false): any {
 </script>
 
 <template>
+  <!-- 端作用域 Tab（A3）：切换按 client_id 重拉树；「去新建端」跳 A1 -->
+  <div class="client-scope-bar">
+    <span class="scope-label">端:</span>
+    <el-tabs
+      :model-value="String(activeClientId)"
+      class="client-tabs"
+      @tab-change="(name: string | number) => switchClient(Number(name))"
+    >
+      <el-tab-pane v-for="c in clients" :key="c.id" :label="c.name" :name="String(c.id)" />
+    </el-tabs>
+    <el-button link type="primary" :icon="Plus" @click="goCreateClient">去新建端</el-button>
+  </div>
+
   <SearchTable
     ref="searchTableRef"
     :search-fields="searchFields"
@@ -282,13 +340,20 @@ function stripClientOnly(data: any, dropParentId = false): any {
     :show-search="false"
   >
     <template #menuName="{ row }">
-      <el-icon
-        v-if="canDrag"
-        class="menu-drag-handle"
-        :data-menu-id="row.id"
-        title="拖动调整层级和排序"
-      ><Rank /></el-icon>
-      <span>{{ row.menuName }}</span>
+      <!-- 移动端分区根（mzone:*）：带标题渲染，locked 不给把手（移动由服务端拒绝 + 本地禁拖） -->
+      <span v-if="isZoneRoot(row)" class="zone-band">
+        <b>{{ row.menuName }}</b>
+        <el-tag size="small" type="info">锁定</el-tag>
+      </span>
+      <template v-else>
+        <el-icon
+          v-if="canDrag"
+          class="menu-drag-handle"
+          :data-menu-id="row.id"
+          title="拖动调整层级和排序"
+        ><Rank /></el-icon>
+        <span>{{ row.menuName }}</span>
+      </template>
     </template>
     <template #icon="{ row }">
       <el-icon><component :is="row.icon || 'Menu'" /></el-icon>
@@ -302,6 +367,27 @@ function stripClientOnly(data: any, dropParentId = false): any {
 </template>
 
 <style scoped>
+.client-scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+.client-scope-bar .scope-label {
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+.client-scope-bar .client-tabs {
+  flex: 1;
+}
+/* 移动端分区根行：带标题样式（与可拖行的把手行区分） */
+.zone-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--el-color-primary);
+}
+
 .menu-drag-handle {
   cursor: grab;
   margin-right: 6px;

@@ -367,26 +367,40 @@ describe('页面根级未装配族：uni 兜底分派逐节点登记', () => {
   const uni = () =>
     generatePageUni(rootFields as any, { pageKey: 'uni_root_unassembled', pageName: 'uni_root_unassembled', client: CLIENT })
 
-  it('产物留挂点注释，且已登记契约的节点逐节点进 manifest（不再只有注释）', () => {
+  it('产物与 manifest 一致：已登记契约的节点要么真装配、要么在自身地址登记（Task 11.1 后 input 已装配）', () => {
     const { files, manifest } = uni()
     const sfc = files['src/pages/gen/uni_root_unassembled.vue']
-    for (const t of ['input', 'radio', 'LookupPicker']) expect(sfc).toContain(`type=${t} field=`)
+    // rule[0] input：Task 11.1 起真装配（真控件 + 页面级后端），不再有挂点注释与登记
+    expect(sfc).toContain('<uni-easyinput v-model="pageForm.title1"')
+    expect(sfc).not.toMatch(/lc:todo node=\S+ type=input field=/)
+    expect(manifest.unsupported.some((u) => u.type === 'input')).toBe(false)
+    // 仍未装配的族：Task 11.2 之前 LookupPicker 尚无 uniapp 映射 → 走字段组件的
+    // 「挂点 + 自身地址登记」（与容器内未映射字段同一纪律），装配在 11.2 落地
+    expect(sfc).toMatch(/lc:todo node=\S+ type=LookupPicker field=owner1/)
     expect(manifest.unsupported).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: 'rule[0]', type: 'input', key: 'not-assembled' }),
-        expect.objectContaining({ path: 'rule[2]', type: 'LookupPicker', key: 'not-assembled' }),
+        expect.objectContaining({ path: 'rule[2]', type: 'LookupPicker', key: 'field-component' }),
       ]),
     )
     // 未登记类型（radio）只保留 parse 那一条，同一节点不许记两行
     expect(manifest.unsupported.filter((u) => u.type === 'radio')).toHaveLength(1)
   })
 
-  it('不变量：页面根的每个节点要么被装配、要么在自身地址登记（报告口径不许掩盖空产物）', () => {
-    const { report } = uni()
+  it('不变量：页面根的每个节点要么进产物真装配、要么在自身地址登记（两态必须一致）', () => {
+    const { files, report } = uni()
+    const sfc = files['src/pages/gen/uni_root_unassembled.vue']
     const roots = report.nodes.filter((n) => /^rule\[\d+\]$/.test(n.path))
     expect(roots.map((n) => n.path)).toEqual(['rule[0]', 'rule[1]', 'rule[2]'])
-    const silent = roots.filter((n) => !report.unsupported.some((u) => u.path === n.path))
-    expect(silent.map((n) => `${n.path}:${n.type}`), 'uni 侧根级节点被静默丢弃').toEqual([])
+    // 本 fixture 每个节点类型唯一 → 挂点注释里的类型即代表该节点未装配
+    const todoTypes = new Set([...sfc.matchAll(/lc:todo node=\S+ type=(\S+) field=/g)].map((m) => m[1]))
+    const registered = (path: string) => report.unsupported.some((u) => u.path === path)
+    const broken = roots.filter((n) =>
+      todoTypes.has(n.type) ? !registered(n.path) : registered(n.path),
+    )
+    expect(
+      broken.map((n) => `${n.path}:${n.type}`),
+      'uni 侧根级节点处于「挂点/登记」不一致状态（既未装配又没登记，或已装配却仍登记）',
+    ).toEqual([])
   })
 
   it('受支持形态不回归：字段进容器照常出码，不产生 not-assembled 登记', () => {

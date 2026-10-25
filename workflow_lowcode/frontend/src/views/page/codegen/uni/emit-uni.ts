@@ -17,12 +17,13 @@
 
 import { emitManifest, jsonToTs } from '../emit'
 import { materialsOf, scriptFunction } from '../chain-emit'
-import { TYPE_CONTRACTS } from '../contract'
+import { isFieldType, TYPE_CONTRACTS } from '../contract'
 import type { GenerateResult, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
 import { buildReport } from '../report'
 import { PROFILES } from '../target-profile'
-import { emitContainerNode } from './emit-container'
+import { collectFieldRules, emitContainerNode, type UniContainerFieldRule } from './emit-container'
+import { emitFieldNode } from './emit-field'
 import { emitListNode } from './emit-list'
 import { dedupeUniEchartsUse, emitWidgetNode } from './emit-widget'
 import { buildAppVue, buildManifestJson, buildPagesJson, type UniClientConfig } from './project-files'
@@ -103,10 +104,28 @@ function mergeImports(lines: string[]): string[] {
 }
 
 /**
+ * 页面根级字段族判定（Task 11.1）：与容器段 fieldRulesOf 同源——嵌套容器（parse 已算好
+ * 子作用域，carrier/shape 都在 IR 上）或有字段契约（isFieldType）且未 parse 降级的节点。
+ * 已降级节点不在这里假装装配（parse 的降级原因照旧走兜底挂点）。
+ */
+function isRootFieldNode(n: IrNode): boolean {
+  if (n.degraded) return false
+  if (n.nested) return !!n.artifact.field
+  return isFieldType(n.artifact.type) && !!n.artifact.field
+}
+
+/**
+ * 根级字段族的表单后端别名（Task 11.1）：页面自己持 pageForm/pageErrors，
+ * 与容器段后端（form/errors）并存不撞名——同一页两套 useUniForm 各自独立。
+ */
+const ROOT_FIELD_CTX = { formVar: 'pageForm', errorsVar: 'pageErrors' }
+
+/**
  * 页面 SFC 装配：模板 = view 根容器 + 逐顶层节点分派（page-list-cards / formContainer /
- * 展示组件族 → 对应片段；其余 lc:todo 挂点）；script = 片段 imports（按源合并）+ 数据源
- * 常量 + 容器段脚本（对位 web 容器段位置）+ 其余片段脚本。页面名不再注入 SFC——标题由
- * pages.json navigationBarTitleText 承担（Task 3.1 的骨架注入随之移除）。
+ * 展示组件族 → 对应片段；**根级字段族 → uni-forms 载体 + 字段片段（Task 11.1）**；
+ * 其余 lc:todo 挂点）；script = 片段 imports（按源合并）+ 数据源常量 + 容器段脚本
+ * （对位 web 容器段位置）+ 页面级表单后端（有根级字段才出）+ 其余片段脚本。
+ * 页面名不再注入 SFC——标题由 pages.json navigationBarTitleText 承担（Task 3.1 的骨架注入随之移除）。
  */
 function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
   const unsupported: Unsupported[] = []
@@ -117,34 +136,67 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
   const containerNode = ir.nodes.find((n) => n.artifact.type === 'formContainer')
   const containerFrag = containerNode ? emitContainerNode(containerNode, ir) : null
 
+  // 页面级表单后端声明（Task 11.1）：根级字段族的字段声明，与模板里的 <uni-forms> 载体
+  // 同进同出——**只在字段真出码时收集**（未映射的字段走兜底挂点，不进载体也不声明后端，
+  // 否则会留下没人读的 pageForm）
+  const rootFieldRules: UniContainerFieldRule[] = []
+
   // 模板主体（相对缩进 0，SFC 组装时统一缩 2 格）
   const T: string[] = ['<view class="lc-page">']
   const pad = (l: string) => (l ? `  ${l}` : l)
+  // 根级字段族的 <uni-forms> 载体：只包「连续」的字段节点，列表/容器/展示件不进表单载体
+  let formOpen = false
+  const closeForm = () => {
+    if (formOpen) {
+      T.push('</uni-forms>')
+      formOpen = false
+    }
+  }
   for (const n of ir.nodes) {
     if (n.artifact.type === 'page-list-cards') {
+      closeForm()
       const frag = emitListNode(n, ir, PROFILES.uniapp)
       T.push(...frag.template.split('\n').map(pad))
       imports.push(...frag.imports)
       scripts.push(...frag.script)
       unsupported.push(...frag.unsupported)
     } else if (n === containerNode && containerFrag) {
+      closeForm()
       T.push(...containerFrag.template.split('\n').map(pad))
       imports.push(...containerFrag.imports)
       unsupported.push(...containerFrag.unsupported)
     } else {
-      // 展示组件族（page-steps/page-detail/page-data-container）走 widget 片段；其余族
-      // 未装配：锚点挂点保留（回读侧按地址回节点），族装配按任务落地
+      // 展示组件族（page-steps/page-detail/page-data-container…）走 widget 片段；其余族
+      // 逐层判定：根级字段族真装配（Task 11.1），未装配族仍以 lc:todo 挂点 + 逐节点登记
       const frag = emitWidgetNode(n, ir)
       if (frag) {
+        closeForm()
         T.push(...frag.template.split('\n').map(pad))
         imports.push(...frag.imports)
         scripts.push(...frag.script)
         unsupported.push(...frag.unsupported)
+      } else if (isRootFieldNode(n)) {
+        const ffrag = emitFieldNode(n, PROFILES.uniapp, ROOT_FIELD_CTX)
+        // 未映射的字段（如 Task 11.2 之前的 LookupPicker）走「挂点 + 登记」形态：
+        // 不进 uni-forms 载体、不声明页面级后端——产物形态与容器内未映射字段同一纪律
+        const unmapped = (ffrag.unsupported ?? []).some((u) => u.key === 'field-component')
+        if (unmapped) {
+          closeForm()
+        } else if (!formOpen) {
+          T.push('<uni-forms :model="pageForm" class="lc-page-form">')
+          formOpen = true
+        }
+        if (!unmapped) collectFieldRules(n, rootFieldRules)
+        T.push(...ffrag.template.split('\n').map(pad))
+        imports.push(...(ffrag.imports ?? []))
+        scripts.push(...(ffrag.script ?? []))
+        unsupported.push(...(ffrag.unsupported ?? []))
       } else {
+        closeForm()
         T.push(
           `  <!-- lc:todo node=${n.artifact.id} type=${n.artifact.type} field=${n.artifact.field} 组件族 uniapp 装配按任务落地 -->`,
         )
-        // 已登记契约的族（dash-filter、页面根级字段族等）在这里不只留注释：逐节点登记进
+        // 已登记契约的族（页面根级字段族等）在这里不只留注释：逐节点登记进
         // manifest —— 报告/manifest 与产物说同一句话，别让「有契约」把空产物盖成「可出码」。
         // 未登记类型由 parse 的「无出码契约」承担，不在这里重复记两行。
         if (TYPE_CONTRACTS[n.artifact.type]) {
@@ -158,7 +210,11 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
       }
     }
   }
+  closeForm()
   T.push('</view>')
+
+  // 页面级表单后端（Task 11.1）的 import 必须在这里并入——下面的 mergeImports 一次性收口
+  if (rootFieldRules.length) imports.push(`import { useUniForm } from '@lc/runtime-uni/form'`)
 
   // 脚本材料（Task 5.3，对位 web emit.ts 464-465 consts + 213-220 imports）：script 链步骤
   // 的白名单上下文在 uni 产物里的对位——message → uniMessage（uni.showToast 包装）、
@@ -180,6 +236,12 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
     S.push('}')
   }
   if (containerFrag) S.push(...containerFrag.script)
+  // 页面级表单后端（Task 11.1）：根级字段族的 v-model/:error-message 后端，与容器段后端
+  // 并存（名字不同）；有根级字段才出这一套
+  if (rootFieldRules.length) {
+    S.push(...`const pageFormRules = ${jsonToTs(rootFieldRules)}`.split('\n'))
+    S.push('const { model: pageForm, errors: pageErrors } = useUniForm(pageFormRules)')
+  }
   // 具名常量（对位 web emit.ts:244）：parse 把 config 族（嵌套 group/tableForm 的
   // <field>Config 等）登记进 ir.consts，片段模板只按名引用——声明必须由页面装配统一给出，
   // 漏了就是运行期 ReferenceError 直接中断整页（片段用例只覆盖片段，覆盖不到这一层）。

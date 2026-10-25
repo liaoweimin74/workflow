@@ -34,7 +34,7 @@ export interface UniContainerFragment {
   unsupported: Unsupported[]
 }
 
-interface UniContainerFieldRule {
+export interface UniContainerFieldRule {
   field: string
   title?: string
   props?: { required: boolean }
@@ -49,30 +49,37 @@ const titleOf = (p: IrNode): string | undefined => {
   return typeof label === 'string' && label ? label : undefined
 }
 
-/** formRules 推导（镜像 web emit.ts 116-127 walk）：嵌套按 shape 给 init，叶字段全 '' */
-function fieldRulesOf(container: IrNode): UniContainerFieldRule[] {
-  const rules: UniContainerFieldRule[] = []
-  const walk = (p: IrNode): void => {
-    if (p.nested) {
-      if (p.artifact.field && !p.degraded) {
-        rules.push({
-          field: p.artifact.field,
-          title: titleOf(p),
-          init: p.nested.shape === 'array' ? [] : {},
-        })
-      }
-      return
-    }
-    if (isFieldType(p.artifact.type) && p.artifact.field) {
-      rules.push({
-        field: p.artifact.field,
-        title: titleOf(p),
-        ...(requiredOf(p) ? { props: { required: true } } : {}),
+/**
+ * 字段声明收集（Task 11.1 起由页面根装配共用）：嵌套按 shape 给 init，叶字段全 ''。
+ * 容器段传「容器的子节点」，页面根装配传「根级节点自身」——同一套判定，
+ * 免得两处各写一份（判定漂移就是 10.5 那个缺陷的成因）。
+ */
+export function collectFieldRules(node: IrNode, out: UniContainerFieldRule[] = []): UniContainerFieldRule[] {
+  if (node.nested) {
+    if (node.artifact.field && !node.degraded) {
+      out.push({
+        field: node.artifact.field,
+        title: titleOf(node),
+        init: node.nested.shape === 'array' ? [] : {},
       })
     }
-    p.children.forEach(walk)
+    return out
   }
-  container.children.forEach(walk)
+  if (isFieldType(node.artifact.type) && node.artifact.field) {
+    out.push({
+      field: node.artifact.field,
+      title: titleOf(node),
+      ...(requiredOf(node) ? { props: { required: true } } : {}),
+    })
+  }
+  node.children.forEach((c) => collectFieldRules(c, out))
+  return out
+}
+
+/** formRules 推导（镜像 web emit.ts 116-127 walk）：容器子节点逐层收集 */
+function fieldRulesOf(container: IrNode): UniContainerFieldRule[] {
+  const rules: UniContainerFieldRule[] = []
+  container.children.forEach((c) => collectFieldRules(c, rules))
   return rules
 }
 
@@ -90,10 +97,12 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
   const pad4 = (l: string) => (l ? `    ${l}` : l)
   const bodyLines: string[] = []
   const fieldScripts: string[] = []
+  const fieldImports: string[] = []
   for (const child of node.children) {
     const frag = emitFieldNode(child, PROFILES.uniapp)
     bodyLines.push(...frag.template.split('\n').map(pad4))
     fieldScripts.push(...(frag.script ?? []))
+    fieldImports.push(...(frag.imports ?? []))
     unsupported.push(...(frag.unsupported ?? []))
   }
 
@@ -192,6 +201,7 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
       `import { ref } from 'vue'`,
       `import { useUniForm } from '@lc/runtime-uni/form'`,
       `import { uniDataApi } from '@lc/runtime-uni/data'`,
+      ...fieldImports,
     ],
     unsupported,
   }

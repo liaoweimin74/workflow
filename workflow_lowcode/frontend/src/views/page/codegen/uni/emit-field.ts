@@ -24,12 +24,33 @@ export interface UniFieldFragment {
   template: string
   /** 产物 script 追加行（precision 取整 handler 等）；无则缺省 */
   script?: string[]
+  /** 产物 import 行（Task 11.1：FormulaField 的 LcFormula 等 runtime 具名组件）；无则缺省 */
+  imports?: string[]
   /**
    * uni 侧适配不了的字段（Task 5.2 新增通道）：todo 占位只是产物内可见缺口，
    * unsupported 让报告/manifest 与产物看到同一份真相（容器装配收集合并）。
    */
   unsupported?: Unsupported[]
 }
+
+/**
+ * 字段片段的后端别名（Task 11.1）：页面根级字段族装配时，页面自己持一套表单后端
+ * （`pageForm`/`pageErrors`），与容器段后端的 `form`/`errors` 并存不撞名。
+ * parse 算好的 v-model 前缀恒为 `form.`（页面作用域口径），这里只做前缀改名，
+ * 行别名（group/tableForm 的 rowVar）与子对象路径不受影响。
+ */
+export interface UniFieldContext {
+  formVar?: string
+  errorsVar?: string
+}
+
+const DEFAULT_FIELD_CTX: Required<UniFieldContext> = { formVar: 'form', errorsVar: 'errors' }
+
+const ctxOf = (ctx?: UniFieldContext): Required<UniFieldContext> => ({ ...DEFAULT_FIELD_CTX, ...ctx })
+
+/** `form.x` → `<formVar>.x`；非 `form.` 前缀（行别名/子对象路径）原样透传 */
+const aliasForm = (path: string, ctx: Required<UniFieldContext>): string =>
+  ctx.formVar === 'form' || !path.startsWith('form.') ? path : `${ctx.formVar}${path.slice('form'.length)}`
 
 /** 属性片段序列化（与 web emit.propText 同规则）：const → :name="constName"，字符串 → name="v"，其余 → :name="JSON" */
 function propText(name: string, node: IrNode): string | null {
@@ -50,18 +71,19 @@ function propLiteral(node: IrNode, name: string): unknown {
   return prop && prop.value.kind === 'literal' ? prop.value.value : undefined
 }
 
-export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFragment {
+export function emitFieldNode(node: IrNode, profile: TargetProfile, ctx?: UniFieldContext): UniFieldFragment {
+  const c = ctxOf(ctx)
   const label = String((node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.label ?? node.artifact.field)
-  const vmodel = node.artifact.host.vmodel ?? `form.${node.artifact.field}`
+  const vmodel = aliasForm(node.artifact.host.vmodel ?? `form.${node.artifact.field}`, c)
 
   // FormulaField（Task 4.3）：对位组件 LcFormula 在 @lc/runtime-uni，不进 component-map（见 emitFormulaField 注）
-  if (node.artifact.type === 'FormulaField' && node.artifact.field) return emitFormulaField(node, label, vmodel)
+  if (node.artifact.type === 'FormulaField' && node.artifact.field) return emitFormulaField(node, label, vmodel, c)
 
   // 嵌套块容器（Task 4.3）：group/subForm（carrier props.rule）递归出码；tableForm
   // （carrier props.columns[].rule）6.4 起出卡片式子列表编辑器；页面级嵌套容器已在
   // parse 侧整节点降级（无 form 后端），这里不再出块
   if (node.nested && !node.degraded && (node.nested.carrier === 'props.rule' || node.nested.carrier === 'props.columns[].rule')) {
-    return emitNestedField(node, profile, label)
+    return emitNestedField(node, profile, label, c)
   }
   const mapping = profile.componentMap?.[node.artifact.type]
   if (!mapping || !node.artifact.field) {
@@ -79,7 +101,7 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
   }
 
   // select 三形态（Task 4.2）：单选 uni-data-select / multiple 弹层 / 远程搜索弹层
-  if (node.artifact.type === 'select') return emitSelectField(node, mapping, label, vmodel)
+  if (node.artifact.type === 'select') return emitSelectField(node, mapping, label, vmodel, c)
 
   // 属性序：v-model → 固定接线（staticProps）→ 白名单内的 IR props（保持 schema 顺序）
   const attrs: string[] = [`v-model="${vmodel}"`]
@@ -109,7 +131,7 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
 
   const template = [
     `<!-- ${node.artifact.anchor} -->`,
-    `${formItemOpen(node, label)}`,
+    `${formItemOpen(node, label, c)}`,
     `  <${mapping.tag} ${attrs.join(' ')} />`,
     `</uni-forms-item>`,
   ].join('\n')
@@ -125,10 +147,10 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile): UniFieldFra
  * 所有字段载体（通用字段族/select 三形态/group/subForm/FormulaField）统一走这里，
  * 开标签形状由本函数单点锁定。
  */
-function formItemOpen(node: IrNode, label: string): string {
+function formItemOpen(node: IrNode, label: string, ctx: Required<UniFieldContext>): string {
   const field = node.artifact.field
   const required = (node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.required === true
-  return `<uni-forms-item label="${label}" name="${field}"${required ? ' required' : ''} :error-message="errors.${field}">`
+  return `<uni-forms-item label="${label}" name="${field}"${required ? ' required' : ''} :error-message="${ctx.errorsVar}.${field}">`
 }
 
 /**
@@ -149,7 +171,13 @@ function formItemOpen(node: IrNode, label: string): string {
  * 常量声明是页面装配（Task 8.x）从 ir.consts 统一出的，片段只消费引用；
  * 弹层形态需要页面 script 预置 import { ref, computed } from 'vue'（装配侧恒出）。
  */
-function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: string, vmodel: string): UniFieldFragment {
+function emitSelectField(
+  node: IrNode,
+  mapping: UniAppComponentMapping,
+  label: string,
+  vmodel: string,
+  ctx: Required<UniFieldContext>,
+): UniFieldFragment {
   const options = optionsRefOf(node)
   const inst = `lcSel${pascal(camelField(node.artifact.field))}`
   // 白名单 props（与通用路径同规则，但无 v-model/staticProps 前置——下方按形态自行拼）
@@ -169,7 +197,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `${formItemOpen(node, label)}`,
+        `${formItemOpen(node, label, ctx)}`,
         `  <${mapping.tag} ${['v-model' + `="${vmodel}"`, ...local, ...attrs].join(' ').trimEnd()} />`,
         `</uni-forms-item>`,
       ].join('\n'),
@@ -191,7 +219,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `${formItemOpen(node, label)}`,
+        `${formItemOpen(node, label, ctx)}`,
         ...trigger,
         `      <checkbox-group class="lc-select-sheet__options" @change="${inst}Change">`,
         `        <label v-for="opt in ${options}" :key="opt.value" class="lc-select-sheet__option">`,
@@ -219,7 +247,7 @@ function emitSelectField(node: IrNode, mapping: UniAppComponentMapping, label: s
   return {
     template: [
       `<!-- ${node.artifact.anchor} -->`,
-      `${formItemOpen(node, label)}`,
+      `${formItemOpen(node, label, ctx)}`,
       ...trigger,
       `      <uni-search-bar v-model="${inst}Keyword" class="lc-select-sheet__search" placeholder="搜索" cancel-button="none" />`,
       `      <scroll-view scroll-y class="lc-select-sheet__options">`,
@@ -273,12 +301,12 @@ function optionsRefOf(node: IrNode): string | null {
  *    （TableForm.vue:146），产物按原样回填、值在 config 常量供人工接管；行函数与
  *    group 同一套（新行形状 = rowKeys）。
  */
-function emitNestedField(node: IrNode, profile: TargetProfile, label: string): UniFieldFragment {
+function emitNestedField(node: IrNode, profile: TargetProfile, label: string, ctx: Required<UniFieldContext>): UniFieldFragment {
   const n = node.nested!
   const cfgName = node.config?.name
   const has = (k: string) => !!node.config && k in node.config.obj
   const opt = (k: string, fallback: string) => (has(k) ? `${cfgName}.${k}` : fallback)
-  const rows = n.valuePath
+  const rows = aliasForm(n.valuePath, ctx)
   // 行函数名（group/tableForm 共用）：add< Pascal(field) >Row / remove… / move…
   const base = pascal(camelField(node.artifact.field))
   const h = { add: `add${base}Row`, remove: `remove${base}Row`, move: `move${base}Row` }
@@ -291,7 +319,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
     if (c.degraded) {
       return [`${pad}<!-- lc:todo node=${c.artifact.id} type=${c.artifact.type} field=${c.artifact.field} ${c.degradeReason ?? 'parse 降级'} -->`]
     }
-    const f = emitFieldNode(c, profile)
+    const f = emitFieldNode(c, profile, ctx)
     childScripts.push(...(f.script ?? []))
     return f.template.split('\n').map((l) => `${pad}${l}`)
   }
@@ -301,7 +329,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
     return {
       template: [
         `<!-- ${node.artifact.anchor} -->`,
-        `${formItemOpen(node, label)}`,
+        `${formItemOpen(node, label, ctx)}`,
         `  <view class="lc-nested lc-nested--sub">`,
         ...node.children.flatMap((c) => childFrag(c, '    ')),
         `  </view>`,
@@ -334,7 +362,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
     }
     const template = [
       `<!-- ${node.artifact.anchor} -->`,
-      `${formItemOpen(node, label)}`,
+      `${formItemOpen(node, label, ctx)}`,
       `  <view class="lc-nested lc-nested--table">`,
       `    <view class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`,
       ...headLines,
@@ -378,7 +406,7 @@ function emitNestedField(node: IrNode, profile: TargetProfile, label: string): U
 
   const template = [
     `<!-- ${node.artifact.anchor} -->`,
-    `${formItemOpen(node, label)}`,
+    `${formItemOpen(node, label, ctx)}`,
     `  <view class="lc-nested lc-nested--group">`,
     `    <${rowTag} class="lc-nested-row" v-for="(${n.rowVar}, i) in ${rows} || []" :key="i">`,
     ...headLines,
@@ -438,7 +466,7 @@ const FORMULA_PROPS: Record<string, string | true> = {
   disabled: true,
 }
 
-function emitFormulaField(node: IrNode, label: string, vmodel: string): UniFieldFragment {
+function emitFormulaField(node: IrNode, label: string, vmodel: string, ctx: Required<UniFieldContext>): UniFieldFragment {
   const backend = vmodel.slice(0, vmodel.lastIndexOf('.'))
   const attrs: string[] = [`v-model="${vmodel}"`, `:form="${backend}"`]
   for (const [schemaName, tagName] of Object.entries(FORMULA_PROPS)) {
@@ -451,9 +479,12 @@ function emitFormulaField(node: IrNode, label: string, vmodel: string): UniField
   return {
     template: [
       `<!-- ${node.artifact.anchor} -->`,
-      `${formItemOpen(node, label)}`,
+      `${formItemOpen(node, label, ctx)}`,
       `  <LcFormula ${attrs.join(' ')} />`,
       `</uni-forms-item>`,
     ].join('\n'),
+    // LcFormula 是 @lc/runtime-uni 的 runtime 具名组件：装配侧必须带上 import，
+    // 否则产物引用未声明组件（Vue 编译告警 + 运行期渲染空）
+    imports: [`import { LcFormula } from '@lc/runtime-uni/formula'`],
   }
 }

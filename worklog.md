@@ -10121,3 +10121,17 @@ Work Log:
 
 Stage Summary:
 - 事件 #147 单轮闭环，累计恢复 147 次，零 mvn 131 次；#146/#147 连续两轮同型（每小时重供给节奏持续）
+
+---
+Task ID: r280
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 12:05（Job 446961）——事件 #148 标准重供给恢复
+
+Work Log:
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，Java 消失；mariadbd 幸存（bootstrap 拉起，dump 272K 数据完整）
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 幸存型超时（第 16 次），复验 ss：8080=java(1510)/3000=vite(1242)/3306=mariadbd(1220)，auth 真绿
+- 40s 四链路 200×4，104 表，收口 dump 041019（272K），内存 3.17GB oom 0
+
+Stage Summary:
+- 事件 #148 单轮闭环，累计恢复 148 次，零 mvn 132 次；本轮 MariaDB 幸存仅 Java 缺失（较 #146/#147 恢复更快）

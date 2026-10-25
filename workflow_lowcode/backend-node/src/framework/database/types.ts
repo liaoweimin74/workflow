@@ -281,6 +281,43 @@ export interface SysMemberGroupMemberTable {
   updated_at: NullableTimestamp
 }
 
+/** 客户端定义（V50 创建；多端支持，portal=现有平台端）。 */
+export interface SysClientTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  /** 客户端编码，全局唯一（uk_client_code）。 */
+  code: string
+  name: string
+  icon: string | null
+  /** 状态：1 启用 0 停用。 */
+  status: number
+  /** 默认角色 id（sys_role.id）。 */
+  default_role_id: number | null
+  /** 默认成员组 id（sys_member_group.id）。 */
+  default_member_group_id: number | null
+  created_at: NullableTimestamp
+  updated_at: NullableTimestamp
+}
+
+/**
+ * 客户端渠道开通矩阵（V50 创建）。client_id 是 sys_client.id 的逻辑外键（无 FK 约束，对齐手写迁移惯例）。
+ *
+ * `config_json` 形状：`{loginMethods: string[], appid?, secret?, minVersion?, forceUpdate?, downloadUrl?}`。
+ * ⚠️ 列类型是 TEXT，mysql2 按原文本返回（不自动 parse），Task 2 负责加解密（secret 存密文）。
+ */
+export interface SysClientChannelTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  client_id: number
+  /** 渠道类型：WEB / H5 / APP / MP（(client_id, channel_type) 唯一，uk_client_channel）。 */
+  channel_type: string
+  /** 是否开通：1 开通 0 未开通。 */
+  enabled: number
+  config_json: string | null
+  created_at: NullableTimestamp
+  updated_at: NullableTimestamp
+}
+
 /** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补；description 由 V42 补）。 */
 export interface WfProcessDraftTable {
   id: string
@@ -655,6 +692,8 @@ export interface DB {
   sys_post: SysPostTable
   sys_member_group: SysMemberGroupTable
   sys_member_group_member: SysMemberGroupMemberTable
+  sys_client: SysClientTable
+  sys_client_channel: SysClientChannelTable
 
   wf_process_draft: WfProcessDraftTable
   wf_node_config: WfNodeConfigTable

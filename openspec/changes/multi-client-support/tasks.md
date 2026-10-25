@@ -5,18 +5,18 @@
 
 ## 1. P0 数据建模与迁移（client-channel-model）
 
-- [ ] 1.1 Flyway：建 `sys_client`（name/code/icon/status，code 唯一）+ 默认平台客户端 `portal` seed；建 `sys_client_channel`（channel_type/开通开关/参数 JSON，secret 列加密存储）
+- [x] 1.1 Flyway：建 `sys_client`（name/code/icon/status，code 唯一）+ 默认平台客户端 `portal` seed；建 `sys_client_channel`（channel_type/开通开关/参数 JSON，secret 列加密存储）
 - [ ] 1.2 后端：Client/ClientChannel 实体 + Mapper + CRUD API（`/api/clients`，权限码 `system:client:*`）；编码唯一冲突与停用状态接口
 - [ ] 1.3 后端：渠道参数校验（小程序 appid/secret 必填）+ 回显脱敏 + 连通测试端点；客户端配置缓存与失效
 - [ ] 1.4 前端：A1 客户端管理列表页（`/system/client`）挂开发管理目录，含"☰菜单"跳转；路由静态注册 + 菜单/权限码接线
 - [ ] 1.5 前端：A2 客户端设置抽屉（渠道开通/登录方式/初始授权三 Tab，"保存并生效"）
-- [ ] 1.6 Flyway：`sys_menu.client_id` 加列 + 全量回填 portal + 索引；回填核对查询（无空值行）入迁移测试
+- [x] 1.6 Flyway：`sys_menu.client_id` 加列 + 全量回填 portal + 索引；回填核对查询（无空值行）入迁移测试
 - [ ] 1.7 Flyway：`sys_role.client_id` 加列 NOT NULL + 回填 portal + 索引；存量行为回归用例（path/权限码/授权零变化）
 
 ## 2. P0 菜单按端分树（client-scoped-menu）
 
 - [ ] 2.1 后端：菜单查询/创建/编辑/移动 API 增加 clientId 作用域（请求缺省 = portal 兼容），跨端节点不可见
-- [ ] 2.2 后端：端形态校验器——WEB 三层现状规则；移动端底部 Tab 2~5 个一级节点、工作台 ≤2 层；拖拽/保存落点服务端拒绝
+- [x] 2.2 后端：端形态校验器——WEB 三层现状规则；移动端底部 Tab 2~5 个一级节点、工作台 ≤2 层；拖拽/保存落点服务端拒绝
 - [ ] 2.3 前端：A3 菜单管理页顶部端切换 Tab（按 client_id 重拉树）+ "去新建端"入口
 - [ ] 2.4 前端：A3 移动端形态的"底部Tab区/工作台功能"分区带拖拽交互（复用现有拖拽 + `PUT /api/menus/{id}/move`）
 - [ ] 2.5 端菜单空态：运行态空工作台/空侧边栏呈现；空菜单不放行任何页面 API 的用例

@@ -45,6 +45,8 @@ export class PageMenuRepository {
     const inserted = await this.db
       .insertInto('sys_menu')
       .values({
+        // 默认归属 portal 平台端（V51 DEFAULT 1 语义的显式化）；端上下文接线由后续任务传入真实 client_id
+        client_id: 1,
         menu_name: row.menuName,
         path: row.path,
         component: row.component,

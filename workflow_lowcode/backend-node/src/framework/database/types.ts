@@ -194,6 +194,8 @@ export interface SysRoleTable {
 export interface SysMenuTable {
   /** 自增主键：写入时省略，由数据库生成。 */
   id: Generated<number>
+  /** 归属客户端 id（sys_client.id 逻辑外键），DEFAULT 1=portal 平台端（V51）。 */
+  client_id: number
   parent_id: number | null
   menu_name: string
   menu_type: number

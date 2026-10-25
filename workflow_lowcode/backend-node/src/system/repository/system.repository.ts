@@ -365,7 +365,8 @@ export class SystemRepository {
   }): Promise<number> {
     const result = await this.db
       .insertInto('sys_menu')
-      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
+      // client_id=1：默认 portal 平台端（V51 DEFAULT 1 语义显式化），端上下文接线在后续任务
+      .values({ ...row, client_id: 1, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
       .executeTakeFirst()
     return Number(result.insertId)
   }

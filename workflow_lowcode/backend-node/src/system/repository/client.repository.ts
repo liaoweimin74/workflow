@@ -207,4 +207,53 @@ export class ClientRepository {
       })
       .execute()
   }
+
+  // ------------------------------------------------------------ 移动形态分区根（tasks 4.4 零代码链）
+
+  /** 该端是否已有指定 component 的分区根（根级、未删）。 */
+  async countZoneRoot(clientId: number, component: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('sys_menu')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('client_id', '=', clientId)
+      .where('component', '=', component)
+      .where('parent_id', 'is', null)
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    return Number(row?.c ?? 0)
+  }
+
+  /**
+   * 插入形态分区根（locked 目录，component 约定见 menu-shape.ts）。
+   *
+   * 与 sys_menu 其他写入一样走显式全列；zone 根不经 createMenu 的
+   * assertPlacement（移动端 parentId=null 会被形态校验拒绝——分区根本身
+   * 就是区域的原点，由渠道开通这一「采用移动形态」的动作触发）。
+   */
+  async insertZoneRoot(
+    clientId: number,
+    component: string,
+    menuName: string,
+    sortOrder: number,
+  ): Promise<number> {
+    const result = await this.db
+      .insertInto('sys_menu')
+      .values({
+        client_id: clientId,
+        parent_id: null,
+        menu_name: menuName,
+        menu_type: 0,
+        path: null,
+        component,
+        permission: null,
+        icon: null,
+        sort_order: sortOrder,
+        status: 1,
+        is_deleted: 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .executeTakeFirst()
+    return Number(result.insertId)
+  }
 }

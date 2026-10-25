@@ -228,9 +228,30 @@ export class ClientService {
       enabled,
       config_json: JSON.stringify(config),
     })
+
+    // 开通移动渠道 = 该端采用移动形态：幂等播种两个锁定分区根（4.4 零代码链——
+    // 「新建端→配渠道→配端菜单」必须全程可配置，分区根若无生成路径则端建树死锁。
+    // WEB-only 端不播种；重复开通/停用再开通都不产生第二组）。
+    if (enabled === 1 && channelType !== 'WEB') {
+      await this.seedMobileZoneRoots(clientId)
+    }
+
     const stored = await this.repo.findChannel(clientId, channelType)
     if (stored === null) throw new BusinessException('渠道写入失败')
     return toChannelVO(stored)
+  }
+
+  /** TAB/GRID 分区根（component 约定与 menu-shape.ts 的 zone 识别一致；名称同 locked 提示文案）。 */
+  private async seedMobileZoneRoots(clientId: number): Promise<void> {
+    const seeds = [
+      { component: 'mzone:tabs', name: '底部 Tab 区', sortOrder: 1 },
+      { component: 'mzone:grid', name: '工作台宫格区', sortOrder: 2 },
+    ] as const
+    for (const s of seeds) {
+      if ((await this.repo.countZoneRoot(clientId, s.component)) === 0) {
+        await this.repo.insertZoneRoot(clientId, s.component, s.name, s.sortOrder)
+      }
+    }
   }
 
   async testChannel(clientId: number, channelType: string): Promise<{ ok: boolean; msg: string }> {

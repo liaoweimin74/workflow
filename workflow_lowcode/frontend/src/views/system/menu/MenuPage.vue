@@ -292,7 +292,9 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
 
   return {
     rule,
-    createApi: (data) => createMenu(stripClientOnly(data)),
+    // 新建挂在当前端作用域：必须显式携带 clientId，否则服务端按缺省 portal 处理，
+    // 非 portal 端会被跨端校验拒绝（Task 11 冒烟发现）。
+    createApi: (data) => createMenu({ ...stripClientOnly(data), clientId: activeClientId.value }),
     updateApi: (id, data) => updateMenu(id as number, stripClientOnly(data, true)),
     deleteApi: async (id) => { await deleteMenu(id as number) },
     getApi: async (id) => {

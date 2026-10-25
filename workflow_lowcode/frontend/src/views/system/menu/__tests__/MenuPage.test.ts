@@ -180,6 +180,27 @@ describe('MenuPage 可见性开关', () => {
     // 新增仍要带 parentId，否则挂不到所选父级
     expect(sent.parentId).toBe(1)
   })
+
+  it('非 portal 端新建：载荷必须携带当前端 clientId（服务端缺省 portal 会跨端拒绝）', async () => {
+    mockRoute.query = { clientId: '2' }
+    try {
+      await createWrapper()
+      ;(createMenu as any).mockResolvedValue({ data: {} })
+      capturedProps.formConfig.createApi({
+        parentId: 454,
+        menuName: '工作台',
+        menuType: 1,
+        path: '/driver/home',
+        component: 'driver/home/index',
+        status: 1,
+      })
+      const sent = (createMenu as any).mock.calls[0][0]
+      expect(sent.clientId).toBe(2)
+      expect(sent.parentId).toBe(454)
+    } finally {
+      mockRoute.query = {}
+    }
+  })
 })
 
 describe('MenuPage 层级由拖动负责', () => {

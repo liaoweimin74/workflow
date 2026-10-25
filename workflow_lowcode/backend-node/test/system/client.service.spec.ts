@@ -95,6 +95,10 @@ describe('ClientService.upsertChannel', () => {
       upsertChannel: async (_clientId: number, _type: string, data: { config_json: string | null }) => {
         storedConfigJson = data.config_json ?? ''
       },
+      // 4.4 补丁后 MP 开通会触发分区根播种；本用例聚焦 secret 边界，stub 成
+      // 「已存在」走幂等 no-op 分支。播种行为在下面的组里单独钉。
+      countZoneRoot: async () => 1,
+      insertZoneRoot: async () => 0,
     })
 
     const vo = await service.upsertChannel(7, 'MP', {
@@ -108,6 +112,52 @@ describe('ClientService.upsertChannel', () => {
     // 落库的是密文：既不含明文 secret，也不是明文 JSON 原文
     expect(storedConfigJson).not.toContain('plain_secret_123')
     expect(storedConfigJson).toContain('wx_id')
+  })
+
+  describe('移动渠道开通播种分区根（tasks 4.4 零代码链补丁）', () => {
+    function seedStub(seeded = new Set<string>()) {
+      const inserted: Array<{ clientId: number; component: string; name: string }> = []
+      const service = makeService({
+        findChannel: async (_clientId: number, type: string) => ({
+          client_id: 7,
+          channel_type: type,
+          enabled: 1,
+          config_json: '{}',
+        }),
+        upsertChannel: async () => {},
+        countZoneRoot: async (_clientId: number, component: string) =>
+          seeded.has(component) ? 1 : 0,
+        insertZoneRoot: async (clientId: number, component: string, name: string) => {
+          inserted.push({ clientId, component, name })
+          seeded.add(component)
+          return 100 + inserted.length
+        },
+      })
+      return { service, inserted }
+    }
+
+    it('H5 enabled=1 → 幂等插入 mzone:tabs + mzone:grid 两个分区根', async () => {
+      const { service, inserted } = seedStub()
+      await service.upsertChannel(7, 'H5', { enabled: 1, config: {} })
+      expect(inserted.map((i) => i.component)).toEqual(['mzone:tabs', 'mzone:grid'])
+      expect(inserted.every((i) => i.clientId === 7)).toBe(true)
+    })
+
+    it('已存在分区根 → 不重复插入（重复开通幂等）', async () => {
+      const { service, inserted } = seedStub(new Set(['mzone:tabs', 'mzone:grid']))
+      await service.upsertChannel(7, 'APP', { enabled: 1, config: {} })
+      expect(inserted).toHaveLength(0)
+    })
+
+    it('WEB 渠道或停用不开播种（形态未变移动）', async () => {
+      const { service, inserted } = seedStub()
+      await service.upsertChannel(7, 'WEB', { enabled: 1, config: {} })
+      expect(inserted).toHaveLength(0)
+
+      const s2 = seedStub()
+      await s2.service.upsertChannel(7, 'H5', { enabled: 0, config: {} })
+      expect(s2.inserted).toHaveLength(0)
+    })
   })
 })
 

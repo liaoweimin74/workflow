@@ -6,12 +6,12 @@
 ## 1. P0 数据建模与迁移（client-channel-model）
 
 - [x] 1.1 Flyway：建 `sys_client`（name/code/icon/status，code 唯一）+ 默认平台客户端 `portal` seed；建 `sys_client_channel`（channel_type/开通开关/参数 JSON，secret 列加密存储）
-- [ ] 1.2 后端：Client/ClientChannel 实体 + Mapper + CRUD API（`/api/clients`，权限码 `system:client:*`）；编码唯一冲突与停用状态接口
+- [x] 1.2 后端：Client/ClientChannel 实体 + Mapper + CRUD API（`/api/clients`，权限码 `system:client:*`）；编码唯一冲突与停用状态接口
 - [ ] 1.3 后端：渠道参数校验（小程序 appid/secret 必填）+ 回显脱敏 + 连通测试端点；客户端配置缓存与失效
-- [ ] 1.4 前端：A1 客户端管理列表页（`/system/client`）挂开发管理目录，含"☰菜单"跳转；路由静态注册 + 菜单/权限码接线
+- [x] 1.4 前端：A1 客户端管理列表页（`/system/client`）挂开发管理目录，含"☰菜单"跳转；路由静态注册 + 菜单/权限码接线
 - [ ] 1.5 前端：A2 客户端设置抽屉（渠道开通/登录方式/初始授权三 Tab，"保存并生效"）
 - [x] 1.6 Flyway：`sys_menu.client_id` 加列 + 全量回填 portal + 索引；回填核对查询（无空值行）入迁移测试
-- [ ] 1.7 Flyway：`sys_role.client_id` 加列 NOT NULL + 回填 portal + 索引；存量行为回归用例（path/权限码/授权零变化）
+- [x] 1.7 Flyway：`sys_role.client_id` 加列 NOT NULL + 回填 portal + 索引；存量行为回归用例（path/权限码/授权零变化）
 
 ## 2. P0 菜单按端分树（client-scoped-menu）
 
@@ -23,9 +23,9 @@
 
 ## 3. P0 角色挂端（client-scoped-role）
 
-- [ ] 3.1 后端：角色创建/编辑挂端（缺省当前端）；角色列表"所属端"列与筛选 API
-- [ ] 3.2 后端：认证/授权链路解析请求端上下文并校验角色所属端一致——不一致 = 该端无角色（空菜单 + 403），越权回归用例
-- [ ] 3.3 后端：A2"注册默认角色"仅可引用本端角色（服务端校验 + 下拉数据接口按端过滤）
+- [x] 3.1 后端：角色创建/编辑挂端（缺省当前端）；角色列表"所属端"列与筛选 API
+- [x] 3.2 后端：认证/授权链路解析请求端上下文并校验角色所属端一致——不一致 = 该端无角色（空菜单 + 403），越权回归用例
+- [x] 3.3 后端：A2"注册默认角色"仅可引用本端角色（服务端校验 + 下拉数据接口按端过滤）
 - [ ] 3.4 前端：角色管理页所属端列/筛选/表单；确认权限码不加端前缀、端内授权语义不变的测试集
 
 ## 4. P0 schema 审计 spike（design D11，铺 P1）

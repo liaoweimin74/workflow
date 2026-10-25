@@ -131,6 +131,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '成员组管理' }
       },
       {
+        // 多端交付 A1：客户端管理（端资产 + 渠道），新建/编辑走页面抽屉
+        path: 'system/client',
+        name: 'ClientManagement',
+        component: () => import('@/views/system/client/ClientPage.vue'),
+        meta: { title: '客户端管理' }
+      },
+      {
         path: 'system/dict',
         name: 'DictManagement',
         component: () => import('@/views/system/dict/DictPage.vue'),

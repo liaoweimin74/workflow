@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { AuthController } from './controller/auth.controller'
+import { ClientController } from './controller/client.controller'
 import {
   DictDataController,
   DictTypeController,
@@ -11,8 +12,10 @@ import {
   UserController,
 } from './controller/system.controller'
 import { AuthRepository } from './repository/auth.repository'
+import { ClientRepository } from './repository/client.repository'
 import { SystemRepository } from './repository/system.repository'
 import { AuthService } from './service/auth.service'
+import { ClientService } from './service/client.service'
 import { SystemService } from './service/system.service'
 
 /**
@@ -24,6 +27,7 @@ import { SystemService } from './service/system.service'
 @Module({
   controllers: [
     AuthController,
+    ClientController,
     UserController,
     RoleController,
     MenuController,
@@ -33,7 +37,7 @@ import { SystemService } from './service/system.service'
     DictTypeController,
     DictDataController,
   ],
-  providers: [AuthRepository, SystemRepository, AuthService, SystemService],
-  exports: [AuthService, SystemService, AuthRepository, SystemRepository],
+  providers: [AuthRepository, ClientRepository, SystemRepository, AuthService, ClientService, SystemService],
+  exports: [AuthService, ClientService, SystemService, AuthRepository, ClientRepository, SystemRepository],
 })
 export class SystemModule {}

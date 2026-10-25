@@ -22,11 +22,17 @@ export interface JwtEnv {
   refreshTokenExpireMinutes: number
 }
 
+/** 客户端渠道 secret 加密配置。secretKey 为 base64 的 32 字节 AES-256 密钥。 */
+export interface CryptoEnv {
+  secretKey: string
+}
+
 export interface Env {
   port: number
   db: DbEnv
   redis: RedisEnv
   jwt: JwtEnv
+  crypto: CryptoEnv
 }
 
 const DEFAULTS: Env = {
@@ -54,6 +60,11 @@ const DEFAULTS: Env = {
     accessTokenExpireMinutes: 30,
     refreshTokenExpireMinutes: 10080,
   },
+  crypto: {
+    // 32 字节（AES-256）base64 开发默认密钥。⚠️ 仅供本地/测试；生产必须用
+    //   CLIENT_CRYPTO_KEY 注入独立密钥，否则任何人拿到仓库即可解出渠道 secret 密文。
+    secretKey: 'CxIZICcuNTxDSlFYX2ZtdHuCiZCXnqWss7rByM/W3eQ=',
+  },
 }
 
 function readInt(value: string | undefined, fallback: number): number {
@@ -68,7 +79,8 @@ function readInt(value: string | undefined, fallback: number): number {
  *
  * 环境变量名：PORT / DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME /
  *            REDIS_HOST / REDIS_PORT / REDIS_DB / REDIS_PASSWORD /
- *            JWT_SECRET / JWT_ACCESS_EXPIRE_MINUTES / JWT_REFRESH_EXPIRE_MINUTES
+ *            JWT_SECRET / JWT_ACCESS_EXPIRE_MINUTES / JWT_REFRESH_EXPIRE_MINUTES /
+ *            CLIENT_CRYPTO_KEY
  */
 export function loadEnv(overrides: Partial<Env> = {}): Env {
   const e = process.env
@@ -98,6 +110,9 @@ export function loadEnv(overrides: Partial<Env> = {}): Env {
         DEFAULTS.jwt.refreshTokenExpireMinutes,
       ),
     },
+    crypto: {
+      secretKey: e.CLIENT_CRYPTO_KEY ?? DEFAULTS.crypto.secretKey,
+    },
   }
 
   return {
@@ -106,5 +121,6 @@ export function loadEnv(overrides: Partial<Env> = {}): Env {
     db: { ...fromEnv.db, ...(overrides.db ?? {}) },
     redis: { ...fromEnv.redis, ...(overrides.redis ?? {}) },
     jwt: { ...fromEnv.jwt, ...(overrides.jwt ?? {}) },
+    crypto: { ...fromEnv.crypto, ...(overrides.crypto ?? {}) },
   }
 }

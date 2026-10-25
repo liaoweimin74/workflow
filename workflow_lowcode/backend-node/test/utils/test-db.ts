@@ -44,9 +44,10 @@ export async function queryRows<T = any>(sql: string, params?: unknown[]): Promi
   return rows as T[]
 }
 
-/** 执行 SQL（INSERT 等），错误原样抛出。 */
+/** 执行 SQL（INSERT/DELETE 等），错误原样抛出。用 query()（占位符参数形态与 execute 相同，
+ *  mysql2 的 execute() Promise 重载对 `unknown[]` 参数不宽容）。 */
 export async function execute(sql: string, params?: unknown[]): Promise<void> {
-  await getTestPool().promise().execute(sql, params)
+  await getTestPool().promise().query(sql, params)
 }
 
 /** 释放连接池（每个 spec 文件 afterAll 调用一次，否则 vitest 进程挂起）。 */

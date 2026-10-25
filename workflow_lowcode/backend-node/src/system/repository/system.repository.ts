@@ -25,6 +25,8 @@ export interface UserRow {
 
 export interface RoleRow {
   id: number
+  /** 归属客户端 id（sys_client.id 逻辑外键），1=portal 平台端（V52）。 */
+  client_id: number
   role_name: string
   role_code: string
   description: string | null
@@ -282,17 +284,33 @@ export class SystemRepository {
 
   // ------------------------------------------------------------ 角色
 
-  async listRoles(offset: number, limit: number): Promise<{ rows: RoleRow[]; total: number }> {
-    const countRow = await this.db
+  /**
+   * 角色分页列表。`clientId` 传入时按归属端过滤（V52 分端）；
+   * 不传 = 全端（存量管理页行为，零破坏）。
+   */
+  async listRoles(
+    offset: number,
+    limit: number,
+    clientId?: number,
+  ): Promise<{ rows: RoleRow[]; total: number }> {
+    const countQuery = this.db
       .selectFrom('sys_role')
       .select((eb) => eb.fn.countAll<number>().as('c'))
       .where('is_deleted', '=', 0)
-      .executeTakeFirst()
-
-    const rows = await this.db
+    const rowsQuery = this.db
       .selectFrom('sys_role')
-      .select(['id', 'role_name', 'role_code', 'description', 'status', 'created_at'])
+      .select(['id', 'client_id', 'role_name', 'role_code', 'description', 'status', 'created_at'])
       .where('is_deleted', '=', 0)
+
+    const countRow = await (clientId === undefined
+      ? countQuery
+      : countQuery.where('client_id', '=', clientId)
+    ).executeTakeFirst()
+
+    const rows = await (clientId === undefined
+      ? rowsQuery
+      : rowsQuery.where('client_id', '=', clientId)
+    )
       // 对齐 Java `RoleServiceImpl.list` 的 `Sort.by(DESC, "createdAt")`
       .orderBy('created_at', 'desc')
       .limit(limit)
@@ -504,7 +522,7 @@ export class SystemRepository {
   async findRoleById(id: number): Promise<RoleRow | null> {
     const row = await this.db
       .selectFrom('sys_role')
-      .select(['id', 'role_name', 'role_code', 'description', 'status', 'created_at'])
+      .select(['id', 'client_id', 'role_name', 'role_code', 'description', 'status', 'created_at'])
       .where('id', '=', id)
       .executeTakeFirst()
     return row ?? null

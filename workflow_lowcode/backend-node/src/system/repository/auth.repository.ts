@@ -63,13 +63,23 @@ export class AuthRepository {
     return row ?? null
   }
 
-  /** 用户的角色 ID 列表。 */
-  async findRoleIdsByUserId(userId: number): Promise<number[]> {
-    const rows = await this.db
+  /**
+   * 用户的角色 ID 列表。`clientId` 传入时按角色归属端过滤（V52 端一致性，Task 5）：
+   * 端不匹配 = 该端无角色（spec client-scoped-role，空而非报错）。
+   *
+   * innerJoin sys_role 不加 is_deleted 条件——与现状「已删角色仍计入」的 Java 行为一致，
+   * join 本身不改变结果集（role_id 均有关联行），只为 client_id 过滤提供列。
+   */
+  async findRoleIdsByUserId(userId: number, clientId?: number): Promise<number[]> {
+    let query = this.db
       .selectFrom('sys_user_role')
-      .select('role_id')
-      .where('user_id', '=', userId)
-      .execute()
+      .innerJoin('sys_role', 'sys_role.id', 'sys_user_role.role_id')
+      .select('sys_user_role.role_id')
+      .where('sys_user_role.user_id', '=', userId)
+    if (clientId !== undefined) {
+      query = query.where('sys_role.client_id', '=', clientId)
+    }
+    const rows = await query.execute()
     return rows.map((r) => r.role_id)
   }
 
@@ -113,14 +123,16 @@ export class AuthRepository {
     return row?.org_name ?? null
   }
 
-  /** 顶级菜单（parent_id 为空）。 */
-  async findRootMenus(): Promise<MenuRow[]> {
-    return this.db
+  /** 顶级菜单（parent_id 为空）。`clientId` 传入时只取该端树（Task 5 端上下文接线）。 */
+  async findRootMenus(clientId?: number): Promise<MenuRow[]> {
+    let query = this.db
       .selectFrom('sys_menu')
       .select(['id', 'parent_id', 'menu_name', 'menu_type', 'path', 'component', 'permission', 'icon', 'sort_order'])
       .where('parent_id', 'is', null)
-      .orderBy('sort_order', 'asc')
-      .execute()
+    if (clientId !== undefined) {
+      query = query.where('client_id', '=', clientId)
+    }
+    return query.orderBy('sort_order', 'asc').execute()
   }
 
   /** 某父菜单下的子菜单。 */

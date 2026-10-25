@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
 import { HealthController } from './api/controllers/health.controller'
 import { SystemInternalController } from './api/controllers/system-internal.controller'
+import { ClientContextInterceptor } from './api/interceptors/client.interceptor'
 import { TenantInterceptor } from './api/interceptors/tenant.interceptor'
 import { UserContextInterceptor } from './api/interceptors/user.interceptor'
 import { DatabaseModule } from './framework/database/database.module'
@@ -35,6 +36,8 @@ import { SystemModule } from './system/system.module'
     { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
     // 全局用户拦截器：把认证结果转入 AsyncLocalStorage（内建「待办任务」数据源按登录人过滤用）
     { provide: APP_INTERCEPTOR, useClass: UserContextInterceptor },
+    // 全局客户端拦截器：解析 X-Client-Id 头转入 ALS 作用域（多端 P0 端上下文；非法/缺失按 portal）
+    { provide: APP_INTERCEPTOR, useClass: ClientContextInterceptor },
   ],
 })
 export class AppModule {}

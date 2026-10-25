@@ -3,6 +3,7 @@ import { R } from '../../common/domain/r'
 import { PageResult } from '../../common/domain/page-result'
 import { JavaStatusOk } from '../../framework/http/java-status.decorator'
 import { bindIntegerProperty } from '../../framework/http/query-params'
+import { tryGetClient } from '../../framework/security/client-context'
 import {
   SystemService,
   type DictDataVO,
@@ -166,13 +167,17 @@ export class RoleController {
   async list(
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('clientId') clientId?: string,
   ): Promise<R<PageResult<RoleVO>>> {
-    return R.ok(await this.service.listRoles(bindIntegerProperty(page, 1), bindIntegerProperty(size, 20)))
+    // clientId 有效（整数≥1）才按端过滤；缺省/非法 = 全端（存量管理页零破坏）。
+    const parsed = clientId === undefined ? Number.NaN : Number(clientId)
+    const filter = Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined
+    return R.ok(await this.service.listRoles(bindIntegerProperty(page, 1), bindIntegerProperty(size, 20), filter))
   }
 
   @Post()
   async create(
-    @Body() body: { roleName: string; roleCode: string; description?: string; status?: number },
+    @Body() body: { roleName: string; roleCode: string; description?: string; status?: number; clientId?: number },
   ): Promise<R<RoleVO>> {
     return R.ok(await this.service.createRole(body))
   }
@@ -180,7 +185,7 @@ export class RoleController {
   @Put(':id')
   async update(
     @Param('id') id: string,
-    @Body() body: { roleName?: string; description?: string; status?: number },
+    @Body() body: { roleName?: string; description?: string; status?: number; clientId?: number },
   ): Promise<R<RoleVO>> {
     return R.ok(await this.service.updateRole(Number(id), body ?? {}))
   }
@@ -213,13 +218,13 @@ export class MenuController {
   constructor(private readonly service: SystemService) {}
 
   /**
-   * 菜单树。`clientId` 缺省 1=portal（Task 5 端上下文接线后由 X-Client-Id 决定）。
-   * 非法值（非数字/<1）回落缺省——零破坏：不带参数的响应与迁移前逐结构一致。
+   * 菜单树。`clientId` query 优先；缺省/非法取请求端上下文（`X-Client-Id`，
+   * Task 5 接线；无头 = portal）。不带参数与不带头的响应与迁移前逐结构一致（零破坏）。
    */
   @Get('tree')
   async tree(@Query('clientId') clientId?: string): Promise<R<MenuTreeVO[]>> {
     const parsed = clientId === undefined ? Number.NaN : Number(clientId)
-    const cid = Number.isInteger(parsed) && parsed >= 1 ? parsed : 1
+    const cid = Number.isInteger(parsed) && parsed >= 1 ? parsed : tryGetClient()
     return R.ok(await this.service.menuTree(cid))
   }
 

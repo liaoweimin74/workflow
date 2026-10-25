@@ -27,6 +27,12 @@ import { SystemRepository } from '../repository/system.repository'
 const MAX_DEPTH = 32
 
 /**
+ * portal 内置角色集（V2 seed 的既有内置角色）。它们是认证链的兜底主体
+ * （如 ROLE_ADMIN 决定管理端全树可见），改端会让系统失去管理入口——拒绝改端（Task 5）。
+ */
+const BUILTIN_ROLE_CODES = new Set(['ROLE_ADMIN', 'ROLE_USER'])
+
+/**
  * 新建/重置用户时的初始密码，对齐 Java `GlobalConstant.DEFAULT_PASSWORD`。
  */
 const DEFAULT_PASSWORD = '123456'
@@ -72,6 +78,8 @@ export interface UserVO {
 
 export interface RoleVO {
   id: number
+  /** 归属客户端 id（V52 增量字段，零破坏追加）。 */
+  clientId: number
   roleName: string
   roleCode: string
   description: string | null
@@ -260,13 +268,14 @@ export class SystemService {
     }))
   }
 
-  async listRoles(page: number, size: number): Promise<PageResult<RoleVO>> {
+  async listRoles(page: number, size: number, clientId?: number): Promise<PageResult<RoleVO>> {
     assertPageSize(size)
     const safePage = Math.max(page, 1)
-    const { rows, total } = await this.repo.listRoles((safePage - 1) * size, size)
+    const { rows, total } = await this.repo.listRoles((safePage - 1) * size, size, clientId)
 
     const vos: RoleVO[] = rows.map((row) => ({
       id: row.id,
+      clientId: row.client_id,
       roleName: row.role_name,
       roleCode: row.role_code,
       description: row.description,
@@ -375,11 +384,14 @@ export class SystemService {
     roleCode: string
     description?: string
     status?: number
+    /** 归属客户端，缺省 1=portal（Task 5 起请求体可带）。 */
+    clientId?: number | null
   }): Promise<RoleVO> {
     if (await this.repo.roleCodeExists(request.roleCode)) {
       throw new BusinessException(`角色编码已存在: ${request.roleCode}`)
     }
     const id = await this.repo.insertRole({
+      client_id: request.clientId ?? 1,
       role_name: request.roleName,
       role_code: request.roleCode,
       description: request.description ?? null,
@@ -390,10 +402,17 @@ export class SystemService {
 
   async updateRole(
     id: number,
-    request: { roleName?: string; description?: string; status?: number },
+    request: { roleName?: string; description?: string; status?: number; clientId?: number | null },
   ): Promise<RoleVO> {
-    await this.requireRole(id)
+    const row = await this.requireRole(id)
     const patch: Record<string, unknown> = {}
+    // 改端规则（Task 5）：portal 内置角色集拒绝；与现有归属相同视为不改端；自定义角色放行。
+    if (request.clientId !== null && request.clientId !== undefined && request.clientId !== row.client_id) {
+      if (BUILTIN_ROLE_CODES.has(row.role_code)) {
+        throw new BusinessException('内置角色不允许修改所属客户端')
+      }
+      patch.client_id = request.clientId
+    }
     if (request.roleName !== undefined) patch.role_name = request.roleName
     if (request.description !== undefined) patch.description = request.description
     if (request.status !== undefined) patch.status = request.status
@@ -430,6 +449,7 @@ export class SystemService {
     const row = await this.requireRole(id)
     return {
       id: row.id,
+      clientId: row.client_id,
       roleName: row.role_name,
       roleCode: row.role_code,
       description: row.description,

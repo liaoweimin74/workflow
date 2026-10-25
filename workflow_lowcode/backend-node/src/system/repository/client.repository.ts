@@ -136,6 +136,21 @@ export class ClientRepository {
     return rows as unknown as ClientOptionRow[]
   }
 
+  // ------------------------------------------------------------ 角色（只读，defaultRoleId 归属校验用）
+
+  /**
+   * 角色摘要（V52 后 sys_role 带 client_id）。
+   * ClientService 校验「注册默认角色必须属于本端」（tasks 3.3）用的最小查询。
+   */
+  async findRoleBrief(roleId: number): Promise<{ id: number; client_id: number } | null> {
+    const row = await this.db
+      .selectFrom('sys_role')
+      .select(['id', 'client_id'])
+      .where('id', '=', roleId)
+      .executeTakeFirst()
+    return row ?? null
+  }
+
   // ------------------------------------------------------------ 客户端（写）
 
   async insertClient(row: {

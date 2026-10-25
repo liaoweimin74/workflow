@@ -180,6 +180,8 @@ export interface SysUserTable {
 export interface SysRoleTable {
   /** 自增主键：写入时省略，由数据库生成。 */
   id: Generated<number>
+  /** 归属客户端 id（sys_client.id 逻辑外键），DEFAULT 1=portal 平台端（V52）。 */
+  client_id: number
   role_code: string
   role_name: string
   description: string | null

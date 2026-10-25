@@ -156,7 +156,13 @@ export class ClientService {
       if (id === PORTAL_CLIENT_ID && dto.status === 0) throw new BusinessException('平台端不允许停用')
       patch.status = dto.status
     }
-    if (dto.defaultRoleId !== undefined) patch.default_role_id = dto.defaultRoleId ?? null
+    if (dto.defaultRoleId !== undefined) {
+      // tasks 3.3：注册默认角色仅可引用本端角色（服务端校验；下拉按端过滤在 /api/roles?clientId=）。
+      if (dto.defaultRoleId !== null) {
+        await this.assertDefaultRoleOnClient(id, dto.defaultRoleId)
+      }
+      patch.default_role_id = dto.defaultRoleId ?? null
+    }
     if (dto.defaultMemberGroupId !== undefined) {
       patch.default_member_group_id = dto.defaultMemberGroupId ?? null
     }
@@ -172,6 +178,16 @@ export class ClientService {
     // portal 保护：平台端不允许停用（停用等于关掉整个管理入口）。
     if (id === PORTAL_CLIENT_ID && status === 0) throw new BusinessException('平台端不允许停用')
     await this.repo.updateStatus(id, status)
+  }
+
+  /**
+   * 默认角色归属校验（tasks 3.3）：角色必须属于该客户端。
+   * ValidationError → body code 400（简报钉的状态码，与既有映射一致）。
+   */
+  private async assertDefaultRoleOnClient(clientId: number, roleId: number): Promise<void> {
+    const role = await this.repo.findRoleBrief(roleId)
+    if (role === null) throw new ValidationError('默认角色不存在')
+    if (role.client_id !== clientId) throw new ValidationError('默认角色必须属于本端')
   }
 
   // ------------------------------------------------------------ 渠道

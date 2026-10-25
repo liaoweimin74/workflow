@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { compare } from 'bcryptjs'
 import { BusinessException } from '../../common/exception/business-exception'
+import { tryGetClient } from '../../framework/security/client-context'
 import { JwtTokenProvider, REFRESH_TOKEN_TYPE } from '../../framework/security/jwt-token.provider'
 import { AuthRepository, type MenuRow, type SysUserRow } from '../repository/auth.repository'
 
@@ -106,7 +107,8 @@ export class AuthService {
   }
 
   private async buildUserInfo(user: SysUserRow): Promise<UserInfoVO> {
-    const roleIds = await this.repo.findRoleIdsByUserId(user.id)
+    // 端上下文过滤（Task 5）：角色不属于当前请求端 → 空数组（该端无角色，非报错）。
+    const roleIds = await this.repo.findRoleIdsByUserId(user.id, tryGetClient())
     const roles = await this.repo.findRoleCodesByIds(roleIds)
     const permissions = await this.repo.findPermissionsByRoleIds(roleIds)
     const orgName = user.org_id === null ? null : await this.repo.findOrgNameById(user.org_id)
@@ -132,12 +134,12 @@ export class AuthService {
    *   - 逐级过滤 is_deleted==0 且 status==1
    */
   async getCurrentUserMenus(userId: number): Promise<MenuTreeVO[]> {
-    const roleIds = await this.repo.findRoleIdsByUserId(userId)
+    const roleIds = await this.repo.findRoleIdsByUserId(userId, tryGetClient())
     const roleCodes = await this.repo.findRoleCodesByIds(roleIds)
     const isAdmin = roleCodes.includes('ROLE_ADMIN')
 
     if (isAdmin) {
-      const roots = await this.repo.findRootMenus()
+      const roots = await this.repo.findRootMenus(tryGetClient())
       return this.buildMenuTree(roots, null)
     }
 

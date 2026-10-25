@@ -10090,3 +10090,19 @@ Stage Summary:
 - 事件 #145 单轮闭环，累计恢复 145 次，零 mvn 达 129 次
 - 沙箱累计故障 71 次（连续 3 轮后自愈）
 - HEAD 9da9901e 已推远端
+
+---
+Task ID: r274
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 09:05（Job 446961）——事件 #146 标准重供给+MariaDB 冷态恢复
+
+Work Log:
+- 沙箱自愈（r269-273 连续 5 轮故障后恢复，累计 #72-#76）
+- 四链路 200×4 但 auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadbd 未起（bootstrap 下载 mariadb 包中），Java 消失 → 事件 #146
+- pkill 五连 + jar 重拼（md5 e369839b ✓）+ 最新 dump 191034 在位 + mariadb-user bin/data 完整
+- recover-dplus.sh 幸存型超时（第 14 次），复验 ss：8080=java(1421)/3000=vite(1134)/3306=mariadbd(1310)，auth 真绿
+- 40s 四链路 200×4，workflow 104 表，收口 dump 011032（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #146 单轮闭环（重供给+MariaDB 冷态复合型首例），累计恢复 146 次，零 mvn 130 次
+- 沙箱累计故障 76 次

@@ -82,7 +82,7 @@ describe('页面根级字段族装配（uni）', () => {
     expect(sfc).toContain('const { model: pageForm, errors: pageErrors } = useUniForm(pageFormRules)')
     expect(sfc).toContain('const { model: form, errors, validate, reset: formReset } = useUniForm(formRules)')
     expect(sfc).toContain('<uni-easyinput v-model="pageForm.root_title"')
-    // 根级字段已装配：无 not-assembled 残留（容器的 LookupPicker 归 11.2）
+    // 根级字段已装配：无 not-assembled 残留（容器的 LookupPicker 11.2 起也已真装配）
     expect(manifest.unsupported.filter((u) => u.type === 'input' && u.key === 'not-assembled')).toEqual([])
   })
 

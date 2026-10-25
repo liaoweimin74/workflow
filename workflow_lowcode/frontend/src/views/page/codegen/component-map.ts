@@ -47,6 +47,12 @@ export const UNIAPP_COMPONENT_MAP: Record<string, UniAppComponentMapping> = {
   dateRange: { tag: 'uni-datetime-picker', render: 'LcDateRange' },
   cascader: { tag: 'uni-data-picker', render: 'LcCascader' },
   colorPicker: { tag: 'uni-easyinput', render: 'LcColorPicker' },
+  /**
+   * 查找选择器（Task 11.2）：产物形态是自绘弹层（只读触发框 uni-easyinput + uni-popup），
+   * 故 emit 侧走特判分支（emitLookupPickerField），这里的 tag 指触发框、props 白名单
+   * 不参与出码；画布按 render 解析 @lc/ui-mobile 的 LcLookupPicker（契约控件）。
+   */
+  LookupPicker: { tag: 'uni-easyinput', render: 'LcLookupPicker' },
   upload: { tag: 'uni-file-picker', render: 'LcUpload' },
   richText: { tag: 'editor', render: 'LcRichText' },
   row: { tag: 'view', render: 'LcRow' },

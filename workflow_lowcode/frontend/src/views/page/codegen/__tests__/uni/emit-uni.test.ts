@@ -93,9 +93,10 @@ describe('generatePageUni — 列表页装配（Task 5.1）', () => {
     expect(sfc).toContain('<!-- lc:node=n2.f10 type=tableForm field=delivery_plan -->')
     expect(sfc).toContain('function addDeliveryPlanRow()')
     // 内置 edit case 走容器函数（容器存在），open-container 不再登记 unsupported；
-    // 无映射容器子字段（LookupPicker/dataPicker）走 field-component 登记
+    // 无映射容器子字段（dataPicker，Task 11.3 装配）走 field-component 登记；
+    // LookupPicker 11.2 起真装配（弹层 + 取数 + 回写），不再登记
     expect(manifest.unsupported.some((u) => u.key === 'open-container' && u.type === 'page-list-cards')).toBe(false)
-    expect(manifest.unsupported.some((u) => u.key === 'field-component' && u.type === 'LookupPicker')).toBe(true)
+    expect(manifest.unsupported.some((u) => u.key === 'field-component' && u.type === 'LookupPicker')).toBe(false)
     expect(manifest.unsupported.some((u) => u.key === 'field-component' && u.type === 'tableForm')).toBe(false)
     expect(manifest.unsupported.some((u) => u.key === 'viewDetail')).toBe(true)
   })
@@ -374,14 +375,11 @@ describe('页面根级未装配族：uni 兜底分派逐节点登记', () => {
     expect(sfc).toContain('<uni-easyinput v-model="pageForm.title1"')
     expect(sfc).not.toMatch(/lc:todo node=\S+ type=input field=/)
     expect(manifest.unsupported.some((u) => u.type === 'input')).toBe(false)
-    // 仍未装配的族：Task 11.2 之前 LookupPicker 尚无 uniapp 映射 → 走字段组件的
-    // 「挂点 + 自身地址登记」（与容器内未映射字段同一纪律），装配在 11.2 落地
-    expect(sfc).toMatch(/lc:todo node=\S+ type=LookupPicker field=owner1/)
-    expect(manifest.unsupported).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: 'rule[2]', type: 'LookupPicker', key: 'field-component' }),
-      ]),
-    )
+    // LookupPicker：Task 11.2 起真装配（触发框 + 弹层 + 回写 handler），
+    // 挂点注释与 field-component 登记同时消失——产物与 manifest 一起翻面
+    expect(sfc).not.toMatch(/lc:todo node=\S+ type=LookupPicker field=owner1/)
+    expect(sfc).toContain('@click="openLookupOwner1"')
+    expect(manifest.unsupported.some((u) => u.type === 'LookupPicker')).toBe(false)
     // 未登记类型（radio）只保留 parse 那一条，同一节点不许记两行
     expect(manifest.unsupported.filter((u) => u.type === 'radio')).toHaveLength(1)
   })

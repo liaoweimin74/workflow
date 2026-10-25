@@ -146,6 +146,9 @@ describe('emitFieldNode select — multiple 自绘弹层（Task 4.2）', () => {
       `  form.tags = e.detail.value.map((k) => tagsConfig.options.find((o) => String(o.value) === k)?.value)`,
       `}`,
     ])
+    // 弹层形态用了 ref/computed：vue import 必须随片段走（页面装配不恒出——
+    // 纯根级字段页没有容器段，缺这行就是运行期 ReferenceError 整页空白）
+    expect(out.imports).toContain(`import { ref, computed } from 'vue'`)
   })
 
   it('multiple 与 filterable 并存：multiple 分支优先（filterable 不透传不出搜索框）', () => {
@@ -210,6 +213,7 @@ describe('emitFieldNode select — filterable 远程搜索自绘弹层（Task 4.
       `  lcSelCityPopup.value?.close()`,
       `}`,
     ])
+    expect(out.imports).toContain(`import { ref, computed } from 'vue'`)
   })
 
   it('component-map 登记：select 白名单含 clearable→clear 改名，multiple/filterable 不透传', async () => {

@@ -18,7 +18,7 @@
 import { emitManifest, jsonToTs } from '../emit'
 import { materialsOf, scriptFunction } from '../chain-emit'
 import { isFieldType, TYPE_CONTRACTS } from '../contract'
-import type { GenerateResult, IrPage, Unsupported } from '../ir'
+import type { GenerateResult, IrNode, IrPage, Unsupported } from '../ir'
 import { parseIr } from '../parse'
 import { buildReport } from '../report'
 import { PROFILES } from '../target-profile'
@@ -117,6 +117,7 @@ function isRootFieldNode(n: IrNode): boolean {
 /**
  * 根级字段族的表单后端别名（Task 11.1）：页面自己持 pageForm/pageErrors，
  * 与容器段后端（form/errors）并存不撞名——同一页两套 useUniForm 各自独立。
+ * Task 11.2 起随片段调用补 ir（选择器族按 globalDataSourceId 解析取数 refId）。
  */
 const ROOT_FIELD_CTX = { formVar: 'pageForm', errorsVar: 'pageErrors' }
 
@@ -176,7 +177,7 @@ function emitPage(ir: IrPage): { source: string; unsupported: Unsupported[] } {
         scripts.push(...frag.script)
         unsupported.push(...frag.unsupported)
       } else if (isRootFieldNode(n)) {
-        const ffrag = emitFieldNode(n, PROFILES.uniapp, ROOT_FIELD_CTX)
+        const ffrag = emitFieldNode(n, PROFILES.uniapp, { ...ROOT_FIELD_CTX, ir })
         // 未映射的字段（如 Task 11.2 之前的 LookupPicker）走「挂点 + 登记」形态：
         // 不进 uni-forms 载体、不声明页面级后端——产物形态与容器内未映射字段同一纪律
         const unmapped = (ffrag.unsupported ?? []).some((u) => u.key === 'field-component')

@@ -16,9 +16,11 @@
  * 首行无缩进、嵌套行相对缩进，页面装配（Task 5.x）统一加页内缩进。
  */
 
-import { camelField, pascal, type IrNode, type Unsupported } from '../ir'
+import { camelField, isPlainObject, pascal, type IrNode, type IrPage, type Unsupported } from '../ir'
 import type { UniAppComponentMapping } from '../component-map'
 import type { TargetProfile } from '../target-profile'
+import { jsonToTs } from '../emit'
+import { refIdExprOf, sq } from './emit-shared'
 
 export interface UniFieldFragment {
   template: string
@@ -42,14 +44,27 @@ export interface UniFieldFragment {
 export interface UniFieldContext {
   formVar?: string
   errorsVar?: string
+  /**
+   * 页面 IR（Task 11.2）：选择器族按 `global-data-source-id` 解析取数 refId
+   * （emit-shared.refIdExprOf 需要 dataSources 表）。缺省时退化为 ds.refId —— 直调
+   * emitFieldNode 的单测场景，产物装配侧（页面/容器）恒把 ir 传进来。
+   */
+  ir?: IrPage
 }
 
-const DEFAULT_FIELD_CTX: Required<UniFieldContext> = { formVar: 'form', errorsVar: 'errors' }
+/** ctx 解析结果：formVar/errorsVar 必有值，ir 可能缺席 */
+interface FieldCtx {
+  formVar: string
+  errorsVar: string
+  ir?: IrPage
+}
 
-const ctxOf = (ctx?: UniFieldContext): Required<UniFieldContext> => ({ ...DEFAULT_FIELD_CTX, ...ctx })
+const DEFAULT_FIELD_CTX = { formVar: 'form', errorsVar: 'errors' }
+
+const ctxOf = (ctx?: UniFieldContext): FieldCtx => ({ ...DEFAULT_FIELD_CTX, ...ctx })
 
 /** `form.x` → `<formVar>.x`；非 `form.` 前缀（行别名/子对象路径）原样透传 */
-const aliasForm = (path: string, ctx: Required<UniFieldContext>): string =>
+const aliasForm = (path: string, ctx: FieldCtx): string =>
   ctx.formVar === 'form' || !path.startsWith('form.') ? path : `${ctx.formVar}${path.slice('form'.length)}`
 
 /** 属性片段序列化（与 web emit.propText 同规则）：const → :name="constName"，字符串 → name="v"，其余 → :name="JSON" */
@@ -103,6 +118,9 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile, ctx?: UniFie
   // select 三形态（Task 4.2）：单选 uni-data-select / multiple 弹层 / 远程搜索弹层
   if (node.artifact.type === 'select') return emitSelectField(node, mapping, label, vmodel, c)
 
+  // 查找选择器（Task 11.2 LookupPicker / Task 11.3 dataPicker）：弹层选择 + 取数 + 回写
+  if (node.artifact.type === 'LookupPicker') return emitLookupPickerField(node, label, vmodel, c)
+
   // 属性序：v-model → 固定接线（staticProps）→ 白名单内的 IR props（保持 schema 顺序）
   const attrs: string[] = [`v-model="${vmodel}"`]
   for (const [k, v] of Object.entries(mapping.staticProps ?? {})) {
@@ -147,7 +165,7 @@ export function emitFieldNode(node: IrNode, profile: TargetProfile, ctx?: UniFie
  * 所有字段载体（通用字段族/select 三形态/group/subForm/FormulaField）统一走这里，
  * 开标签形状由本函数单点锁定。
  */
-function formItemOpen(node: IrNode, label: string, ctx: Required<UniFieldContext>): string {
+function formItemOpen(node: IrNode, label: string, ctx: FieldCtx): string {
   const field = node.artifact.field
   const required = (node.attrs['el-form-item'] as Record<string, unknown> | undefined)?.required === true
   return `<uni-forms-item label="${label}" name="${field}"${required ? ' required' : ''} :error-message="${ctx.errorsVar}.${field}">`
@@ -169,14 +187,16 @@ function formItemOpen(node: IrNode, label: string, ctx: Required<UniFieldContext
  *    形态分支条件，不是透传 prop，白名单缺登记即不会漏到模板上。
  * 属性序：v-model → options 绑定（:localdata + format）→ 白名单 props。
  * 常量声明是页面装配（Task 8.x）从 ir.consts 统一出的，片段只消费引用；
- * 弹层形态需要页面 script 预置 import { ref, computed } from 'vue'（装配侧恒出）。
+ * 弹层形态的 import { ref, computed } from 'vue' 随片段自带（装配侧不恒出——
+ * 纯根级字段页没有容器段兜底，缺 vue import 就是运行期 ReferenceError 整页空白；
+ * 页面装配的 mergeImports 按源合并，多片段重复行只出一份）。
  */
 function emitSelectField(
   node: IrNode,
   mapping: UniAppComponentMapping,
   label: string,
   vmodel: string,
-  ctx: Required<UniFieldContext>,
+  ctx: FieldCtx,
 ): UniFieldFragment {
   const options = optionsRefOf(node)
   const inst = `lcSel${pascal(camelField(node.artifact.field))}`
@@ -240,6 +260,7 @@ function emitSelectField(
         `  ${vmodel} = e.detail.value.map((k) => ${options}.find((o) => String(o.value) === k)?.value)`,
         `}`,
       ],
+      imports: [`import { ref, computed } from 'vue'`],
     }
   }
 
@@ -273,6 +294,172 @@ function emitSelectField(
       `  ${inst}Popup.value?.close()`,
       `}`,
     ],
+    imports: [`import { ref, computed } from 'vue'`],
+  }
+}
+
+/**
+ * 查找选择器（Task 11.2 LookupPicker）：只读触发框 + 底部弹层（搜索条 + 触底 + 逐行选择）
+ * + useUniPicker 取数 + select/clear 回写 handler。
+ *
+ * 与 web src/components/business/LookupPicker.vue 的对位（数据层见 @lc/runtime-uni/picker）：
+ *  · v-model 承载「显示文本」（:268-270）：触发框直接显示 vmodel，选中/清除同步置值；
+ *  · idField / returnFields 回写走 spec 常量（applyUniPickerWrites / clearUniPickerWrites）；
+ *  · 取数身份走 globalDataSourceId 解析出的 refId（产物不挂渲染器、activeDsBindings 恒空，
+ *    组件只能吃现成的 refId；第二个源起必须查产物 dataSources 常量表，否则查错表）；
+ *  · 回写载体 = vmodel 去末段（页面/容器 form、行对象、子对象）——行内选择器把带回字段写在
+ *    行对象上（对位 web 行作用域 form-create 实例的 api.setValue），与 FormulaField 的
+ *    :form 后端同一套取值法；
+ *  · 形态沿用 select 弹层先例（绝对定位下拉在 MP 表单页有裁剪风险），弹层嵌在同一字段载体里；
+ *  · columns（参数列）uni 首版弹层只出 displayField 单列、非字面量 prop 运行期不解释
+ *    （no-eval 纪律）——两者都显式登记，绝不静默丢配置。
+ */
+function emitLookupPickerField(node: IrNode, label: string, vmodel: string, ctx: FieldCtx): UniFieldFragment {
+  const type = node.artifact.type
+  const unsupported: Unsupported[] = []
+  const p = camelField(node.artifact.field)
+  const P = pascal(p)
+
+  // IR prop 值解析（Task 11.2）：parse 把数组/对象类 prop 登记成具名常量（emit: 'prop'
+  // → ir.consts，web 产物的 :search-columns="searchColumns" 就是它），字面量直取；
+  // 常量表查不到或非字面量（$ 表达式）→ 登记后按缺省处理，不猜值。
+  const propValueOf = (name: string): unknown => {
+    const prop = node.props.find((x) => x.name === name)
+    if (!prop) return undefined
+    const v = prop.value
+    if (v.kind === 'const') {
+      const hit = ctx.ir?.consts.find(([n]) => n === v.constName)
+      if (!hit) {
+        unsupported.push({
+          path: `${node.artifact.rulePath}.props.${name}`,
+          type,
+          key: 'picker-dynamic-prop',
+          message: `选择器 ${name} 的常量面解析不到（无页面 IR 或常量未登记），uni 首版按缺省处理`,
+        })
+        return undefined
+      }
+      return hit[1]
+    }
+    if (v.kind !== 'literal') {
+      unsupported.push({
+        path: `${node.artifact.rulePath}.props.${name}`,
+        type,
+        key: 'picker-dynamic-prop',
+        message: `选择器 ${name} 非字面量（产物运行期零解释），uni 首版按缺省处理`,
+      })
+      return undefined
+    }
+    return v.value
+  }
+
+  const idField = propValueOf('idField')
+  const returnFields = propValueOf('returnFields')
+  const displayField = propValueOf('displayField')
+  const searchColumns = propValueOf('searchColumns')
+  const columns = propValueOf('columns')
+
+  if (Array.isArray(columns) && columns.length > 0) {
+    unsupported.push({
+      path: `${node.artifact.rulePath}.props.columns`,
+      type,
+      key: 'picker-columns',
+      message: '参数列（columns）uni 首版弹层只出 displayField 单列，多列展示留给后续任务',
+    })
+  }
+
+  // 搜索面：契约 searchColumns（列名数组）→ useUniList 的 searchFields（like 命中）；
+  // 非字符串项不进查询条件（形状不对别硬塞），显式登记
+  const searchFieldLits = (Array.isArray(searchColumns) ? searchColumns : [])
+    .filter((c): c is string => typeof c === 'string' && !!c)
+    .map((c) => `{ prop: ${sq(c)} }`)
+  if (Array.isArray(searchColumns) && searchFieldLits.length !== searchColumns.length) {
+    unsupported.push({
+      path: `${node.artifact.rulePath}.props.searchColumns`,
+      type,
+      key: 'picker-search-columns',
+      message: 'searchColumns 含非字符串项，uni 首版只把列名进搜索面',
+    })
+  }
+
+  // spec 三键恒出（缺省空值）：产物 SFC 的 TS 形状稳定，空值不写任何字段
+  const spec = {
+    idField: typeof idField === 'string' ? idField : '',
+    returnFields: isPlainObject(returnFields) ? (returnFields as Record<string, string>) : {},
+    displayField: typeof displayField === 'string' ? displayField : '',
+  }
+
+  // 回写载体：vmodel 去末段（页面/容器 form / 行对象 / 子对象）
+  const dot = vmodel.lastIndexOf('.')
+  const backend = dot > 0 ? vmodel.slice(0, dot) : ctx.formVar
+
+  const opts = [`refId: ${refIdExprOf(node, ctx.ir, 'global-data-source-id')}`]
+  if (searchFieldLits.length) opts.push(`searchFields: [${searchFieldLits.join(', ')}]`)
+
+  const T = [
+    `<!-- ${node.artifact.anchor} -->`,
+    `${formItemOpen(node, label, ctx)}`,
+    `  <view class="lc-lookup" @click="openLookup${P}">`,
+    `    <uni-easyinput readonly :model-value="String(${vmodel} ?? '')" placeholder="请选择" />`,
+    `    <text v-if="${vmodel}" class="lc-lookup__clear" @click.stop="clearLookup${P}">×</text>`,
+    `  </view>`,
+    `  <uni-popup ref="${p}Popup" type="bottom" background-color="#fff">`,
+    `    <view class="lc-lookup__panel">`,
+    `      <view class="lc-lookup__panel-head">`,
+    `        <text class="lc-lookup__panel-title">选择记录</text>`,
+    `        <text class="lc-lookup__panel-cancel" @click="closeLookup${P}">取消</text>`,
+    `      </view>`,
+    `      <uni-search-bar v-model="${p}Keyword" placeholder="搜索" cancel-button="none" @confirm="${p}Search" @clear="${p}Search" />`,
+    `      <scroll-view scroll-y class="lc-lookup__body" @scrolltolower="${p}LoadMore">`,
+    `        <view v-for="row in ${p}Rows" :key="row.id" class="lc-lookup__row" @click="selectLookup${P}(row)">`,
+    `          <text class="lc-lookup__row-text">{{ uniPickerTextOf(row, ${p}Spec.displayField) }}</text>`,
+    `        </view>`,
+    `        <view class="lc-lookup__status">{{ ${p}Loading ? '加载中…' : ${p}Finished ? '没有更多了' : '' }}</view>`,
+    `      </scroll-view>`,
+    `    </view>`,
+    `  </uni-popup>`,
+    `</uni-forms-item>`,
+  ]
+
+  const S: string[] = []
+  S.push(...`const ${p}Spec = ${jsonToTs(spec)}`.split('\n'))
+  S.push(`const ${p}Picker = useUniPicker({ ${opts.join(', ')} })`)
+  S.push(
+    `const { rows: ${p}Rows, keyword: ${p}Keyword, loading: ${p}Loading, finished: ${p}Finished } = ${p}Picker`,
+  )
+  S.push(`const ${p}Popup = ref()`)
+  S.push(`function openLookup${P}() {`)
+  S.push(`  ${p}Popup.value?.open()`)
+  S.push(`  void ${p}Picker.open()`)
+  S.push(`}`)
+  S.push(`function closeLookup${P}() {`)
+  S.push(`  ${p}Popup.value?.close()`)
+  S.push(`  ${p}Picker.close()`)
+  S.push(`}`)
+  S.push(`function ${p}Search() {`)
+  S.push(`  void ${p}Picker.onSearch()`)
+  S.push(`}`)
+  S.push(`function ${p}LoadMore() {`)
+  S.push(`  void ${p}Picker.loadMore()`)
+  S.push(`}`)
+  S.push(`/** ${node.artifact.anchor} 选中：idField/returnFields 回写（web LookupPicker.vue:273-295） */`)
+  S.push(`function selectLookup${P}(row: Record<string, unknown>) {`)
+  S.push(`  applyUniPickerWrites(${backend}, row, ${p}Spec)`)
+  S.push(`  ${vmodel} = uniPickerTextOf(row, ${p}Spec.displayField)`)
+  S.push(`  closeLookup${P}()`)
+  S.push(`}`)
+  S.push(`function clearLookup${P}() {`)
+  S.push(`  clearUniPickerWrites(${backend}, ${p}Spec)`)
+  S.push(`  ${vmodel} = ''`)
+  S.push(`}`)
+
+  return {
+    template: T.join('\n'),
+    script: S,
+    imports: [
+      `import { ref } from 'vue'`,
+      `import { applyUniPickerWrites, clearUniPickerWrites, uniPickerTextOf, useUniPicker } from '@lc/runtime-uni/picker'`,
+    ],
+    unsupported,
   }
 }
 
@@ -301,7 +488,7 @@ function optionsRefOf(node: IrNode): string | null {
  *    （TableForm.vue:146），产物按原样回填、值在 config 常量供人工接管；行函数与
  *    group 同一套（新行形状 = rowKeys）。
  */
-function emitNestedField(node: IrNode, profile: TargetProfile, label: string, ctx: Required<UniFieldContext>): UniFieldFragment {
+function emitNestedField(node: IrNode, profile: TargetProfile, label: string, ctx: FieldCtx): UniFieldFragment {
   const n = node.nested!
   const cfgName = node.config?.name
   const has = (k: string) => !!node.config && k in node.config.obj
@@ -466,7 +653,7 @@ const FORMULA_PROPS: Record<string, string | true> = {
   disabled: true,
 }
 
-function emitFormulaField(node: IrNode, label: string, vmodel: string, ctx: Required<UniFieldContext>): UniFieldFragment {
+function emitFormulaField(node: IrNode, label: string, vmodel: string, ctx: FieldCtx): UniFieldFragment {
   const backend = vmodel.slice(0, vmodel.lastIndexOf('.'))
   const attrs: string[] = [`v-model="${vmodel}"`, `:form="${backend}"`]
   for (const [schemaName, tagName] of Object.entries(FORMULA_PROPS)) {

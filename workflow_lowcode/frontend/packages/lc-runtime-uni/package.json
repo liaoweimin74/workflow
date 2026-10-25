@@ -12,6 +12,7 @@
     "./charts": "./src/charts.ts",
     "./formula": "./src/formula.ts",
     "./list": "./src/list.ts",
+    "./picker": "./src/picker.ts",
     "./data": "./src/data.ts",
     "./dash": "./src/dash.ts"
   },

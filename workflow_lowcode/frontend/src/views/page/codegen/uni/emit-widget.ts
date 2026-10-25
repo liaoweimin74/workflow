@@ -52,6 +52,7 @@ import { jsonToTs } from '../emit'
 import { camelField, kebab, type IrNode, type IrPage, type Unsupported } from '../ir'
 import { needsBlock } from '../chain-emit'
 import { rowOf, stepStatementsUni, usesRow } from './emit-list'
+import { refIdExprOf, sq } from './emit-shared'
 
 export interface UniWidgetFragment {
   template: string
@@ -61,9 +62,6 @@ export interface UniWidgetFragment {
   imports: string[]
   unsupported: Unsupported[]
 }
-
-/** 单引号字面量：模板表达式里的字段键（业务字段大量带短横线，不赌合法标识符） */
-const sq = (v: string): string => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 
 /** 解 IR prop 值：const 具名常量回查 ir.consts，字面量直取（dsRef 由 ds 寻址单独处理） */
 function propOf(node: IrNode, ir: IrPage, name: string): unknown {
@@ -206,11 +204,8 @@ function emitPdc(node: IrNode, ir: IrPage): UniWidgetFragment {
   const pageSize = propOf(node, ir, 'pageSize')
   const fields = extractPdcFields(propOf(node, ir, 'childRules'))
 
-  // 数据源寻址（与 emit-list 同规则：首源走 ds.refId，其余查登记表）
-  const dsProp = node.props.find((x) => x.name === 'ds-ref-id')
-  const sourceId = dsProp && dsProp.value.kind === 'dsRef' ? String(dsProp.value.sourceId ?? '') : ''
-  const firstDsId = String(ir.dataSources[0]?.id ?? '')
-  const refIdExpr = sourceId && sourceId !== firstDsId ? `dataSources['${sourceId}']` : 'ds.refId'
+  // 数据源寻址（与 emit-list/emit-field 同规则：首源走 ds.refId，其余查登记表）
+  const refIdExpr = refIdExprOf(node, ir)
 
   const T: string[] = [
     `<!-- ${node.artifact.anchor} -->`,
@@ -616,14 +611,6 @@ function sizeMirrorUnsupported(node: IrNode): Unsupported {
   }
 }
 
-/** 数据源寻址（与 emitPdc/emitTable 同规则：首源走 ds.refId，其余查登记表） */
-function dsRefIdExpr(node: IrNode, ir: IrPage): string {
-  const dsProp = node.props.find((x) => x.name === 'ds-ref-id')
-  const sourceId = dsProp && dsProp.value.kind === 'dsRef' ? String(dsProp.value.sourceId ?? '') : ''
-  const firstDsId = String(ir.dataSources[0]?.id ?? '')
-  return sourceId && sourceId !== firstDsId ? `dataSources['${sourceId}']` : 'ds.refId'
-}
-
 /** dash-kpi → 自绘统计卡 .lc-kpi：web 契约 aggregate（group=__all__ 单行）→ rows[0].value，
  *  走 useUniKpi（失败静默 value=null）；title/subtitle/unit 出静态文本，value 唯一运行期
  *  绑定（null = 失败/空值，模板统一 -- 占位）；trend 系/sparkline/numberFormat/filter 登记。 */
@@ -689,7 +676,7 @@ function emitKpi(node: IrNode, ir: IrPage): UniWidgetFragment {
   T.push('</view>')
 
   // options：metric 空值不出（count 不需要度量列）；filter 有值才出（单引号字面量照落）
-  const opts = [`refId: ${dsRefIdExpr(node, ir)}`, `agg: '${agg.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`]
+  const opts = [`refId: ${refIdExprOf(node, ir)}`, `agg: '${agg.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`]
   if (metric !== null && metric !== undefined && metric !== '') opts.push(`metric: ${sq(String(metric))}`)
   if (typeof filter === 'string' && filter) opts.push(`filter: ${sq(filter)}`)
   const unitConst = typeof unit === 'string' && unit ? [`const ${p}Unit = '${unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`] : []
@@ -906,7 +893,7 @@ function emitDashChart(node: IrNode, ir: IrPage): UniWidgetFragment {
     title || (agg === 'count' ? '数量' : `${agg}(${typeof metric === 'string' ? metric : ''})`)
 
   // options：缺省项不出（sort=key/order=asc 是 useUniChart 缺省；count 不带 metric）
-  const opts = [`refId: ${dsRefIdExpr(node, ir)}`]
+  const opts = [`refId: ${refIdExprOf(node, ir)}`]
   if (group) opts.push(`group: ${sq(group)}`)
   opts.push(`agg: ${sq(agg)}`)
   if (metric !== null && metric !== undefined && metric !== '') opts.push(`metric: ${sq(String(metric))}`)
@@ -991,7 +978,7 @@ function emitPageChart(node: IrNode, ir: IrPage): UniWidgetFragment {
     script: [
       UNI_ECHARTS_USE_LINE,
       `const ${chartConstName} = ${jsonToTs(chartConst)}`,
-      `const ${p} = useUniList({ refId: ${dsRefIdExpr(node, ir)}, pagination: false })`,
+      `const ${p} = useUniList({ refId: ${refIdExprOf(node, ir)}, pagination: false })`,
       `const { rows: ${p}Rows, loading: ${p}Loading } = ${p}`,
       `const ${p}Option = computed(() => buildUniDatasetOption(${chartConstName}.type, ${p}Rows, ${chartConstName}))`,
       `onMounted(() => void ${p}.reload())`,

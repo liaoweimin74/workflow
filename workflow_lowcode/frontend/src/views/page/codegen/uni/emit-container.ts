@@ -92,18 +92,25 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
   const headTitle = typeof dialogAttrs?.title === 'string' ? dialogAttrs.title : ''
 
   // —— 字段片段（缩进 4 嵌进弹层体）+ 无映射字段 unsupported 收集 ——
-  // 字段子片段的 script（嵌套行函数 / inputNumber precision 取整 handler）并进容器
-  // script——模板真绑到的 handler 必须有声明方，否则产物 SFC 引用未声明函数。
+  // 字段子片段的 script（嵌套行函数 / inputNumber precision 取整 handler / 选择器
+  // 取数回写组）并进容器 script——模板真绑到的 handler 必须有声明方，否则产物 SFC
+  // 引用未声明函数。ctx 带 ir（Task 11.2）：选择器族按 globalDataSourceId 解析 refId。
   const pad4 = (l: string) => (l ? `    ${l}` : l)
   const bodyLines: string[] = []
   const fieldScripts: string[] = []
   const fieldImports: string[] = []
+  // 真装配的子节点（片段没有 field-component 登记）：带回接线由片段自己出 handler，
+  // 不再按 5.2 的「未出码」口径登记 writeback（登记的是缺口，不是已落地的接线）
+  const assembled = new Set<string>()
   for (const child of node.children) {
-    const frag = emitFieldNode(child, PROFILES.uniapp)
+    const frag = emitFieldNode(child, PROFILES.uniapp, { ir })
     bodyLines.push(...frag.template.split('\n').map(pad4))
     fieldScripts.push(...(frag.script ?? []))
     fieldImports.push(...(frag.imports ?? []))
     unsupported.push(...(frag.unsupported ?? []))
+    if (!(frag.unsupported ?? []).some((u) => u.key === 'field-component')) {
+      assembled.add(child.artifact.id)
+    }
   }
 
   // ==================== 模板 ====================
@@ -126,12 +133,16 @@ export function emitContainerNode(node: IrNode, ir: IrPage): UniContainerFragmen
   const declared = new Set(rules.map((r) => r.field))
   const childIds = new Set(node.children.map((c) => c.artifact.id))
   for (const wb of ir.writebacks.filter((w) => childIds.has(w.nodeId))) {
-    unsupported.push({
-      path: wb.rulePath,
-      type: wb.type,
-      key: 'writeback',
-      message: `字段 ${wb.field} 的选择器带回接线（web wbEvents select/clear）uni 首版未出`,
-    })
+    // 片段已真装配的选择器（Task 11.2）：select/clear 的带回接线由片段自己出 handler
+    // （@lc/runtime-uni/picker 的回写），这里只补声明；未装配的仍按缺口登记
+    if (!assembled.has(wb.nodeId)) {
+      unsupported.push({
+        path: wb.rulePath,
+        type: wb.type,
+        key: 'writeback',
+        message: `字段 ${wb.field} 的选择器带回接线（web wbEvents select/clear）uni 首版未出`,
+      })
+    }
     for (const t of [wb.idTarget, ...Object.values(wb.map ?? {})]) {
       if (typeof t === 'string' && t && !declared.has(t)) {
         declared.add(t)

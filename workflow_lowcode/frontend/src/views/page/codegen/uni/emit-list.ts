@@ -22,6 +22,7 @@ import { argOf, exprOf, keyText, literalOf, needsBlock } from '../chain-emit'
 import { camelField } from '../ir'
 import type { IrChain, IrChainStep, IrNode, IrPage, Unsupported } from '../ir'
 import type { TargetProfile } from '../target-profile'
+import { refIdExprOf, sq } from './emit-shared'
 
 export interface UniListFragment {
   /** 模板片段（单串，\n 分行；页面装配统一加缩进） */
@@ -64,9 +65,6 @@ interface SearchField {
   prop?: string
   label?: string
 }
-
-/** 单引号字面量：产物语句里的字符串实参（label/url 等可能带引号） */
-const sq = (v: string): string => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 
 /** 行字段访问：统一下标 + 引号（业务字段大量带短横线，不赌合法标识符） */
 export const rowOf = (prop: string | undefined): string => `row[${sq(String(prop ?? ''))}]`
@@ -185,11 +183,8 @@ export function emitListNode(node: IrNode, ir: IrPage, _profile: TargetProfile):
   // Task 5.2）；无容器保留 todo + unsupported，绝不静默
   const hasContainer = ir.nodes.some((n) => n.artifact.type === 'formContainer')
 
-  // —— 数据源寻址（对位 web propText 的 dsRef 分支：首源走 ds.refId，其余查登记表）——
-  const dsProp = node.props.find((x) => x.name === 'ds-ref-id')
-  const sourceId = dsProp && dsProp.value.kind === 'dsRef' ? String(dsProp.value.sourceId ?? '') : ''
-  const firstDsId = String(ir.dataSources[0]?.id ?? '')
-  const refIdExpr = sourceId && sourceId !== firstDsId ? `dataSources['${sourceId}']` : 'ds.refId'
+  // —— 数据源寻址（emit-shared.refIdExprOf：首源走 ds.refId，其余查登记表）——
+  const refIdExpr = refIdExprOf(node, ir)
 
   // —— 列角色（镜像 ListCards 的 role 取法：title/subtitle/tag/metric 只按 role，其余全字段行）——
   const allColumns = (valueOf(node, ir, 'columns') as CardColumn[] | undefined) ?? []

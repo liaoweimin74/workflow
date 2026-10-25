@@ -37,15 +37,17 @@ export const WEB_ONLY_TYPES: ReadonlySet<string> = new Set([
 export const MOBILE_ONLY_TYPES: ReadonlySet<string> = new Set<string>([])
 
 /**
- * 已知组件类型全集（capabilities 派生输入）：component-map 18 键（字段/布局族）
- * + 画布自定义拖拽类型（PageDesigner.registerPageComponents 全名单）
+ * 已知组件类型全集（capabilities 派生输入）：component-map 全键（字段/布局族）
+ * + 画布自定义拖拽类型（PageDesigner.registerPageComponents 名单里 map 外的键）
  * + dash-kpi-trend（仅 component 注册，无拖拽规则）+ textarea（form-create 内建字段，
  * 矩阵 §2.1：uni-easyinput type=textarea）。
+ * 已进 component-map 的类型不得在此重复列名——数组计重、Set 不计，派生口径就会错开
+ * （LookupPicker Task 11.2 进映射表后从这份名单移除）。
  */
 export const KNOWN_TYPES: readonly string[] = [
   ...Object.keys(UNIAPP_COMPONENT_MAP),
-  // 画布自定义拖拽类型
-  'dataPicker', 'LookupPicker',
+  // 画布自定义拖拽类型（map 外的键；LookupPicker 11.2 起已在映射表内）
+  'dataPicker',
   'page-table', 'page-list-cards', 'page-tree', 'page-form', 'page-detail',
   'page-tree-table', 'page-chart', 'page-iframe', 'page-notice-carousel',
   'page-calendar', 'page-timeline', 'page-steps',

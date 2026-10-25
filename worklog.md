@@ -10135,3 +10135,18 @@ Work Log:
 
 Stage Summary:
 - 事件 #148 单轮闭环，累计恢复 148 次，零 mvn 132 次；本轮 MariaDB 幸存仅 Java 缺失（较 #146/#147 恢复更快）
+
+---
+Task ID: r281
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 13:05（Job 446961）——事件 #149 标准重供给恢复
+
+Work Log:
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadbd 幸存（1250），Java 消失 → 事件 #149
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 首次完整退出（EXIT=0，done: 8080=200 jar=ok 3306=ok 真绿 t+5s），非幸存型
+- 40s 四链路 200×4，ss：8080=java(1420)/3000=vite(1174)/3306=mariadbd(1250)，104 表
+- 收口 dump 050709（272K），内存 3.31GB oom 0
+
+Stage Summary:
+- 事件 #149 单轮闭环，累计恢复 149 次，零 mvn 133 次；recover 脚本首次在工具时限内跑完全程

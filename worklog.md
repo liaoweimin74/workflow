@@ -10166,3 +10166,19 @@ Work Log:
 
 Stage Summary:
 - 事件 #150 单轮闭环，累计恢复 150 次（整数里程碑），零 mvn 134 次
+
+---
+Task ID: r289
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 21:05（Job 446961）——事件 #151 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r287-288 连续 2 轮故障后恢复，累计 #82-#83）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1246），Java 消失 → 事件 #151
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 3 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1420)/3000=vite(1223)/3306=mariadbd(1246)，104 表
+- 收口 dump 130714（272K），内存 3.31GB oom 0
+
+Stage Summary:
+- 事件 #151 单轮闭环，累计恢复 151 次，零 mvn 135 次

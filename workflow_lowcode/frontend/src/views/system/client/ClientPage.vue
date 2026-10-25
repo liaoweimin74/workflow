@@ -20,6 +20,7 @@ import { SearchTable } from '@/components/business'
 import type { ActionButton, SearchField, TableColumn } from '@/components/business/types'
 import { listClients, createClient, updateClient, setClientStatus } from '@/api/client'
 import type { ClientVO } from '@/types/client'
+import ClientSettingDrawer from './ClientSettingDrawer.vue'
 
 const searchTableRef = ref()
 // ensure searchTableRef is "used" for template ref binding
@@ -52,6 +53,8 @@ const columns: TableColumn[] = [
 
 // ---------- 行操作 ----------
 const actionButtons: ActionButton[] = [
+  // 「⚙设置」打开 A2 抽屉（渠道开通/登录方式/初始授权，Task 7）
+  { label: '⚙设置', size: 'small', link: true, permission: 'system:client:update', onClick: openSetting },
   { label: '编辑', icon: Edit, size: 'small', link: true, permission: 'system:client:update', onClick: openEdit },
   // 「☰菜单」跳 A3（菜单管理）并携带端参数；MenuPage 的端 Tab 消费在 Task 14 接线（当前忽略=无害）
   { label: '☰菜单', size: 'small', link: true, onClick: goMenu },
@@ -63,6 +66,20 @@ const actionButtons: ActionButton[] = [
 
 function goMenu(row: ClientVO): void {
   router.push({ path: '/system/menu', query: { clientId: String(row.id) } })
+}
+
+// ---------- A2 设置抽屉（Task 7：渠道开通/登录方式/初始授权） ----------
+const settingVisible = ref(false)
+const settingClient = ref<ClientVO | null>(null)
+
+function openSetting(row: ClientVO): void {
+  settingClient.value = row
+  settingVisible.value = true
+}
+
+/** A2 保存后刷新列表（渠道徽标/授权回显即时更新）。 */
+function onSettingSaved(): void {
+  searchTableRef.value?.fetchList()
 }
 
 async function toggleStatus(row: ClientVO): Promise<void> {
@@ -187,6 +204,9 @@ async function submitForm(): Promise<void> {
       <el-button type="primary" :loading="submitting" @click="submitForm">保存</el-button>
     </template>
   </el-drawer>
+
+  <!-- A2 设置抽屉：渠道开通/登录方式/初始授权（保存并生效后刷新列表） -->
+  <ClientSettingDrawer v-model="settingVisible" :client="settingClient" @saved="onSettingSaved" />
 </template>
 
 <style scoped>

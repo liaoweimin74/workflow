@@ -33,9 +33,16 @@ vi.mock('@/api/client', () => ({
   setClientStatus: vi.fn(),
   upsertChannel: vi.fn(),
   testChannel: vi.fn(),
+  listRolesByClient: vi.fn(),
+}))
+
+// ClientSettingDrawer（A2）在打开时会拉角色/成员组——真实子组件挂载需这两个 mock 可控
+vi.mock('@/api/memberGroup', () => ({
+  getMemberGroupList: vi.fn(),
 }))
 
 const api = (await import('@/api/client')) as any
+const { getMemberGroupList } = (await import('@/api/memberGroup')) as any
 
 function clientRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,6 +88,8 @@ beforeEach(() => {
   ;(api.listClients as any).mockResolvedValue({
     data: { rows: [clientRow()], total: 1, page: 1, size: 20 },
   })
+  ;(api.listRolesByClient as any).mockResolvedValue({ data: { rows: [] } })
+  ;(getMemberGroupList as any).mockResolvedValue({ data: { rows: [], total: 0 } })
 })
 
 describe('ClientPage 列表配置', () => {
@@ -168,6 +177,20 @@ describe('ClientPage ☰菜单跳转（tasks 1.4）', () => {
     expect(menuBtn).toBeDefined()
     await menuBtn.onClick(clientRow({ id: 7 }))
     expect(pushMock).toHaveBeenCalledWith({ path: '/system/menu', query: { clientId: '7' } })
+    wrapper.unmount()
+  })
+})
+
+describe('ClientPage ⚙设置接入 A2 抽屉（Task 7）', () => {
+  it('操作列含「⚙设置」，点击打开设置抽屉并按该端拉角色', async () => {
+    const wrapper = await mountPage(['system:client:list', 'system:client:update'])
+    const actions = wrapper.findComponent(SearchTableStub as any).props('actionButtons') as any[]
+    const settingBtn = actions.find((b) => b.label.includes('设置'))
+    expect(settingBtn).toBeDefined()
+    await settingBtn.onClick(clientRow())
+    await flushPromises()
+    expect((wrapper.vm as any).settingVisible).toBe(true)
+    expect(api.listRolesByClient).toHaveBeenCalledWith(2)
     wrapper.unmount()
   })
 })

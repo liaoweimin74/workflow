@@ -42,3 +42,11 @@ export function upsertChannel(id: number, data: ChannelUpsertDTO) {
 export function testChannel(id: number, type: string) {
   return http.post<any, R<{ ok: boolean; msg: string }>>(`/clients/${id}/channels/${type}/test`)
 }
+
+/** A2 初始授权的角色下拉：仅本端角色（tasks 3.3 数据侧，服务端 clientId 过滤裁决）。 */
+export function listRolesByClient(clientId: number) {
+  return http.get<
+    any,
+    R<{ rows: Array<{ id: number; roleName: string; roleCode: string; status: number; clientId: number }>; total: number }>
+  >('/roles', { params: { page: 1, size: 200, clientId } })
+}

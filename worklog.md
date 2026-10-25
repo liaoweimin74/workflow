@@ -10106,3 +10106,18 @@ Work Log:
 Stage Summary:
 - 事件 #146 单轮闭环（重供给+MariaDB 冷态复合型首例），累计恢复 146 次，零 mvn 130 次
 - 沙箱累计故障 76 次
+
+---
+Task ID: r277
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 11:05（Job 446961）——事件 #147 标准重供给+MariaDB 冷态恢复
+
+Work Log:
+- 沙箱单轮故障后自愈（累计 #77）
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadb 冷态（bootstrap 下载中），Java 消失 → 事件 #147（同 #146 复合型）
+- pkill 五连 + jar 重拼（md5 e369839b ✓）+ dump 011032 在位；mariadbd 二进制缺位由 recover 链自 debs 重建
+- recover-dplus.sh 幸存型超时（第 15 次），复验 ss：8080=java(1407)/3000=vite(1137)/3306=mariadbd(1313)，auth 真绿
+- 40s 四链路 200×4，104 表，收口 dump 031011（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #147 单轮闭环，累计恢复 147 次，零 mvn 131 次；#146/#147 连续两轮同型（每小时重供给节奏持续）

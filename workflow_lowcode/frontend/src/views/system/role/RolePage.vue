@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'RoleManagement' })
 
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Key, Lock } from '@element-plus/icons-vue'
@@ -11,6 +11,8 @@ import type { Rule } from '@form-create/element-ui'
 import { registerPageActions } from '@/utils/aiPageExecutor'
 import { getRoleList, createRole, updateRole, deleteRole, getRoleMenus, assignRoleMenus } from '@/api/role'
 import { getMenuTree } from '@/api/menu'
+import { clientOptions } from '@/api/client'
+import type { ClientOptionVO } from '@/types/client'
 import type { RoleVO } from '@/types/role'
 import type { MenuTree } from '@/types/menu'
 import RoleDataPermissionDialog from './RoleDataPermissionDialog.vue'
@@ -28,37 +30,64 @@ const dataPermissionDialogRef = ref<InstanceType<typeof RoleDataPermissionDialog
 const dataPermissionVisible = ref(false)
 const dataPermissionRole = ref<RoleVO | null>(null)
 
+// ---------- 端维度（Task 9，tasks.md 3.4）----------
+const route = useRoute()
+const clients = ref<ClientOptionVO[]>([])
+// 新建表单「所属端」缺省：URL ?clientId=（端上下文）优先，缺省 portal(1)
+const initialClientId = Number(route.query?.clientId)
+const activeClientId = Number.isFinite(initialClientId) && initialClientId > 0 ? initialClientId : 1
+/** 与后端 system.service BUILTIN_ROLE_CODES 镜像：内置角色拒改端（服务端 500），前端预禁下拉 */
+const BUILTIN_ROLE_CODES = new Set(['ROLE_ADMIN', 'ROLE_USER'])
+/** 当前编辑中的角色行（onFormOpen 清空 → getApi 载入）；决定所属端是否锁定 */
+const editingRole = ref<RoleVO | null>(null)
+
+async function loadClients(): Promise<void> {
+  try {
+    const res = await clientOptions()
+    clients.value = res.data
+  } catch {
+    clients.value = [] // 端列表失败降级：所属端显示「—」，下次打开表单重试
+  }
+}
+loadClients()
+
+const clientNameMap = computed(() => new Map(clients.value.map((c) => [c.id, c.name])))
+const clientSelectOptions = computed(() => clients.value.map((c) => ({ label: c.name, value: c.id })))
+
 // ---------- 搜索字段 ----------
-const searchFields: SearchField[] = [
+const searchFields = computed<SearchField[]>(() => [
   { type: 'input', label: '角色名称', prop: 'roleName', placeholder: '输入角色名称' },
   {
     type: 'select', label: '状态', prop: 'status', placeholder: '选择状态',
     options: [{ label: '全部', value: undefined }, { label: '启用', value: 1 }, { label: '停用', value: 0 }],
     style: 'width: 120px',
   },
-]
+  {
+    type: 'select', label: '所属端', prop: 'clientId', placeholder: '选择端',
+    options: [{ label: '全部', value: undefined }, ...clientSelectOptions.value],
+    style: 'width: 140px',
+  },
+])
 
 // ---------- 表格列 ----------
-const columns: TableColumn[] = [
+const columns = computed<TableColumn[]>(() => [
   { prop: 'roleName', label: '角色名称', width: 140 },
   { prop: 'roleCode', label: '角色编码', width: 160 },
+  {
+    prop: 'clientId', label: '所属端', width: 110,
+    formatter: (_row: any, _col: any, cellValue: any) => clientNameMap.value.get(cellValue) ?? '—',
+  },
   { prop: 'description', label: '描述', minWidth: 200 },
   { label: '状态', width: 80, align: 'center', formatter: (_r: any, _c: any, v: any) => v === 1 ? '启用' : '停用' },
   { prop: 'createdAt', label: '创建时间', width: 170 },
-]
+])
 
 // ---------- 分配菜单 ----------
-let _menuTreeLoaded = false
-async function ensureMenuTree() {
-  if (_menuTreeLoaded) return
-  _menuTreeLoaded = true
-  const res = await getMenuTree()
-  menuTree.value = res.data
-}
-
 async function handleAssignMenu(row: RoleVO) {
   currentRoleId.value = row.id
-  await ensureMenuTree()
+  // 菜单树按角色所属端拉（跨端节点服务端本就不可见；按端取避免把 A 端菜单授权给 B 端角色）
+  const treeRes = await getMenuTree(row.clientId ?? 1)
+  menuTree.value = treeRes.data
   const res = await getRoleMenus(row.id)
   checkedMenuKeys.value = res.data || []
   menuDialogVisible.value = true
@@ -90,24 +119,47 @@ async function fetchApi(params: any) {
 }
 
 // ---------- 表单配置 ----------
-const formConfig: FormConfig<RoleVO> = {
+const formConfig = computed<FormConfig<RoleVO>>(() => ({
   rule: [
     { type: 'input', field: 'roleName', title: '角色名称', validate: [{ required: true, message: '请输入角色名称', trigger: 'blur' }] } as Rule,
     { type: 'input', field: 'roleCode', title: '角色编码', validate: [{ required: true, message: '请输入角色编码', trigger: 'blur' }] } as Rule,
+    {
+      type: 'select', field: 'clientId', title: '所属端',
+      props: {
+        // 内置角色锁端（后端拒改端 500，前端预禁）；新建/自定义角色可改
+        disabled: editingRole.value !== null && BUILTIN_ROLE_CODES.has(editingRole.value.roleCode),
+        placeholder: '选择所属端',
+      },
+      options: clientSelectOptions.value,
+    } as Rule,
     { type: 'input', field: 'description', title: '描述', props: { placeholder: '请输入描述' } } as Rule,
   ],
+  // 新建缺省挂当前端上下文（URL ?clientId= 优先，缺省 portal）
+  initialValues: { clientId: activeClientId },
   createApi: createRole,
-  updateApi: (id, data) => updateRole(id as number, { roleName: data.roleName, description: data.description }),
+  updateApi: (id, data) =>
+    updateRole(id as number, {
+      roleName: data.roleName,
+      description: data.description,
+      clientId: (data as any).clientId,
+    }),
   deleteApi: async (id) => { await deleteRole(id as number) },
   getApi: async (id) => {
     const res = await getRoleList({ page: 1, size: 999 })
-    return res.data.rows.find((r: RoleVO) => r.id === (id as number)) as RoleVO
+    const row = res.data.rows.find((r: RoleVO) => r.id === (id as number)) as RoleVO
+    editingRole.value = row ?? null
+    return row
+  },
+  // 弹窗打开前：清编辑态（新建路径不经 getApi）+ 端列表失败时重试
+  onFormOpen: async () => {
+    editingRole.value = null
+    if (clients.value.length === 0) await loadClients()
   },
   dialogTitle: { create: '新增角色', edit: '编辑角色' },
   createPermission: 'system:role:create',
   editPermission: 'system:role:update',
   deletePermission: 'system:role:delete',
-}
+}))
 
 // ==================== AI 页面操作（L2 注册层：角色管理） ====================
 const aiRoute = useRoute()
@@ -117,7 +169,7 @@ function aiRows(limit = 10) {
   return rows.slice(0, limit).map((r) => ({ id: r.id, roleName: r.roleName, roleCode: r.roleCode, description: r.description, status: r.status }))
 }
 
-const QUERY_FIELDS = ['roleName', 'status']
+const QUERY_FIELDS = ['roleName', 'status', 'clientId']
 
 /** 按 menuName 在菜单树中查找 id（支持部分匹配，返回全部命中叶子路径节点） */
 function findMenuIds(names: string[]): number[] {
@@ -138,9 +190,9 @@ const unregisterAi = registerPageActions({
   manifest: () => ({
     pageType: 'admin',
     title: '角色管理',
-    searchFields: searchFields.map((f) => ({ field: f.prop, title: f.label, type: f.type })),
-    tableColumns: columns.map((c) => ({ field: (c as TableColumn).prop, title: (c as TableColumn).label })).filter((c) => c.field),
-    formFields: formConfig.rule.map((r) => ({ field: (r as any).field, title: (r as any).title, required: !!(r as any).validate?.length })),
+    searchFields: searchFields.value.map((f) => ({ field: f.prop, title: f.label, type: f.type })),
+    tableColumns: columns.value.map((c) => ({ field: (c as TableColumn).prop, title: (c as TableColumn).label })).filter((c) => c.field),
+    formFields: formConfig.value.rule.map((r) => ({ field: (r as any).field, title: (r as any).title, required: !!(r as any).validate?.length })),
     buttons: ['search', 'reset', 'open-create', 'open-edit', 'submit', 'assign-menu', 'check-menu', 'submit-menu', 'assign-data-permission'],
     notes: 'set-query 即时生效并刷新列表；弹窗表单先 open-create/open-edit 再 set-value，最后 submit；分配菜单流程=assign-menu(行序号)→check-menu(菜单名数组)→submit-menu；数据权限流程=assign-data-permission(行序号) 打开勾选弹窗（人工勾选授权对象后保存）',
     layer: 'L2',

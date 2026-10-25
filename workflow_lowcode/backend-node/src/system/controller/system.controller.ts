@@ -212,9 +212,15 @@ export class RoleController {
 export class MenuController {
   constructor(private readonly service: SystemService) {}
 
+  /**
+   * 菜单树。`clientId` 缺省 1=portal（Task 5 端上下文接线后由 X-Client-Id 决定）。
+   * 非法值（非数字/<1）回落缺省——零破坏：不带参数的响应与迁移前逐结构一致。
+   */
   @Get('tree')
-  async tree(): Promise<R<MenuTreeVO[]>> {
-    return R.ok(await this.service.menuTree())
+  async tree(@Query('clientId') clientId?: string): Promise<R<MenuTreeVO[]>> {
+    const parsed = clientId === undefined ? Number.NaN : Number(clientId)
+    const cid = Number.isInteger(parsed) && parsed >= 1 ? parsed : 1
+    return R.ok(await this.service.menuTree(cid))
   }
 
   /**
@@ -229,6 +235,7 @@ export class MenuController {
   async create(@Body() body: MenuSaveRequest): Promise<R<MenuTreeVO>> {
     return R.ok(
       await this.service.createMenu({
+        clientId: body.clientId ?? null,
         parentId: body.parentId ?? null,
         menuName: body.menuName,
         menuType: body.menuType,
@@ -262,6 +269,23 @@ export class MenuController {
     )
   }
 
+  /**
+   * 移动菜单到新父级（Node 新增端点，不在契约网；对齐 Java `move` 语义，
+   * 落点先过端形态校验——违规抛 BusinessException → body code 500）。
+   */
+  @Put(':id/move')
+  async move(
+    @Param('id') id: string,
+    @Body() body: MenuMoveRequest,
+  ): Promise<R<MenuTreeVO>> {
+    return R.ok(
+      await this.service.moveMenu(Number(id), {
+        parentId: body.parentId ?? null,
+        index: body.index ?? null,
+      }),
+    )
+  }
+
   /** 删除菜单（**软删除**；有子菜单时拒绝）。 */
   @Delete(':id')
   async remove(@Param('id') id: string): Promise<R<null>> {
@@ -272,6 +296,8 @@ export class MenuController {
 
 /** 菜单保存请求体，对齐 Java `MenuCreateRequest` / `MenuUpdateRequest`。 */
 interface MenuSaveRequest {
+  /** 归属客户端（缺省 1=portal，V51 分树）。 */
+  clientId?: number | null
   parentId?: number | null
   menuName: string
   menuType: number
@@ -281,6 +307,12 @@ interface MenuSaveRequest {
   icon?: string | null
   sortOrder?: number | null
   status?: number | null
+}
+
+/** 菜单移动请求体，对齐 Java `MenuMoveRequest`（parentId 空=根，index 空=末尾）。 */
+interface MenuMoveRequest {
+  parentId?: number | null
+  index?: number | null
 }
 
 /** 组织接口（`/api/orgs`）。 */

@@ -47,9 +47,10 @@ export interface OrgRowFull extends OrgRow {
   is_deleted: number
 }
 
-/** 菜单行的完整形态（写路径需要 status / is_deleted）。 */
+/** 菜单行的完整形态（写路径需要 status / is_deleted；client_id=归属端，V51）。 */
 export interface MenuRow {
   id: number
+  client_id: number
   parent_id: number | null
   menu_name: string
   menu_type: number
@@ -303,9 +304,13 @@ export class SystemRepository {
 
   // ------------------------------------------------------------ 菜单
 
-  async listAllMenus(): Promise<
+  /** 端内全部未删菜单（按 client_id 过滤，V51 分树；VO 需要 client_id 列）。 */
+  async listAllMenus(
+    clientId: number,
+  ): Promise<
     Array<{
       id: number
+      client_id: number
       parent_id: number | null
       menu_name: string
       menu_type: number
@@ -318,8 +323,9 @@ export class SystemRepository {
   > {
     return this.db
       .selectFrom('sys_menu')
-      .select(['id', 'parent_id', 'menu_name', 'menu_type', 'path', 'component', 'permission', 'icon', 'sort_order'])
+      .select(['id', 'client_id', 'parent_id', 'menu_name', 'menu_type', 'path', 'component', 'permission', 'icon', 'sort_order'])
       .where('is_deleted', '=', 0)
+      .where('client_id', '=', clientId)
       .orderBy('sort_order', 'asc')
       .execute()
   }
@@ -346,13 +352,14 @@ export class SystemRepository {
   async findMenuById(id: number): Promise<MenuRow | null> {
     const row = await this.db
       .selectFrom('sys_menu')
-      .select(['id', 'parent_id', 'menu_name', 'menu_type', 'path', 'component', 'permission', 'icon', 'sort_order', 'status', 'is_deleted'])
+      .select(['id', 'client_id', 'parent_id', 'menu_name', 'menu_type', 'path', 'component', 'permission', 'icon', 'sort_order', 'status', 'is_deleted'])
       .where('id', '=', id)
       .executeTakeFirst()
     return (row as MenuRow | undefined) ?? null
   }
 
   async insertMenu(row: {
+    client_id: number
     parent_id: number | null
     menu_name: string
     menu_type: number
@@ -365,8 +372,8 @@ export class SystemRepository {
   }): Promise<number> {
     const result = await this.db
       .insertInto('sys_menu')
-      // client_id=1：默认 portal 平台端（V51 DEFAULT 1 语义显式化），端上下文接线在后续任务
-      .values({ ...row, client_id: 1, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
+      // client_id 由 service 传入（缺省 portal=1）；落点校验也在 service 完成后才走到这里
+      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
       .executeTakeFirst()
     return Number(result.insertId)
   }

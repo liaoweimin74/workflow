@@ -3,6 +3,13 @@ import { hash } from 'bcryptjs'
 import { PageResult } from '../../common/domain/page-result'
 import { BusinessException } from '../../common/exception/business-exception'
 import { assertPageSize } from '../../framework/http/query-params'
+import {
+  assertMenuPlacement,
+  assertZoneRootEditable,
+  isZoneRootComponent,
+  type MenuZone,
+} from './menu-shape'
+import { ClientService } from './client.service'
 import type {
   DictDataRow,
   DictTypeRow,
@@ -15,6 +22,9 @@ import type {
   UserRow,
 } from '../repository/system.repository'
 import { SystemRepository } from '../repository/system.repository'
+
+/** 菜单树 parent 链回溯护栏（对齐 Java MenuServiceImpl.MAX_DEPTH）。 */
+const MAX_DEPTH = 32
 
 /**
  * 新建/重置用户时的初始密码，对齐 Java `GlobalConstant.DEFAULT_PASSWORD`。
@@ -69,9 +79,11 @@ export interface RoleVO {
   createdAt: Date | null
 }
 
-/** 菜单树（与认证模块的 MenuTree 同构）。 */
+/** 菜单树（与认证模块的 MenuTree 同构；clientId 为 V51 增量字段，零破坏追加）。 */
 export interface MenuTreeVO {
   id: number
+  /** 归属客户端 id（sys_client.id）。 */
+  clientId: number
   parentId: number | null
   menuName: string
   menuType: number
@@ -163,7 +175,11 @@ export interface GroupMemberVO {
 
 @Injectable()
 export class SystemService {
-  constructor(private readonly repo: SystemRepository) {}
+  constructor(
+    private readonly repo: SystemRepository,
+    /** 多端支持：判断目标端移动形态（Task 2 options），并做端形态落点校验。 */
+    private readonly clientService: ClientService,
+  ) {}
 
   async listUsers(page: number, size: number): Promise<PageResult<UserVO>> {
     // Java 走 `PageRequest.of(page - 1, size)` ⇒ size < 1 抛 IllegalArgumentException → HTTP 400
@@ -261,9 +277,14 @@ export class SystemService {
     return new PageResult(total, safePage, size, vos)
   }
 
-  /** 菜单树（管理端，取全部未删除菜单，不做角色过滤）。 */
-  async menuTree(): Promise<MenuTreeVO[]> {
-    const menus = await this.repo.listAllMenus()
+  /**
+   * 菜单树（管理端，取该端全部未删菜单，不做角色过滤）。
+   *
+   * `clientId` 缺省 1=portal：不带参数的请求响应与 V51 迁移前逐结构一致
+   * （仅 VO 增量 `clientId` 字段，Review Focus 1 零破坏断言钉）。
+   */
+  async menuTree(clientId = 1): Promise<MenuTreeVO[]> {
+    const menus = await this.repo.listAllMenus(clientId)
 
     const byParent = new Map<number | null, typeof menus>()
     for (const menu of menus) {
@@ -277,6 +298,7 @@ export class SystemService {
         const children = build(menu.id)
         return {
           id: menu.id,
+          clientId: menu.client_id,
           parentId: menu.parent_id,
           menuName: menu.menu_name,
           menuType: menu.menu_type,
@@ -678,7 +700,7 @@ export class SystemService {
   //    Node 侧按**正确语义**实现（新建应成功），行为正确性由集成测试保证。
   //    这是刻意的行为差异：Java 那边是缺陷，不是契约。
 
-  /** 新建菜单（`sortOrder` 空落 0、`status` 空落 1）。 */
+  /** 新建菜单（`sortOrder` 空落 0、`status` 空落 1；落点按端形态校验）。 */
   async createMenu(request: {
     parentId: number | null
     menuName: string
@@ -689,8 +711,13 @@ export class SystemService {
     icon?: string | null
     sortOrder?: number | null
     status?: number | null
+    /** 归属客户端，缺省 1=portal（Task 5 起由端上下文注入真实值）。 */
+    clientId?: number | null
   }): Promise<MenuTreeVO> {
+    const clientId = request.clientId ?? 1
+    await this.assertPlacement(clientId, request.menuType, request.parentId)
     const id = await this.repo.insertMenu({
+      client_id: clientId,
       parent_id: request.parentId,
       menu_name: request.menuName,
       menu_type: request.menuType,
@@ -723,7 +750,13 @@ export class SystemService {
       status?: number | null
     },
   ): Promise<MenuTreeVO> {
-    await this.requireMenu(id)
+    const row = await this.requireMenu(id)
+    // zone 根 locked：带改名内容的 PUT 一律拒绝（其余字段补丁不受影响）
+    if (hasText(request.menuName)) assertZoneRootEditable(row.component, 'rename')
+    // 改类型要与现有父级重新校验（对齐 Java update：否则能改出不合法组合）
+    if (request.menuType !== null && request.menuType !== undefined && request.menuType !== row.menu_type) {
+      await this.assertPlacement(row.client_id, request.menuType, row.parent_id)
+    }
     const patch: Partial<MenuRow> = {}
     if (hasText(request.menuName)) patch.menu_name = String(request.menuName)
     if (request.menuType !== null && request.menuType !== undefined) patch.menu_type = request.menuType
@@ -737,9 +770,179 @@ export class SystemService {
     return this.menuTreeOf(id)
   }
 
-  /** 删除菜单（**软删除**）；有子菜单时拒绝。 */
+  /**
+   * 移动菜单到新的父级（`PUT /api/menus/:id/move`，对齐 Java `move` 的
+   * parentId+index 语义：目标插位含钳位，两侧兄弟重排）。
+   *
+   * 多端规则：跨客户端移动拒绝；被移节点是 zone 根拒绝；落点过端形态校验。
+   */
+  async moveMenu(
+    id: number,
+    request: { parentId: number | null; index?: number | null },
+  ): Promise<MenuTreeVO> {
+    const menu = await this.requireMenu(id)
+    assertZoneRootEditable(menu.component, 'move')
+    const originParentId = menu.parent_id
+    const targetParentId = request.parentId ?? null
+
+    if (targetParentId !== null) {
+      if (targetParentId === menu.id) {
+        throw new BusinessException('不能把菜单移动到自己的子菜单之下')
+      }
+      const targetParent = await this.requireMenu(targetParentId)
+      if (targetParent.client_id !== menu.client_id) {
+        throw new BusinessException('不能跨客户端移动菜单')
+      }
+      await this.assertNotInSubtree(menu.id, targetParent)
+    }
+    await this.assertPlacement(menu.client_id, menu.menu_type, targetParentId, menu.id)
+
+    // 兄弟重排（对齐 Java：origin 移除自身后 renumber；target 按 index 插入后 renumber）
+    const all = await this.repo.listAllMenus(menu.client_id)
+    const childrenOf = (parentId: number | null): MenuRow[] =>
+      all
+        .filter((m) => m.parent_id === parentId && m.id !== menu.id)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((m) => ({ ...m, is_deleted: 0 }) as unknown as MenuRow)
+
+    const originSiblings = childrenOf(originParentId)
+    const sameParent = originParentId === targetParentId
+    const targetSiblings = sameParent ? originSiblings : childrenOf(targetParentId)
+
+    const size = targetSiblings.length
+    const raw = request.index ?? null
+    const index = raw === null ? size : Math.max(0, Math.min(raw, size))
+    targetSiblings.splice(index, 0, menu)
+
+    // 父级变更落库 + 两侧 renumber（同 parent 时只做一次；updateMenu 内部自动刷 updated_at）
+    await this.repo.updateMenu(menu.id, { parent_id: targetParentId })
+    await this.renumber(targetSiblings)
+    if (!sameParent) {
+      await this.renumber(originSiblings)
+    }
+    return this.menuTreeOf(id)
+  }
+
+  /** Java `renumber`：兄弟按 0..n-1 重发 sort_order（与自身是否在原列表无关）。 */
+  private async renumber(siblings: MenuRow[]): Promise<void> {
+    for (const [i, s] of siblings.entries()) {
+      if (s.sort_order !== i) {
+        await this.repo.updateMenu(s.id, { sort_order: i })
+      }
+    }
+  }
+
+  /** 目标父不得落在被移节点子树内（沿 parent 链回溯，对齐 Java `requireNotInSubtree`）。 */
+  private async assertNotInSubtree(menuId: number, targetParent: MenuRow): Promise<void> {
+    let cursor: MenuRow | null = targetParent
+    let hops = 0
+    while (cursor !== null) {
+      if (cursor.id === menuId) {
+        throw new BusinessException('不能把菜单移动到自己的子菜单之下')
+      }
+      if (cursor.parent_id === null) return
+      if (++hops > MAX_DEPTH) throw new BusinessException('菜单层级过深')
+      cursor = await this.repo.findMenuById(cursor.parent_id)
+    }
+  }
+
+  // ------------------------------------------------------------ 多端落点校验（Task 4）
+
+  /** 该客户端是否移动形态：H5/APP/MP 任一 enabled（渠道矩阵在 Task 1/2）。 */
+  private async isMobileClient(clientId: number): Promise<boolean> {
+    const options = await this.clientService.options()
+    const found = options.find((o) => o.id === clientId)
+    if (!found) throw new BusinessException('客户端不存在')
+    return found.channelTypes.some((t) => t === 'H5' || t === 'APP' || t === 'MP')
+  }
+
+  /**
+   * 落点合法性：解析 parent 链得出 zone/depth/parentType/tabSiblingCount，
+   * 再调 Task 3 的纯函数 assertMenuPlacement。
+   *
+   * 移动端：沿 parentId 链上溯找 zone 根（component=mzone:tabs|mzone:grid）；
+   * 链上有被移动节点自身 → 拒绝（子树）；找不到 zone 根 → 拒绝（必须挂形态区）。
+   */
+  private async assertPlacement(
+    clientId: number,
+    nodeType: number,
+    parentId: number | null,
+    movingId?: number,
+  ): Promise<void> {
+    const mobile = await this.isMobileClient(clientId)
+    if (!mobile) {
+      // WEB：现状三层规则只需要 parentType。
+      let parentType: number | null = null
+      if (parentId !== null) {
+        const parent = await this.requireMenu(parentId)
+        if (parent.client_id !== clientId) throw new BusinessException('不能跨客户端移动菜单')
+        parentType = parent.menu_type
+      }
+      assertMenuPlacement({ zone: 'WEB', nodeType, depth: 1, parentType, tabSiblingCount: 0, mobile: false })
+      return
+    }
+
+    // 移动端：直接父类型先定位（zone 推导依赖它）。
+    const directParentType = parentId === null ? null : (await this.requireMenu(parentId)).menu_type
+
+    // 按钮跟随菜单：BUTTON 区不占屏、不占形态区层级（design D5），不要求 zone 根祖先。
+    if (nodeType === 2) {
+      assertMenuPlacement({
+        zone: 'BUTTON',
+        nodeType,
+        depth: 1,
+        parentType: directParentType,
+        tabSiblingCount: 0,
+        mobile: true,
+      })
+      return
+    }
+
+    // 目录/菜单：沿 parentId 链上溯找 zone 根（component=mzone:tabs|mzone:grid）。
+    let zone: MenuZone | null = null
+    let zoneRootId: number | null = null
+    let depth = 1
+    let cursorId = parentId
+    let hops = 0
+    while (cursorId !== null) {
+      const node = await this.requireMenu(cursorId)
+      if (node.client_id !== clientId) throw new BusinessException('不能跨客户端移动菜单')
+      if (movingId !== undefined && node.id === movingId) {
+        throw new BusinessException('不能把菜单移动到自己的子菜单之下')
+      }
+      if (isZoneRootComponent(node.component)) {
+        zone = node.component === 'mzone:tabs' ? 'TAB' : 'GRID'
+        zoneRootId = node.id
+        break
+      }
+      depth += 1
+      cursorId = node.parent_id
+      if (++hops > MAX_DEPTH) throw new BusinessException('菜单层级过深')
+    }
+    if (zone === null) {
+      throw new BusinessException('移动端菜单必须挂在底部 Tab 区或工作台宫格区之下')
+    }
+
+    let tabSiblingCount = 0
+    if (zone === 'TAB') {
+      // Tab 子项是 zone 根的直接子级；计数排除被移节点自身（对齐 Java removeIf）。
+      const all = await this.repo.listAllMenus(clientId)
+      tabSiblingCount = all.filter((m) => m.parent_id === zoneRootId && m.id !== movingId).length
+    }
+    assertMenuPlacement({
+      zone,
+      nodeType,
+      depth,
+      parentType: directParentType,
+      tabSiblingCount,
+      mobile: true,
+    })
+  }
+
+  /** 删除菜单（**软删除**）；zone 根 locked 拒绝；有子菜单时拒绝（现状文案）。 */
   async deleteMenu(id: number): Promise<void> {
-    await this.requireMenu(id)
+    const row = await this.requireMenu(id)
+    assertZoneRootEditable(row.component, 'delete')
     if ((await this.repo.countMenusByParentId(id)) > 0) {
       throw new BusinessException('存在子菜单，无法删除')
     }
@@ -752,10 +955,10 @@ export class SystemService {
     return row
   }
 
-  /** 取单个菜单并组装其子树（对齐 Java `toMenuTree`，空 children 为 null）。 */
+  /** 取单个菜单并组装其子树（对齐 Java `toMenuTree`，空 children 为 null）。按归属端取树。 */
   private async menuTreeOf(id: number): Promise<MenuTreeVO> {
     const row = await this.requireMenu(id)
-    const menus = await this.repo.listAllMenus()
+    const menus = await this.repo.listAllMenus(row.client_id)
     const byParent = new Map<number | null, typeof menus>()
     for (const menu of menus) {
       const list = byParent.get(menu.parent_id) ?? []
@@ -766,6 +969,7 @@ export class SystemService {
       const children = (byParent.get(menu.id) ?? []).map(build)
       return {
         id: menu.id,
+        clientId: menu.client_id,
         parentId: menu.parent_id,
         menuName: menu.menu_name,
         menuType: menu.menu_type,
@@ -1151,6 +1355,7 @@ function toPostVO(row: PostRow): PostVO {
 /** 把 `MenuRow` 补成 `listAllMenus` 的元素形状（`menuTreeOf` 内部用）。 */
 function toMenuRowLike(row: MenuRow): {
   id: number
+  client_id: number
   parent_id: number | null
   menu_name: string
   menu_type: number
@@ -1162,6 +1367,7 @@ function toMenuRowLike(row: MenuRow): {
 } {
   return {
     id: row.id,
+    client_id: row.client_id,
     parent_id: row.parent_id,
     menu_name: row.menu_name,
     menu_type: row.menu_type,

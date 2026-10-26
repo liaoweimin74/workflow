@@ -56,11 +56,17 @@ public class LoginUserService {
         }
         List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
         Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
-        List<String> roles = roleRepository.findAllById(roleIds).stream()
+        // B5 端空态安全：roles 与权限码同口径按端过滤——非 portal 端只认本端角色。
+        // PermissionEvaluator 的 ROLE_ADMIN 绕过读此集合，不过滤即 admin 跨端放行页面 API（Node J5 冒烟实证 roles=[]）。
+        List<SysRole> ownRoles = roleRepository.findAllById(roleIds).stream()
+                .filter(r -> isPortal(clientId) || clientId.equals(r.getClientId()))
+                .collect(Collectors.toList());
+        List<String> roles = ownRoles.stream()
                 .map(SysRole::getRoleCode)
                 .collect(Collectors.toList());
 
-        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
+        Set<Long> scopedRoleIds = ownRoles.stream().map(SysRole::getId).collect(Collectors.toSet());
+        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(scopedRoleIds).stream()
                 .map(SysRoleMenu::getMenuId)
                 .collect(Collectors.toSet());
         // 端隔离沿用 PageAccessGuard 裁定：仅非 portal 端只认本端菜单权限码，portal 全量（存量零破坏）

@@ -406,9 +406,14 @@ public class AuthServiceImpl implements AuthService {
     private UserInfo buildUserInfo(SysUser user, Long clientId) {
         List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
         Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
-        List<SysRole> roles = roleRepository.findAllById(roleIds);
+        // B5 端空态安全（对齐 node 冒烟口径 X-Client-Id=2 → roles=[]）：
+        // 非 portal 端只认本端角色，授权码从本端角色推导，portal 全量零破坏
+        List<SysRole> roles = roleRepository.findAllById(roleIds).stream()
+                .filter(r -> isPortal(clientId) || clientId.equals(r.getClientId()))
+                .collect(Collectors.toList());
+        Set<Long> ownRoleIds = roles.stream().map(SysRole::getId).collect(Collectors.toSet());
 
-        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
+        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(ownRoleIds).stream()
                 .map(SysRoleMenu::getMenuId)
                 .collect(Collectors.toSet());
         // 端隔离沿用裁定：仅非 portal 端只认本端菜单权限码，portal 全量（存量零破坏）

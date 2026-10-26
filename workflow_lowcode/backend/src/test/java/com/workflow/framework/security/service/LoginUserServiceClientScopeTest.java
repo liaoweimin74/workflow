@@ -61,6 +61,8 @@ class LoginUserServiceClientScopeTest {
         SysRole role = new SysRole();
         role.setId(5L);
         role.setRoleCode("ROLE_DRIVER");
+        // 角色挂端（V73 列）：driver 的角色属司机端(7)，与其本端菜单授权(61)一致
+        role.setClientId(7L);
         when(roleRepository.findAllById(any())).thenReturn(List.of(role));
 
         SysRoleMenu rm1 = new SysRoleMenu();
@@ -113,5 +115,61 @@ class LoginUserServiceClientScopeTest {
         when(userRepository.findById(9L)).thenReturn(Optional.of(disabled));
 
         assertThat(service.buildLoginUser(9L, 7L, "MP")).isNull();
+    }
+
+    // ------------------------------------------------------------ B5 端空态安全（roles 同端过滤，封 admin 跨端绕过）
+
+    /** 以「admin 画像」重布夹具：ROLE_ADMIN 挂 portal(1)，并持有一个司机端菜单授权 */
+    private void asAdminWithPortalRole() {
+        SysRole admin = new SysRole();
+        admin.setId(1L);
+        admin.setRoleCode("ROLE_ADMIN");
+        admin.setClientId(1L);
+        when(roleRepository.findAllById(any())).thenReturn(List.of(admin));
+        SysUserRole urAdmin = new SysUserRole();
+        urAdmin.setUserId(9L);
+        urAdmin.setRoleId(1L);
+        when(userRoleRepository.findByUserId(9L)).thenReturn(List.of(urAdmin));
+
+        SysRoleMenu rm = new SysRoleMenu();
+        rm.setRoleId(1L);
+        rm.setMenuId(63L);
+        // 真实 JPA 语义：空角色集合 → 空授权行（桩必须看参数，否则端过滤推导断言失真）
+        when(roleMenuRepository.findByRoleIdIn(any())).thenAnswer(inv ->
+                ((java.util.Collection<?>) inv.getArgument(0)).contains(1L) ? List.of(rm) : List.of());
+        when(menuRepository.findAllById(any())).thenAnswer(inv ->
+                ((java.util.Collection<?>) inv.getArgument(0)).contains(63L)
+                        ? List.of(menu(63L, "order:list", 7L)) : List.of());
+    }
+
+    @Test
+    void nonPortalClient_rolesScopedToOwnClient_adminBypassBlocked() {
+        asAdminWithPortalRole();
+
+        LoginUser loginUser = service.buildLoginUser(9L, 7L, "MP");
+
+        // 空态裁定（对齐 Node J5 冒烟 roles=[]）：portal 角色不带入他端——
+        // PermissionEvaluator 的 ROLE_ADMIN 绕过读的就是这个集合，必须为空
+        assertThat(loginUser.getRoles()).isEmpty();
+        // 权限码即使指向本端菜单，也随角色过滤一并失效（无本端角色=无授权来源）
+        assertThat(loginUser.getPermissions()).isEmpty();
+    }
+
+    @Test
+    void nonPortalClient_keepsOwnClientRoles() {
+        // driver 的 ROLE_DRIVER 挂司机端(7)：本端登录照常携带（绕过/角色语义只在跨端时被剥）
+        LoginUser loginUser = service.buildLoginUser(9L, 7L, "MP");
+
+        assertThat(loginUser.getRoles()).containsExactly("ROLE_DRIVER");
+    }
+
+    @Test
+    void portalClient_keepsAllRoles_zeroBreakage() {
+        asAdminWithPortalRole();
+
+        LoginUser loginUser = service.buildLoginUser(9L, 1L, "WEB");
+
+        assertThat(loginUser.getRoles()).containsExactly("ROLE_ADMIN");
+        assertThat(loginUser.getPermissions()).containsExactly("order:list");
     }
 }

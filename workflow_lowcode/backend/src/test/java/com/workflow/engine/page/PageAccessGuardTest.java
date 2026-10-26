@@ -183,4 +183,42 @@ class PageAccessGuardTest {
 
         assertThatCode(() -> guard.assertPageAccess("leave-query")).doesNotThrowAnyException();
     }
+
+    // ------------------------------------------------------------ B5 端空态安全（真实 evaluator，不 mock 绕过语义）
+
+    /** 用真实 PermissionEvaluator 重建 guard：钉「空端态不放行」端到端语义 */
+    private void withRealEvaluator() {
+        guard = new PageAccessGuard(menuRepository, new com.workflow.framework.security.permission.PermissionEvaluator());
+    }
+
+    private void loginAsWithGrants(Long clientId, List<String> roles, Set<String> permissions) {
+        LoginUser loginUser = new LoginUser(1L, "u", null, roles, permissions, true, clientId, "MP");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(loginUser, null, List.of()));
+    }
+
+    @Test
+    void nonPortalEmptyState_pageWithOwnClientMenu_still403() {
+        withRealEvaluator();
+        loginAsWithGrants(7L, List.of(), Set.of()); // LoginUserService 修复后的 admin 端空态产物
+        menuB.setClientId(7L); // 页面在本端有挂接菜单——端过滤剔除不了，授权段必须拦住
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA, menuB));
+
+        // roles=[] → 无 ROLE_ADMIN 绕过；permissions=[] → 无码命中 → 403，页面 API 不放行
+        assertThatThrownBy(() -> guard.assertPageAccess("leave-query"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无页面访问权限");
+    }
+
+    @Test
+    void portalAdmin_withRealEvaluator_grants_zeroBreakage() {
+        withRealEvaluator();
+        loginAsWithGrants(1L, List.of("ROLE_ADMIN"), Set.of());
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA));
+
+        // portal 端 admin 绕过语义保持（存量零破坏——修复只剥跨端携带，不动端内特权）
+        assertThatCode(() -> guard.assertPageAccess("leave-query")).doesNotThrowAnyException();
+    }
 }

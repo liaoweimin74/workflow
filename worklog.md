@@ -10214,3 +10214,19 @@ Work Log:
 
 Stage Summary:
 - 事件 #153 单轮闭环，累计恢复 153 次，零 mvn 137 次
+
+---
+Task ID: r306
+Agent: main
+Task: 轻量运维巡检 2026-10-26 15:05 (Job 446961)
+
+Work Log:
+- 巡检发现：环境重供给 #154（标准型）——8080 Node 假绿 no such table: SYS_USER，bun 残留（src/index.ts/install/run dev），3000 三链路 000，mariadbd 幸存；首轮 dump-db 报 workflow dump 无效
+- pkill 五连 + jar-parts checkout 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 6 次完整退出型）；注意：recover 日志称「无 jar 备份」走了重建分支但 68s 即完成，结果真绿，备份路径探测待观察
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3306=mariadbd/1222、3000=MainThread/1284、8080=java/1530）
+- 收口 dump OK（20261026-070838 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #154，累计 154 次全部单轮闭环；沙箱故障窗口 r304-r305 两连后恢复
+- 内存 3.33GB（峰值），oom_kill 0；四链路全绿真绿，回合结束

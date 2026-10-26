@@ -12,6 +12,7 @@ public class RoleDataPermissionDTO {
     private List<Map<String, Object>> conditions;
     private List<String> dataSourceIds;
     private boolean granted;
+    private List<Map<String, Object>> fieldPolicies;
 
     public Long getPermissionId() { return permissionId; }
     public void setPermissionId(Long permissionId) { this.permissionId = permissionId; }
@@ -25,4 +26,6 @@ public class RoleDataPermissionDTO {
     public void setDataSourceIds(List<String> dataSourceIds) { this.dataSourceIds = dataSourceIds; }
     public boolean isGranted() { return granted; }
     public void setGranted(boolean granted) { this.granted = granted; }
+    public List<Map<String, Object>> getFieldPolicies() { return fieldPolicies; }
+    public void setFieldPolicies(List<Map<String, Object>> fieldPolicies) { this.fieldPolicies = fieldPolicies; }
 }

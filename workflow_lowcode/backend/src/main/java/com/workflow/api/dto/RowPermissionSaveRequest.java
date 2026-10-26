@@ -23,6 +23,9 @@ public class RowPermissionSaveRequest {
     /** 关联的数据源 id；至少一个，且须为可施加范围（FORM / SQL）的类型 */
     private List<String> dataSourceIds;
 
+    /** 字段策略 [{column,policy,rule}, ...]；列须在每个关联源的声明输出列内；空=无策略 */
+    private List<Map<String, Object>> fieldPolicies;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
@@ -33,4 +36,6 @@ public class RowPermissionSaveRequest {
     public void setConditions(List<Map<String, Object>> conditions) { this.conditions = conditions; }
     public List<String> getDataSourceIds() { return dataSourceIds; }
     public void setDataSourceIds(List<String> dataSourceIds) { this.dataSourceIds = dataSourceIds; }
+    public List<Map<String, Object>> getFieldPolicies() { return fieldPolicies; }
+    public void setFieldPolicies(List<Map<String, Object>> fieldPolicies) { this.fieldPolicies = fieldPolicies; }
 }

@@ -67,7 +67,7 @@ public class RowPermissionController {
     public R<RowPermissionDTO> save(@RequestBody RowPermissionSaveRequest req) {
         requireAdmin();
         Detail saved = objectService.save(new Input(req.getId(), req.getName(), req.getRemark(),
-                req.getConditions(), req.getDataSourceIds()));
+                req.getConditions(), req.getDataSourceIds(), req.getFieldPolicies()));
         return R.ok(toDTO(saved));
     }
 
@@ -85,6 +85,7 @@ public class RowPermissionController {
         dto.setRemark(detail.permission().getRemark());
         dto.setConditions(detail.conditions());
         dto.setDataSourceIds(detail.dataSourceIds());
+        dto.setFieldPolicies(detail.fieldPolicies());
         dto.setGrants(detail.grants().stream().map(grant -> {
             RowPermissionDTO.GrantDTO item = new RowPermissionDTO.GrantDTO();
             item.setSubjectType(grant.subjectType());

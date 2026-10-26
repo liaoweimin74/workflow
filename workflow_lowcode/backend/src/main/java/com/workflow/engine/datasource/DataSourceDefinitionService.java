@@ -14,6 +14,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.datasource.scope.DataScopeService;
+import com.workflow.engine.datasource.scope.FieldPolicyService;
 import com.workflow.engine.form.bizdata.BizDataHandler;
 import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.bizdata.JoinSqlGenerator;
@@ -97,6 +98,7 @@ public class DataSourceDefinitionService {
     private final ObjectMapper objectMapper;
     private final List<DataSourceAdapter> adapters;
     private final DataScopeService dataScopeService;
+    private final FieldPolicyService fieldPolicyService;
     private final List<BizDataHandler> bizDataHandlers;
 
     /**
@@ -109,6 +111,7 @@ public class DataSourceDefinitionService {
                                        ObjectMapper objectMapper,
                                        List<DataSourceAdapter> adapters,
                                        DataScopeService dataScopeService,
+                                       FieldPolicyService fieldPolicyService,
                                        List<BizDataHandler> bizDataHandlers) {
         this.dsRepository = dsRepository;
         this.formDefRepository = formDefRepository;
@@ -117,6 +120,7 @@ public class DataSourceDefinitionService {
         this.objectMapper = objectMapper;
         this.adapters = adapters == null ? List.of() : adapters;
         this.dataScopeService = dataScopeService;
+        this.fieldPolicyService = fieldPolicyService;
         this.bizDataHandlers = bizDataHandlers == null ? List.of() : bizDataHandlers;
     }
 
@@ -406,7 +410,7 @@ public class DataSourceDefinitionService {
         }
         requireScopeEnforceable(id);
         dataScopeService.apply(id, req);
-        return queryAdapter(id, req);
+        return fieldPolicyService.applyToPage(id, queryAdapter(id, req));
     }
 
     /**
@@ -418,6 +422,7 @@ public class DataSourceDefinitionService {
             req = new AggregateRequest();
         }
         requireScopeEnforceable(id);
+        fieldPolicyService.requireAggregateAllowed(id, req);
         dataScopeService.apply(id, req);
         return adapterOf(id).aggregate(getById(id), req);
     }
@@ -442,9 +447,9 @@ public class DataSourceDefinitionService {
             if (scoped == null) {
                 throw new BusinessException(404, "记录不存在或无权访问: " + rowId);
             }
-            return scoped;
+            return fieldPolicyService.applyToRow(id, scoped);
         }
-        return adapterOf(id).get(getById(id), rowId);
+        return fieldPolicyService.applyToRow(id, adapterOf(id).get(getById(id), rowId));
     }
 
     /**
@@ -459,7 +464,7 @@ public class DataSourceDefinitionService {
      */
     public void updateData(String id, String rowId, Map<String, Object> data, Integer version) {
         requireRowWritable(id, rowId);
-        adapterOf(id).update(getById(id), rowId, data, version);
+        adapterOf(id).update(getById(id), rowId, fieldPolicyService.stripForWrite(id, data), version);
     }
 
     /**

@@ -2,6 +2,7 @@ package com.workflow.engine.datasource.scope;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
@@ -87,6 +88,8 @@ public class RowPermissionObjectService {
         List<DataSourceDefinition> sources = requireSources(input.dataSourceIds());
         List<String> dataSourceIds = sources.stream().map(DataSourceDefinition::getId).toList();
         requireColumnsUsable(sources, conditions);
+        List<FieldPolicy> fieldPolicies = FieldPolicies.fromEntries(input.fieldPolicies());
+        requirePolicyColumnsKnown(sources, fieldPolicies);
         String tenantId = tenantProvider.getTenantId();
 
         RowPermission permission;
@@ -99,6 +102,7 @@ public class RowPermissionObjectService {
         permission.setName(name);
         permission.setRemark(remark);
         permission.setConditionsJson(writeConditions(conditions));
+        permission.setFieldPoliciesJson(FieldPolicies.writeJson(fieldPolicies));
         permission = permissionRepository.save(permission);
 
         syncSources(tenantId, permission.getId(), dataSourceIds);
@@ -242,6 +246,35 @@ public class RowPermissionObjectService {
         return name == null || name.isBlank() ? source.getId() : name + "（" + source.getType() + "）";
     }
 
+    /**
+     * 字段策略列必须被每个关联源声明为输出列（消息与列集口径见 {@link FieldPolicies#requireColumnsKnown}）：
+     * 生效侧对未知列不会报错、只会静默无匹配，等于策略失效——比条件列更该在保存期把关。
+     */
+    private void requirePolicyColumnsKnown(List<DataSourceDefinition> sources, List<FieldPolicy> policies) {
+        if (policies.isEmpty()) {
+            return;
+        }
+        Map<String, Set<String>> columnsBySource = new LinkedHashMap<>();
+        Map<String, String> namesById = new LinkedHashMap<>();
+        for (DataSourceDefinition source : sources) {
+            columnsBySource.put(source.getId(), declaredColumns(source.getId()));
+            namesById.put(source.getId(), sourceDisplayName(source));
+        }
+        FieldPolicies.requireColumnsKnown(policies, columnsBySource, namesById::get);
+    }
+
+    /** 源声明的输出列 key 集（metadata 口径；内置列不在其中，天然排除在策略范围外）。 */
+    private Set<String> declaredColumns(String dataSourceId) {
+        DataSourceMetadata metadata = dataSourceService.metadata(dataSourceId);
+        if (metadata == null || metadata.getColumns() == null) {
+            return Set.of();
+        }
+        return metadata.getColumns().stream()
+                .map(ColumnConfig::getKey)
+                .filter(key -> key != null && !key.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private String writeConditions(List<Map<String, Object>> conditions) {
         try {
             return objectMapper.writeValueAsString(conditions);
@@ -293,12 +326,20 @@ public class RowPermissionObjectService {
                 .map(grant -> new GrantView(grant.getSubjectType(), grant.getSubjectKey()))
                 .toList();
         return new Detail(permission, dataScopeService.parseStoredConditions(permission.getConditionsJson()),
-                dataSourceIds, grants);
+                dataSourceIds, grants,
+                FieldPolicies.toJsonEntries(FieldPolicies.parse(permission.getFieldPoliciesJson())));
     }
 
     public record Input(Long id, String name, String remark,
                         List<Map<String, Object>> conditions,
-                        List<String> dataSourceIds) {
+                        List<String> dataSourceIds,
+                        List<Map<String, Object>> fieldPolicies) {
+
+        /** 兼容旧 5 参调用点：不带策略 = null（写 NULL 列）。 */
+        public Input(Long id, String name, String remark,
+                     List<Map<String, Object>> conditions, List<String> dataSourceIds) {
+            this(id, name, remark, conditions, dataSourceIds, null);
+        }
     }
 
     /** 候选条件列（配置辅助，只给展示用信息；可筛性判定不在这里重复）。 */
@@ -309,6 +350,7 @@ public class RowPermissionObjectService {
     }
 
     public record Detail(RowPermission permission, List<Map<String, Object>> conditions,
-                         List<String> dataSourceIds, List<GrantView> grants) {
+                         List<String> dataSourceIds, List<GrantView> grants,
+                         List<Map<String, Object>> fieldPolicies) {
     }
 }

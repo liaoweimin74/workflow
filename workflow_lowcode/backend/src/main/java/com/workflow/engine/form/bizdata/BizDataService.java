@@ -6,6 +6,7 @@ import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
+import com.workflow.engine.datasource.scope.FieldPolicyService;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logicflow.service.FormLogicBindingService;
@@ -61,9 +62,25 @@ public class BizDataService {
     }
 
     /**
-     * @param autoNumberHook 自动编号填充钩子（Task 3-d，Spring 主构造注入）
+     * @param autoNumberHook 自动编号填充钩子（Task 3-d；兼容重载为 null = create 判空跳过）
      * @param handlers       Spring 自动注入所有 BizDataHandler bean（无则空列表）
      * @param guards         Spring 自动注入所有 FormProcessGuard bean（无则空列表）
+     */
+    public BizDataService(JdbcTemplate jdbcTemplate,
+                          DynamicTableManager tableManager,
+                          FormDefinitionService formDefService,
+                          TenantProvider tenantProvider,
+                          ObjectMapper objectMapper,
+                          List<BizDataHandler> handlers,
+                          List<FormProcessGuard> guards,
+                          FormLogicBindingService logicBindings,
+                          AutoNumberHook autoNumberHook) {
+        this(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper,
+                handlers, guards, logicBindings, autoNumberHook, null);
+    }
+
+    /**
+     * @param fieldPolicyService 字段策略生效服务（resolve 显示文本掩码封口；null = 兼容构造不掩）
      */
     @Autowired
     public BizDataService(JdbcTemplate jdbcTemplate,
@@ -74,8 +91,10 @@ public class BizDataService {
                           List<BizDataHandler> handlers,
                           List<FormProcessGuard> guards,
                           FormLogicBindingService logicBindings,
-                          AutoNumberHook autoNumberHook) {
-        this.support = new BizDataSupport(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper);
+                          AutoNumberHook autoNumberHook,
+                          FieldPolicyService fieldPolicyService) {
+        this.support = new BizDataSupport(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                objectMapper, fieldPolicyService);
         this.tenantProvider = tenantProvider;
         this.guards = guards == null ? List.of() : guards;
         this.handlerIndex = buildHandlerIndex(handlers);

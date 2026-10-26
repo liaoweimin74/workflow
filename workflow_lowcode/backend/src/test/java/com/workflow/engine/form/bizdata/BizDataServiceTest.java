@@ -600,6 +600,35 @@ class BizDataServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
     }
 
+    /**
+     * 引用显示文本出口过列策略，且封口发生在默认显示列解析「之后」——
+     * displayField 缺省时选中受控列同样必须掩，否则默认列形态就是绕过口。
+     */
+    @Test
+    void resolveByFormKey_masksTexts_afterDefaultColumnResolution() {
+        lenient().when(tableManager.tableExists("wf_biz_emp_profile")).thenReturn(true);
+        when(formDefService.getBusinessColumnsByKey("emp_profile"))
+                .thenReturn(List.of(simpleColumn("name", "VARCHAR", 255)));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三")));
+        com.workflow.engine.datasource.scope.FieldPolicyService fieldPolicies =
+                mock(com.workflow.engine.datasource.scope.FieldPolicyService.class);
+        when(fieldPolicies.maskResolveTexts(eq("emp_profile"), eq("name"), any()))
+                .thenAnswer(inv -> {
+                    Map<String, String> texts = inv.getArgument(2);
+                    Map<String, String> out = new java.util.LinkedHashMap<>();
+                    texts.forEach((id, t) -> out.put(id, "张*"));
+                    return out;
+                });
+        BizDataService svc = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(), List.of(), mock(FormLogicBindingService.class),
+                null, fieldPolicies);
+
+        Map<String, String> map = svc.resolveByFormKey("emp_profile", List.of("a"), null);
+
+        assertThat(map).containsEntry("a", "张*");
+    }
+
     // ==================== 引用统计（referenced-count） ====================
 
     @Test

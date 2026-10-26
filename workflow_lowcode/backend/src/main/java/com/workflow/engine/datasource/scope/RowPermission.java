@@ -28,6 +28,10 @@ public class RowPermission extends BaseEntity {
     @Column(name = "conditions_json", nullable = false, columnDefinition = "TEXT")
     private String conditionsJson;
 
+    /** 字段策略基线（V78）：JSON 数组 [{column,policy,rule}]；NULL = 无策略（全列可见）。 */
+    @Column(name = "field_policies_json", columnDefinition = "TEXT")
+    private String fieldPoliciesJson;
+
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getName() { return name; }
@@ -36,4 +40,6 @@ public class RowPermission extends BaseEntity {
     public void setRemark(String remark) { this.remark = remark; }
     public String getConditionsJson() { return conditionsJson; }
     public void setConditionsJson(String conditionsJson) { this.conditionsJson = conditionsJson; }
+    public String getFieldPoliciesJson() { return fieldPoliciesJson; }
+    public void setFieldPoliciesJson(String fieldPoliciesJson) { this.fieldPoliciesJson = fieldPoliciesJson; }
 }

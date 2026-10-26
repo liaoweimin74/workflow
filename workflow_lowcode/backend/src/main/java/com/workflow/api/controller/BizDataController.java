@@ -54,7 +54,7 @@ public class BizDataController {
     @GetMapping("/{formKey}")
     public R<BizDataPageVO> query(@PathVariable String formKey, BizDataQueryRequest req) {
         scopeGuard.apply(formKey, req);
-        return R.ok(bizDataService.query(formKey, req));
+        return R.ok(scopeGuard.applyFieldPolicy(formKey, bizDataService.query(formKey, req)));
     }
 
     /**
@@ -64,7 +64,7 @@ public class BizDataController {
     public R<BizDataVO> getById(@PathVariable String formKey,
                                 @PathVariable String id) {
         scopeGuard.requireReadable(formKey, id);
-        return R.ok(bizDataService.getById(formKey, id));
+        return R.ok(scopeGuard.applyFieldPolicyRow(formKey, bizDataService.getById(formKey, id)));
     }
 
     /**
@@ -87,7 +87,7 @@ public class BizDataController {
                                @RequestBody Map<String, Object> data) {
         scopeGuard.requireWritable(formKey, id);
         Integer version = data.get("version") instanceof Number n ? n.intValue() : null;
-        return R.ok(bizDataService.update(formKey, id, data, version));
+        return R.ok(bizDataService.update(formKey, id, scopeGuard.stripFieldPolicy(formKey, data), version));
     }
 
     /**

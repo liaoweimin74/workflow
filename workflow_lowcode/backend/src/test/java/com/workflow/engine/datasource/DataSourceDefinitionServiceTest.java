@@ -11,6 +11,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.datasource.scope.DataScopeService;
+import com.workflow.engine.datasource.scope.FieldPolicyService;
 import com.workflow.engine.form.bizdata.BizDataHandler;
 import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.entity.FormDefinition;
@@ -29,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +67,9 @@ class DataSourceDefinitionServiceTest {
     @Mock
     private DataScopeService dataScopeService;
 
+    @Mock
+    private FieldPolicyService fieldPolicyService;
+
     private ObjectMapper objectMapper = new ObjectMapper();
     private DataSourceDefinitionService service;
 
@@ -79,8 +84,12 @@ class DataSourceDefinitionServiceTest {
         lenient().when(formAdapter.supports("FORM")).thenReturn(true);
         lenient().when(formAdapter.supports("SYSTEM")).thenReturn(false);
         lenient().when(formAdapter.supports("API")).thenReturn(false);
+        // 字段策略缺省透传：接线用例单独 stub 覆盖，其余用例不受掩码语义干扰
+        lenient().when(fieldPolicyService.applyToPage(any(), any())).thenAnswer(inv -> inv.getArgument(1));
+        lenient().when(fieldPolicyService.applyToRow(any(), any())).thenAnswer(inv -> inv.getArgument(1));
+        lenient().when(fieldPolicyService.stripForWrite(any(), any())).thenAnswer(inv -> inv.getArgument(1));
         service = new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
-                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, List.of());
+                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, fieldPolicyService, List.of());
     }
 
     @AfterEach
@@ -491,6 +500,85 @@ class DataSourceDefinitionServiceTest {
         service.aggregateData(DS_ID, req);
 
         verify(dataScopeService).apply(DS_ID, req);
+    }
+
+    // ==================== 字段策略序列化接线 ====================
+
+    /** 列表出口：适配器取回的页必须过列策略——页面渲染、Excel 导出、数据源直查三条通道都汇在这一处。 */
+    @Test
+    void queryData_resultPassesThroughFieldPolicy() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        LinkedHashMap<String, Object> raw = new LinkedHashMap<>();
+        raw.put("phone", "13812345678");
+        BizDataPageVO page = new BizDataPageVO(List.of(new BizDataVO("r1", raw, 1, null, null)), 1, 1, 20);
+        when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class))).thenReturn(page);
+        when(fieldPolicyService.applyToPage(eq(DS_ID), same(page))).thenAnswer(inv -> {
+            BizDataPageVO p = inv.getArgument(1);
+            p.getRecords().forEach(r -> r.getData().put("phone", "138****5678"));
+            return p;
+        });
+
+        BizDataPageVO out = service.queryData(DS_ID, new BizDataQueryRequest());
+
+        assertEquals("138****5678", out.getRecords().get(0).getData().get("phone"));
+    }
+
+    /** 详情出口：单条同样过列策略，否则「列表看不见、详情直读」绕开脱敏。 */
+    @Test
+    void getData_resultPassesThroughFieldPolicy() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(false);
+        LinkedHashMap<String, Object> raw = new LinkedHashMap<>();
+        raw.put("phone", "13812345678");
+        BizDataVO row = new BizDataVO("r1", raw, 1, null, null);
+        when(formAdapter.get(ds, "r1")).thenReturn(row);
+        when(fieldPolicyService.applyToRow(DS_ID, row)).thenAnswer(inv -> {
+            BizDataVO v = inv.getArgument(1);
+            v.getData().put("phone", "138****5678");
+            return v;
+        });
+
+        BizDataVO out = service.getData(DS_ID, "r1");
+
+        assertEquals("138****5678", out.getData().get("phone"));
+    }
+
+    /** 统计出口：命中列策略的聚合必须当场拒绝，且不把聚合打到适配器上。 */
+    @Test
+    void aggregateData_coveredColumnRejected_beforeQueryRuns() {
+        AggregateRequest req = new AggregateRequest();
+        req.setGroup("phone");
+        doThrow(new BusinessException(400, "该列受字段策略限制，不能参与统计: 分组列 phone"))
+                .when(fieldPolicyService).requireAggregateAllowed(DS_ID, req);
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.aggregateData(DS_ID, req));
+
+        assertEquals(400, e.getCode());
+        verify(formAdapter, never()).aggregate(any(), any());
+    }
+
+    /** 写出口：被掩列从载荷剔除后才交给适配器——防「138****5678」回写污染真值。 */
+    @Test
+    void updateData_stripsCoveredColumns_beforeHandingToAdapter() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dataScopeService.hasScope(DS_ID)).thenReturn(false);
+        LinkedHashMap<String, Object> data = new LinkedHashMap<>();
+        data.put("phone", "138****5678");
+        data.put("age", 31);
+        LinkedHashMap<String, Object> stripped = new LinkedHashMap<>();
+        stripped.put("age", 31);
+        when(fieldPolicyService.stripForWrite(DS_ID, data)).thenReturn(stripped);
+
+        service.updateData(DS_ID, "r1", data, 2);
+
+        verify(formAdapter).update(eq(ds), eq("r1"), same(stripped), eq(2));
     }
 
     // ==================== 单条读取与写路径的可见集合门禁 ====================
@@ -1141,7 +1229,7 @@ class DataSourceDefinitionServiceTest {
 
     private DataSourceDefinitionService serviceWithHandlers(BizDataHandler... handlers) {
         return new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
-                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, List.of(handlers));
+                tenantProvider, objectMapper, List.of(formAdapter), dataScopeService, fieldPolicyService, List.of(handlers));
     }
 
     /** 只声明接管查询的钩子替身：honors 参数模拟「有没有声明自己会把可见集合透传下去」。 */

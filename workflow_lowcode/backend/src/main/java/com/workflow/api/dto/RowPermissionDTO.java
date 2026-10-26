@@ -14,6 +14,7 @@ public class RowPermissionDTO {
     private List<Map<String, Object>> conditions;
     private List<String> dataSourceIds;
     private List<GrantDTO> grants;
+    private List<Map<String, Object>> fieldPolicies;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -27,6 +28,8 @@ public class RowPermissionDTO {
     public void setDataSourceIds(List<String> dataSourceIds) { this.dataSourceIds = dataSourceIds; }
     public List<GrantDTO> getGrants() { return grants; }
     public void setGrants(List<GrantDTO> grants) { this.grants = grants; }
+    public List<Map<String, Object>> getFieldPolicies() { return fieldPolicies; }
+    public void setFieldPolicies(List<Map<String, Object>> fieldPolicies) { this.fieldPolicies = fieldPolicies; }
 
     public static class GrantDTO {
 

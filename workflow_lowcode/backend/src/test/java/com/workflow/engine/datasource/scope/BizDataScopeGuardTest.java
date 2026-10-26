@@ -38,13 +38,15 @@ class BizDataScopeGuardTest {
 
     private DataScopeService dataScopeService;
     private BizDataService bizDataService;
+    private FieldPolicyService fieldPolicyService;
     private BizDataScopeGuard guard;
 
     @BeforeEach
     void setUp() {
         dataScopeService = mock(DataScopeService.class);
         bizDataService = mock(BizDataService.class);
-        guard = new BizDataScopeGuard(dataScopeService, bizDataService, new ObjectMapper());
+        fieldPolicyService = mock(FieldPolicyService.class);
+        guard = new BizDataScopeGuard(dataScopeService, bizDataService, fieldPolicyService, new ObjectMapper());
     }
 
     /** 受控时把可见集合交给 DataScopeService（条件构造出口仍在它那里）。 */
@@ -159,5 +161,50 @@ class BizDataScopeGuardTest {
         ArgumentCaptor<BizDataQueryRequest> probed = ArgumentCaptor.forClass(BizDataQueryRequest.class);
         verify(bizDataService).query(eq(FORM_KEY), probed.capture());
         assertSame(applied.getValue(), probed.getValue());
+    }
+
+    // ==================== 字段策略出口（列收紧与行范围同通道） ====================
+
+    /** 列表出口：受控表单的页必须带反查出的数据源 id 过列策略。 */
+    @Test
+    void applyFieldPolicy_delegates_with_resolved_data_source() {
+        BizDataPageVO page = new BizDataPageVO(List.of(), 0, 1, 10);
+        BizDataPageVO masked = new BizDataPageVO(List.of(), 0, 1, 10);
+        when(dataScopeService.dataSourceIdOfForm(FORM_KEY)).thenReturn("ds-x");
+        when(fieldPolicyService.applyToPage("ds-x", page)).thenReturn(masked);
+
+        assertSame(masked, guard.applyFieldPolicy(FORM_KEY, page));
+    }
+
+    /** 表未被任何数据源描述 = 不受控，列策略不付反查后的判定成本。 */
+    @Test
+    void applyFieldPolicy_unmanaged_form_passes_through() {
+        BizDataPageVO page = new BizDataPageVO(List.of(), 0, 1, 10);
+        when(dataScopeService.dataSourceIdOfForm(FORM_KEY)).thenReturn(null);
+
+        assertSame(page, guard.applyFieldPolicy(FORM_KEY, page));
+        verify(fieldPolicyService, never()).applyToPage(any(), any());
+    }
+
+    @Test
+    void applyFieldPolicyRow_delegates_with_resolved_data_source() {
+        BizDataVO row = new BizDataVO(ROW, Map.of("phone", "13812345678"), 1, null, null);
+        BizDataVO masked = new BizDataVO(ROW, Map.of("phone", "138****5678"), 1, null, null);
+        when(dataScopeService.dataSourceIdOfForm(FORM_KEY)).thenReturn("ds-x");
+        when(fieldPolicyService.applyToRow("ds-x", row)).thenReturn(masked);
+
+        assertSame(masked, guard.applyFieldPolicyRow(FORM_KEY, row));
+    }
+
+    @Test
+    void stripFieldPolicy_delegates_and_unmanaged_form_passes_through() {
+        Map<String, Object> data = Map.of("phone", "138****5678", "age", 31);
+        Map<String, Object> stripped = Map.of("age", 31);
+        when(dataScopeService.dataSourceIdOfForm(FORM_KEY)).thenReturn("ds-x");
+        when(fieldPolicyService.stripForWrite("ds-x", data)).thenReturn(stripped);
+        assertSame(stripped, guard.stripFieldPolicy(FORM_KEY, data));
+
+        when(dataScopeService.dataSourceIdOfForm("other_form")).thenReturn(null);
+        assertSame(data, guard.stripFieldPolicy("other_form", data));
     }
 }

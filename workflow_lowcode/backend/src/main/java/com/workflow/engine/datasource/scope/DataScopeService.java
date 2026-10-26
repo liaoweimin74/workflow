@@ -218,8 +218,10 @@ public class DataScopeService {
     /**
      * formKey → 描述该业务表的数据源 id（租户内 formKey 唯一，与 {@code DataSourceSyncListener}
      * / {@code ModuleExportService} 的既有约定一致）。
+     *
+     * <p>包内共享：字段策略的底表通道（{@link FieldPolicyService}）走同一反查，防两条通道口径漂移。
      */
-    private String dataSourceIdOfForm(String formKey) {
+    String dataSourceIdOfForm(String formKey) {
         if (formKey == null || formKey.isBlank()) {
             return null;
         }
@@ -229,8 +231,9 @@ public class DataScopeService {
                 .orElse(null);
     }
 
-    private static boolean isAdmin(LoginUser user) {
-        return user.getRoles() != null && user.getRoles().stream().anyMatch(ADMIN_ROLES::contains);
+    /** 管理员豁免（与 PermissionEvaluator / NotificationAdminAuthorization 的双 code 兼容一致）；包内共享防字段策略侧名单漂移。 */
+    static boolean isAdmin(LoginUser user) {
+        return user != null && user.getRoles() != null && user.getRoles().stream().anyMatch(ADMIN_ROLES::contains);
     }
 
     private Map<String, Object> leaf(String column, String op, Object value) {
@@ -515,7 +518,8 @@ public class DataScopeService {
         }
     }
 
-    private LoginUser currentUser() {
+    /** 当前登录主体（无安全上下文 = null，内部链路不因范围判定报错）；包内共享。 */
+    static LoginUser currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
             return loginUser;

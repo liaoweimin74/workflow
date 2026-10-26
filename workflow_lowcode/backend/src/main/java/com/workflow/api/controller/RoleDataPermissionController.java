@@ -46,7 +46,8 @@ public class RoleDataPermissionController {
     public R<Void> save(@PathVariable Long roleId, @RequestBody RoleDataPermissionSaveRequest request) {
         requireAdmin();
         List<Item> items = request.getItems() == null ? List.of() : request.getItems().stream()
-                .map(item -> item == null ? null : new Item(item.getPermissionId()))
+                .map(item -> item == null ? null
+                        : new Item(item.getPermissionId(), item.getFieldPolicies()))
                 .toList();
         roleDataPermissionService.save(roleId, items);
         return R.ok();
@@ -60,6 +61,7 @@ public class RoleDataPermissionController {
         dto.setConditions(view.conditions());
         dto.setDataSourceIds(view.dataSourceIds());
         dto.setGranted(view.granted());
+        dto.setFieldPolicies(view.fieldPolicies());
         return dto;
     }
 

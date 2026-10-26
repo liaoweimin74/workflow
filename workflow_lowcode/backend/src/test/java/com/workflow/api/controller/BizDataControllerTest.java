@@ -9,10 +9,12 @@ import com.workflow.engine.form.bizdata.BizDataService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -44,6 +46,10 @@ class BizDataControllerTest {
     void setUp() {
         bizDataService = mock(BizDataService.class);
         scopeGuard = mock(BizDataScopeGuard.class);
+        // 列策略缺省透传：接线用例单独 stub 覆盖，其余用例不受掩码语义干扰
+        when(scopeGuard.applyFieldPolicy(anyString(), any())).thenAnswer(inv -> inv.getArgument(1));
+        when(scopeGuard.applyFieldPolicyRow(anyString(), any())).thenAnswer(inv -> inv.getArgument(1));
+        when(scopeGuard.stripFieldPolicy(anyString(), any())).thenAnswer(inv -> inv.getArgument(1));
         controller = new BizDataController(bizDataService, scopeGuard);
     }
 
@@ -116,5 +122,53 @@ class BizDataControllerTest {
         verify(scopeGuard, never()).apply(any(), any());
         verify(scopeGuard, never()).requireReadable(any(), anyString());
         verify(scopeGuard, never()).requireWritable(any(), anyString());
+    }
+
+    // ==================== 字段策略出口接线（与行范围同闸门） ====================
+
+    /** 列表出口：服务取回的页必须过列策略掩码后才发——管理数据页是受控表第二通道。 */
+    @Test
+    void query_serves_field_policy_masked_page() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO raw = new BizDataPageVO(
+                List.of(new BizDataVO(ROW, Map.of("phone", "13812345678"), 1, null, null)), 1, 1, 20);
+        BizDataPageVO masked = new BizDataPageVO(
+                List.of(new BizDataVO(ROW, Map.of("phone", "138****5678"), 1, null, null)), 1, 1, 20);
+        when(bizDataService.query(FORM_KEY, req)).thenReturn(raw);
+        when(scopeGuard.applyFieldPolicy(FORM_KEY, raw)).thenReturn(masked);
+
+        BizDataPageVO out = controller.query(FORM_KEY, req).getData();
+
+        assertEquals("138****5678", out.getRecords().get(0).getData().get("phone"));
+    }
+
+    @Test
+    void get_by_id_serves_masked_row() {
+        BizDataVO raw = new BizDataVO(ROW, Map.of("phone", "13812345678"), 1, null, null);
+        BizDataVO masked = new BizDataVO(ROW, Map.of("phone", "138****5678"), 1, null, null);
+        when(bizDataService.getById(FORM_KEY, ROW)).thenReturn(raw);
+        when(scopeGuard.applyFieldPolicyRow(FORM_KEY, raw)).thenReturn(masked);
+
+        assertSame(masked, controller.getById(FORM_KEY, ROW).getData());
+        verify(scopeGuard).requireReadable(FORM_KEY, ROW);
+    }
+
+    /** 写出口：载荷先剔除被掩列再交给服务，否则「138****5678」会回写污染真值。 */
+    @Test
+    void update_strips_covered_columns_before_saving() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("phone", "138****5678");
+        data.put("age", 31);
+        data.put("version", 2);
+        Map<String, Object> stripped = new LinkedHashMap<>();
+        stripped.put("age", 31);
+        stripped.put("version", 2);
+        when(scopeGuard.stripFieldPolicy(FORM_KEY, data)).thenReturn(stripped);
+        when(bizDataService.update(FORM_KEY, ROW, stripped, 2))
+                .thenReturn(new BizDataVO(ROW, stripped, 2, null, null));
+
+        controller.update(FORM_KEY, ROW, data);
+
+        verify(bizDataService).update(FORM_KEY, ROW, stripped, 2);
     }
 }

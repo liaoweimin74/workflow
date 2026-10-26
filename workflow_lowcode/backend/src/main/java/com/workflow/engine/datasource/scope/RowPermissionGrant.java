@@ -33,6 +33,10 @@ public class RowPermissionGrant extends BaseEntity {
     @Column(name = "subject_key", length = 64, nullable = false)
     private String subjectKey;
 
+    /** 授予级字段策略覆写（V78）：同列以 grant 为准，其余跟对象基线；NULL = 完全跟基线。 */
+    @Column(name = "field_policies_json", columnDefinition = "TEXT")
+    private String fieldPoliciesJson;
+
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public Long getPermissionId() { return permissionId; }
@@ -41,6 +45,8 @@ public class RowPermissionGrant extends BaseEntity {
     public void setSubjectType(DataScopeSubject subjectType) { this.subjectType = subjectType; }
     public String getSubjectKey() { return subjectKey; }
     public void setSubjectKey(String subjectKey) { this.subjectKey = subjectKey; }
+    public String getFieldPoliciesJson() { return fieldPoliciesJson; }
+    public void setFieldPoliciesJson(String fieldPoliciesJson) { this.fieldPoliciesJson = fieldPoliciesJson; }
 
     /** 与 {@link DataScopeSubjectResolver} 产出的主体标识同格式（{@code TYPE:key}）。 */
     public String subjectRef() {

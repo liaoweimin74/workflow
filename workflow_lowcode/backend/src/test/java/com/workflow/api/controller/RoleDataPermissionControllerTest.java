@@ -63,7 +63,7 @@ class RoleDataPermissionControllerTest {
         login(List.of("admin"));
         when(service.list(2L)).thenReturn(List.of(new RoleDataPermissionService.View(
                 10L, "一线可见", "备注", List.of(Map.of("column", "owner_id", "op", "eq", "value", "{userId}")),
-                List.of("ds-1"), true)));
+                List.of("ds-1"), true, List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")))));
 
         RoleDataPermissionDTO dto = controller.list(2L).getData().get(0);
 
@@ -71,13 +71,15 @@ class RoleDataPermissionControllerTest {
         assertEquals("一线可见", dto.getPermissionName());
         assertEquals(List.of("ds-1"), dto.getDataSourceIds());
         assertTrue(dto.isGranted());
+        assertEquals(List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")),
+                dto.getFieldPolicies());
     }
 
     @Test
     void list_maps_ungranted_flag() {
         login(List.of("admin"));
         when(service.list(2L)).thenReturn(List.of(new RoleDataPermissionService.View(
-                10L, "一线可见", null, List.of(), List.of("ds-1"), false)));
+                10L, "一线可见", null, List.of(), List.of("ds-1"), false, List.of())));
 
         assertFalse(controller.list(2L).getData().get(0).isGranted());
     }
@@ -109,5 +111,21 @@ class RoleDataPermissionControllerTest {
         controller.save(2L, empty);
 
         verify(service).save(2L, List.of());
+    }
+
+    /** 授权级策略随条目透传给服务（保存期校验与落库在服务层，controller 只做映射）。 */
+    @Test
+    void save_maps_grant_field_policies() {
+        login(List.of("admin"));
+        RoleDataPermissionSaveRequest request = new RoleDataPermissionSaveRequest();
+        RoleDataPermissionSaveRequest.Item item = new RoleDataPermissionSaveRequest.Item();
+        item.setPermissionId(10L);
+        item.setFieldPolicies(List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")));
+        request.setItems(List.of(item));
+
+        controller.save(2L, request);
+
+        verify(service).save(eq(2L), eq(List.of(new RoleDataPermissionService.Item(10L,
+                List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE"))))));
     }
 }

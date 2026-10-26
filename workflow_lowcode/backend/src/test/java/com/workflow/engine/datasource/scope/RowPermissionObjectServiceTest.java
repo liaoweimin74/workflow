@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -66,6 +67,9 @@ class RowPermissionObjectServiceTest {
         // 默认两个源都有条件列：列可用性由具体用例收窄
         when(dataSourceService.scopeColumns(anyString()))
                 .thenAnswer(inv -> new HashSet<>(List.of("owner_id", "dept_id", "created_by")));
+        // 默认 metadata 含 phone：字段策略保存期校验读这一面，具体用例按需收窄
+        when(dataSourceService.metadata(anyString())).thenAnswer(inv -> metadata(
+                column("owner_id", "负责人"), column("dept_id", "归属部门"), column("phone", "手机号")));
     }
 
     @AfterEach
@@ -169,6 +173,75 @@ class RowPermissionObjectServiceTest {
         assertEquals(400, e.getCode());
         assertTrue(e.getMessage().contains("没有可施加范围条件的列"), e.getMessage());
         verify(permissionRepository, never()).save(any());
+    }
+
+    // ==================== 字段策略（对象基线，保存期校验） ====================
+
+    /** 合法策略随对象落库：存储 JSON 走 FieldPolicies 唯一协议口径（列/处置/规则齐全）。 */
+    @Test
+    void save_stores_validated_field_policies() throws Exception {
+        when(permissionRepository.save(any(RowPermission.class))).thenAnswer(inv -> {
+            RowPermission permission = inv.getArgument(0);
+            permission.setId(10L);
+            return permission;
+        });
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+        when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+
+        RowPermissionObjectService.Detail saved = service.save(new RowPermissionObjectService.Input(null,
+                "销售-部门", null, List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS1),
+                List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE"))));
+
+        assertEquals("[{\"column\":\"phone\",\"policy\":\"MASK\",\"rule\":\"PHONE\"}]",
+                saved.permission().getFieldPoliciesJson());
+        assertEquals(List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")),
+                saved.fieldPolicies());
+    }
+
+    /** 策略列会下发到每个关联源的输出：任一源不认识这一列就点名拒绝，防查询期整条报错。 */
+    @Test
+    void save_rejects_policy_column_missing_on_linked_source() {
+        when(dataSourceService.metadata(DS2)).thenReturn(metadata(column("owner_id", "负责人")));
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.save(new RowPermissionObjectService.Input(null, "销售-部门", null,
+                        List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS1, DS2),
+                        List.of(Map.of("column", "phone", "policy", "HIDDEN")))));
+
+        assertEquals(400, e.getCode());
+        assertTrue(e.getMessage().contains("phone"), e.getMessage());
+        assertTrue(e.getMessage().contains("客户台账"), e.getMessage());
+        verify(permissionRepository, never()).save(any());
+    }
+
+    /** MASK 必带规则是协议层校验：保存期就报错，静默降级等于策略失效。 */
+    @Test
+    void save_rejects_mask_without_rule() {
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.save(new RowPermissionObjectService.Input(null, "销售-部门", null,
+                        List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS1),
+                        List.of(Map.of("column", "phone", "policy", "MASK")))));
+
+        assertEquals(400, e.getCode());
+        verify(permissionRepository, never()).save(any());
+    }
+
+    /** 「没配策略」写 NULL 列（与配空数组同语义），回显为空列表。 */
+    @Test
+    void save_without_policies_writes_null_and_echoes_empty() {
+        when(permissionRepository.save(any(RowPermission.class))).thenAnswer(inv -> {
+            RowPermission permission = inv.getArgument(0);
+            permission.setId(10L);
+            return permission;
+        });
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+        when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+
+        RowPermissionObjectService.Detail saved = service.save(input(null,
+                List.of(leaf("owner_id", "eq", "{userId}")), List.of(DS1)));
+
+        assertNull(saved.permission().getFieldPoliciesJson());
+        assertEquals(List.of(), saved.fieldPolicies());
     }
 
     // ==================== 候选列（交集） ====================
@@ -286,6 +359,22 @@ class RowPermissionObjectServiceTest {
         assertEquals(List.of(DS1), list.get(0).dataSourceIds());
         assertEquals(1, list.get(0).grants().size());
         assertEquals(List.of(leaf("owner_id", "eq", "{userId}")), list.get(0).conditions());
+    }
+
+    /** 管理页要能看见已存策略（编辑入口的前置），Detail 回显走同一协议解析。 */
+    @Test
+    void list_echoes_stored_field_policies() throws Exception {
+        RowPermission permission = permission(10L, "销售-部门");
+        permission.setFieldPoliciesJson(om.writeValueAsString(
+                List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE"))));
+        when(permissionRepository.findByTenantIdOrderByIdDesc(TENANT)).thenReturn(List.of(permission));
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+        when(grantRepository.findByTenantIdAndPermissionId(TENANT, 10L)).thenReturn(List.of());
+
+        List<RowPermissionObjectService.Detail> list = service.list();
+
+        assertEquals(List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")),
+                list.get(0).fieldPolicies());
     }
 
     // ==================== 辅助 ====================

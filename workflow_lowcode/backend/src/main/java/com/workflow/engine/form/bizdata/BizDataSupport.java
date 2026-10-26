@@ -15,8 +15,10 @@ import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
+import com.workflow.engine.datasource.scope.FieldPolicyService;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -60,18 +62,31 @@ public class BizDataSupport {
     private final TenantProvider tenantProvider;
     private final ObjectMapper objectMapper;
     private final SqlQueryEngine sqlQueryEngine;
+    /** 字段策略生效服务（resolve 显示文本掩码封口点）；旧兼容构造为 null = 不掩（与 AutoNumberHook 同款先例）。 */
+    private final FieldPolicyService fieldPolicyService;
 
     public BizDataSupport(JdbcTemplate jdbcTemplate,
                           DynamicTableManager tableManager,
                           FormDefinitionService formDefService,
                           TenantProvider tenantProvider,
                           ObjectMapper objectMapper) {
+        this(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper, null);
+    }
+
+    @Autowired
+    public BizDataSupport(JdbcTemplate jdbcTemplate,
+                          DynamicTableManager tableManager,
+                          FormDefinitionService formDefService,
+                          TenantProvider tenantProvider,
+                          ObjectMapper objectMapper,
+                          FieldPolicyService fieldPolicyService) {
         this.jdbcTemplate = jdbcTemplate;
         this.tableManager = tableManager;
         this.formDefService = formDefService;
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
         this.sqlQueryEngine = new SqlQueryEngine(jdbcTemplate);
+        this.fieldPolicyService = fieldPolicyService;
     }
 
     // ==================== 复用面：上下文/校验/查询 ====================
@@ -181,7 +196,9 @@ public class BizDataSupport {
                     .findFirst()
                     .orElseThrow(() -> new BusinessException(400, "目标表单无可解析的显示字段"));
         }
-        return resolveDisplayTexts(formKey, ids, field);
+        // 封口在最终列解析之后：displayField 缺省选中的默认列同样受列策略约束（否则默认列形态是绕过口）
+        Map<String, String> texts = resolveDisplayTexts(formKey, ids, field);
+        return fieldPolicyService == null ? texts : fieldPolicyService.maskResolveTexts(formKey, field, texts);
     }
 
     /**

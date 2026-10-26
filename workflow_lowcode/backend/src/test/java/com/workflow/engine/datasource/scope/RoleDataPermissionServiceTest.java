@@ -1,8 +1,11 @@
 package com.workflow.engine.datasource.scope;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.entity.SysRole;
@@ -41,6 +44,7 @@ class RoleDataPermissionServiceTest {
     private RowPermissionRepository permissionRepository;
     private RowPermissionSourceRepository sourceRepository;
     private RowPermissionGrantRepository grantRepository;
+    private DataSourceDefinitionService dataSourceService;
     private RoleDataPermissionService service;
 
     @BeforeEach
@@ -49,15 +53,19 @@ class RoleDataPermissionServiceTest {
         permissionRepository = mock(RowPermissionRepository.class);
         sourceRepository = mock(RowPermissionSourceRepository.class);
         grantRepository = mock(RowPermissionGrantRepository.class);
+        dataSourceService = mock(DataSourceDefinitionService.class);
         DataScopeService dataScopeService = new DataScopeService(permissionRepository, sourceRepository,
                 grantRepository,
                 new DataScopeSubjectResolver(),
                 new DataScopeVariables(mock(SysOrganizationRepository.class)),
                 om, new TenantProvider(), mock(DataSourceDefinitionRepository.class));
         service = new RoleDataPermissionService(roleRepository, permissionRepository, sourceRepository,
-                grantRepository, dataScopeService, new TenantProvider());
+                grantRepository, dataScopeService, new TenantProvider(), dataSourceService);
         TenantContext.setTenantId(TENANT);
         when(roleRepository.findById(2L)).thenReturn(Optional.of(role(2L, ROLE_CODE)));
+        // 默认源元数据含 phone：授权列策略保存期校验读这一面，具体用例按需收窄
+        when(dataSourceService.metadata(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> metadata(column("phone", "手机号")));
     }
 
     @AfterEach
@@ -158,6 +166,85 @@ class RoleDataPermissionServiceTest {
         assertTrue(e.getMessage().contains("不能重复提交"), e.getMessage());
     }
 
+    // ==================== 授权级字段策略（grant 覆写对象基线） ====================
+
+    /** 合法策略随授权落库：grant 的列策略是这条链的精调，与对象基线分开存储。 */
+    @Test
+    void save_stores_grant_field_policies() throws Exception {
+        when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection()))
+                .thenReturn(List.of(permission(1L, "p1")));
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 1L))
+                .thenReturn(List.of(link(1L, "ds-a")));
+        when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
+                .thenReturn(List.of());
+
+        service.save(2L, List.of(new RoleDataPermissionService.Item(1L,
+                List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")))));
+
+        ArgumentCaptor<RowPermissionGrant> saved = ArgumentCaptor.forClass(RowPermissionGrant.class);
+        verify(grantRepository).save(saved.capture());
+        assertEquals("[{\"column\":\"phone\",\"policy\":\"MASK\",\"rule\":\"PHONE\"}]",
+                saved.getValue().getFieldPoliciesJson());
+    }
+
+    /** 全量替换语义补洞：kept grant 的策略变化必须同步覆写，否则重保存丢更新。 */
+    @Test
+    void save_updates_field_policies_on_kept_grant() throws Exception {
+        RowPermissionGrant kept = grant(1L, ROLE_CODE);
+        kept.setFieldPoliciesJson(om.writeValueAsString(List.of(Map.of("column", "name", "policy", "HIDDEN"))));
+        when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection()))
+                .thenReturn(List.of(permission(1L, "p1")));
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 1L)).thenReturn(List.of(link(1L, "ds-a")));
+        when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
+                .thenReturn(List.of(kept));
+
+        service.save(2L, List.of(new RoleDataPermissionService.Item(1L,
+                List.of(Map.of("column", "phone", "policy", "MASK", "rule", "PHONE")))));
+
+        assertEquals("[{\"column\":\"phone\",\"policy\":\"MASK\",\"rule\":\"PHONE\"}]",
+                kept.getFieldPoliciesJson());
+        verify(grantRepository).save(kept);
+        verify(grantRepository, never()).deleteAll(any());
+    }
+
+    /** 策略列必须在权限对象关联的每个源上存在——与对象基线同一保存期口径。 */
+    @Test
+    void save_rejects_policy_column_missing_on_linked_source() {
+        when(permissionRepository.findByTenantIdAndIdIn(eq(TENANT), anyCollection()))
+                .thenReturn(List.of(permission(1L, "p1")));
+        when(sourceRepository.findByTenantIdAndPermissionId(TENANT, 1L)).thenReturn(List.of(link(1L, "ds-a")));
+        when(dataSourceService.metadata("ds-a")).thenReturn(metadata());
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> service.save(2L, List.of(new RoleDataPermissionService.Item(1L,
+                        List.of(Map.of("column", "phone", "policy", "HIDDEN"))))));
+
+        assertEquals(400, e.getCode());
+        assertTrue(e.getMessage().contains("phone"), e.getMessage());
+        verify(grantRepository, never()).save(any(RowPermissionGrant.class));
+    }
+
+    /** 角色页要能回显每条授权已配的策略（编辑入口前置）；未授权对象回显空列表。 */
+    @Test
+    void list_views_echo_grant_field_policies() throws Exception {
+        RowPermission p1 = permission(1L, "一线可见");
+        p1.setConditionsJson("[]");
+        RowPermission p2 = permission(2L, "未授权对象");
+        p2.setConditionsJson("[]");
+        RowPermissionGrant g = grant(1L, ROLE_CODE);
+        g.setFieldPoliciesJson(om.writeValueAsString(List.of(Map.of("column", "phone", "policy", "HIDDEN"))));
+        when(permissionRepository.findByTenantIdOrderByIdDesc(TENANT)).thenReturn(List.of(p1, p2));
+        when(sourceRepository.findByTenantIdAndPermissionIdIn(eq(TENANT), anyCollection()))
+                .thenReturn(List.of(link(1L, "ds-a")));
+        when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectKey(TENANT, DataScopeSubject.ROLE, ROLE_CODE))
+                .thenReturn(List.of(g));
+
+        List<RoleDataPermissionService.View> views = service.list(2L);
+
+        assertEquals(List.of(Map.of("column", "phone", "policy", "HIDDEN")), views.get(0).fieldPolicies());
+        assertEquals(List.of(), views.get(1).fieldPolicies());
+    }
+
     @Test
     void save_unknown_role_returns_404() {
         BusinessException e = assertThrows(BusinessException.class,
@@ -209,5 +296,18 @@ class RoleDataPermissionServiceTest {
         leaf.put("op", op);
         leaf.put("value", value);
         return leaf;
+    }
+
+    private DataSourceMetadata metadata(ColumnConfig... columns) {
+        DataSourceMetadata meta = new DataSourceMetadata();
+        meta.setColumns(List.of(columns));
+        return meta;
+    }
+
+    private ColumnConfig column(String key, String label) {
+        ColumnConfig column = new ColumnConfig();
+        column.setKey(key);
+        column.setLabel(label);
+        return column;
     }
 }

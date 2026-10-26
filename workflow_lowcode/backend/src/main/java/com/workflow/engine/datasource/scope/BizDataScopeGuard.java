@@ -22,26 +22,48 @@ import java.util.Map;
  * 这里只补「按 id 反查这一行在不在可见集合里」的读回逻辑。
  *
  * <p>不参与范围的动作（与 v3 不变量一致）：新增不按行校验；独立子表行不按主表行收紧；
- * 引用显示文本解析（resolve）保持可用，否则看不见来源行的表单会连标签一起空掉。
+ * 引用显示文本解析（resolve）保持可用，否则看不见来源行的表单会连标签一起空掉
+ * （列策略对 resolve 的封口在序列化侧 {@code BizDataSupport.resolveByFormKey} 尾部，不影响本条）。
  */
 @Component
 public class BizDataScopeGuard {
 
     private final DataScopeService dataScopeService;
     private final BizDataService bizDataService;
+    private final FieldPolicyService fieldPolicyService;
     private final ObjectMapper objectMapper;
 
     public BizDataScopeGuard(DataScopeService dataScopeService,
                              BizDataService bizDataService,
+                             FieldPolicyService fieldPolicyService,
                              ObjectMapper objectMapper) {
         this.dataScopeService = dataScopeService;
         this.bizDataService = bizDataService;
+        this.fieldPolicyService = fieldPolicyService;
         this.objectMapper = objectMapper;
     }
 
     /** 列表/聚合：把当前用户在该表单上的可见集合叠加到请求上。 */
     public void apply(String formKey, FilterAware request) {
         dataScopeService.applyByFormKey(formKey, request);
+    }
+
+    /** 列表出口：按 formKey 反查数据源后过列策略（与行范围同闸门口径，未受控原样放行）。 */
+    public BizDataPageVO applyFieldPolicy(String formKey, BizDataPageVO page) {
+        String dataSourceId = dataScopeService.dataSourceIdOfForm(formKey);
+        return dataSourceId == null ? page : fieldPolicyService.applyToPage(dataSourceId, page);
+    }
+
+    /** 单条出口：详情同样过列策略，否则「列表掩掉、详情直读」绕开脱敏。 */
+    public BizDataVO applyFieldPolicyRow(String formKey, BizDataVO row) {
+        String dataSourceId = dataScopeService.dataSourceIdOfForm(formKey);
+        return dataSourceId == null ? row : fieldPolicyService.applyToRow(dataSourceId, row);
+    }
+
+    /** 写载荷防御：剔除当前用户列策略覆盖（MASK/HIDDEN）的列，以库中值为准（防掩码回写污染真值）。 */
+    public Map<String, Object> stripFieldPolicy(String formKey, Map<String, Object> data) {
+        String dataSourceId = dataScopeService.dataSourceIdOfForm(formKey);
+        return dataSourceId == null ? data : fieldPolicyService.stripForWrite(dataSourceId, data);
     }
 
     /** 单条读取：不可见按 404（不区分「不存在」与「无权读」，免得这里变成存在性探针）。 */

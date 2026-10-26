@@ -3,6 +3,8 @@ package com.workflow.system.service;
 import com.workflow.system.domain.dto.MenuCreateRequest;
 import com.workflow.system.domain.dto.MenuMoveRequest;
 import com.workflow.system.domain.entity.SysMenu;
+import com.workflow.system.repository.SysClientChannelRepository;
+import com.workflow.system.repository.SysClientRepository;
 import com.workflow.system.repository.SysMenuRepository;
 import com.workflow.system.service.impl.MenuServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,10 @@ class MenuServiceMoveTest {
 
     @Mock
     SysMenuRepository menuRepository;
+    @Mock
+    SysClientRepository clientRepository;
+    @Mock
+    SysClientChannelRepository channelRepository;
 
     @InjectMocks
     MenuServiceImpl menuService;

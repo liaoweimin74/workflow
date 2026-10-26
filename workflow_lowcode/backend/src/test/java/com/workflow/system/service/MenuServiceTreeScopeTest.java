@@ -3,6 +3,8 @@ package com.workflow.system.service;
 import com.workflow.system.domain.dto.MenuCreateRequest;
 import com.workflow.system.domain.entity.SysMenu;
 import com.workflow.system.domain.vo.MenuTree;
+import com.workflow.system.repository.SysClientChannelRepository;
+import com.workflow.system.repository.SysClientRepository;
 import com.workflow.system.repository.SysMenuRepository;
 import com.workflow.system.service.impl.MenuServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,10 @@ class MenuServiceTreeScopeTest {
 
     @Mock
     SysMenuRepository menuRepository;
+    @Mock
+    SysClientRepository clientRepository;
+    @Mock
+    SysClientChannelRepository channelRepository;
 
     @InjectMocks
     MenuServiceImpl menuService;
@@ -97,6 +103,8 @@ class MenuServiceTreeScopeTest {
     @Test
     void createPersistsClientIdFromRequest() {
         stubSaveWithId(70L);
+        // A 组落点校验上线后，非 portal 客户端要先过存在性（无渠道行=桌面形态，本用例不关心形态）
+        when(clientRepository.existsById(2L)).thenReturn(true);
 
         menuService.create(new MenuCreateRequest(
                 null, "移动端新目录", DIR, "/m", null, null, null, null, null, 2L));

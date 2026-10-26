@@ -248,6 +248,13 @@
     </el-dialog>
 
     <!-- 另存为模板弹窗：新建模板 或 按 key 覆盖已有模板 -->
+    <!-- A5 发布目标端对话框 -->
+    <PagePublishDialog
+      v-model="publishDialogVisible"
+      :page-name="pageName || pageKey"
+      @confirm="handlePublishConfirm"
+    />
+
     <el-dialog v-model="templateDialogVisible" title="另存为模板" width="520px" destroy-on-close>
       <el-alert
         :type="templateKind === 'skeleton' ? 'warning' : 'info'"
@@ -384,6 +391,7 @@ import { attachmentHintText, imageHintText } from '@/components/business/compone
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setChainParamContextProvider } from './components/chainParamContext'
 import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
+import PagePublishDialog from './components/PagePublishDialog.vue'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -720,6 +728,8 @@ async function handleUnmount(menu: PageMenuItem) {
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
+// A5 发布目标端对话框：发布先选端再随请求下发
+const publishDialogVisible = ref(false)
 const previewVisible = ref(false)
 const previewJson = ref('')
 /** 数据源/动作配置弹窗 */
@@ -1871,20 +1881,15 @@ async function handleSave() {
   }
 }
 
-async function handlePublish() {
-  const isRepublish = formStatus.value === 'PUBLISHED'
-  try {
-    await ElMessageBox.confirm(
-      isRepublish ? '确定要重新发布此页面吗？' : '确定要发布此页面吗？',
-      isRepublish ? '确认重新发布' : '确认发布',
-      { type: 'warning' },
-    )
-  } catch {
-    return
-  }
+/** 发布入口（A5）：先打开目标端对话框，选端后由 handlePublishConfirm 下发 */
+function handlePublish() {
+  publishDialogVisible.value = true
+}
+
+async function handlePublishConfirm(clientIds: number[]) {
   publishing.value = true
   try {
-    const res = await pageApi.publishPage(pageId.value)
+    const res = await pageApi.publishPage(pageId.value, clientIds)
     ElMessage.success('发布成功')
     formStatus.value = ((res.data as any)?.status as string) || 'PUBLISHED'
   } catch {

@@ -90,9 +90,9 @@ export const pageApi = {
     return http.delete(`/v1/pages/${id}`)
   },
 
-  /** 发布页面定义 */
-  publishPage(id: string): Promise<R<PageDefinitionDTO>> {
-    return http.post(`/v1/pages/${id}/publish`)
+  /** 发布页面定义（A5：clientIds=发布目标端 sys_client.id 列表；不传/空 = 缺省仅 portal(1)） */
+  publishPage(id: string, clientIds?: number[]): Promise<R<PageDefinitionDTO>> {
+    return http.post(`/v1/pages/${id}/publish`, { clientIds })
   },
 
   /** 当前系统首页的页面 key（未配置或配置失效时为 dashboard） */

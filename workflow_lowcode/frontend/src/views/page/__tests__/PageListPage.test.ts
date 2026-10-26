@@ -53,11 +53,21 @@ const SearchTableStub = defineComponent({
   },
 })
 
+/** A5 发布目标端对话框桩：捕获可见性，手动 emit confirm 驱动下发 */
+const PublishDialogStub = defineComponent({
+  name: 'PagePublishDialog',
+  props: ['modelValue', 'pageName'],
+  emits: ['update:modelValue', 'confirm'],
+  setup() {
+    return () => h('div', { class: 'publish-dialog-stub' })
+  },
+})
+
 function createWrapper() {
   return mount(PageListPage, {
     global: {
         plugins: [ElementPlus, createPinia()],
-      stubs: { SearchTable: SearchTableStub },
+      stubs: { SearchTable: SearchTableStub, PagePublishDialog: PublishDialogStub },
     },
   })
 }
@@ -103,10 +113,9 @@ describe('PageListPage — 发布/删除交互', () => {
     wrapper.unmount()
   })
 
-  it('发布草稿页：确认后调用 publishPage 并提示成功', async () => {
+  it('发布草稿页：打开目标端对话框，确认后携 clientIds 下发', async () => {
     ;(pageApi.getPages as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(ElMessageBox.confirm as any).mockResolvedValue(undefined)
     ;(pageApi.publishPage as any).mockResolvedValue({ data: {} })
     const wrapper = createWrapper()
     await nextTick()
@@ -115,25 +124,30 @@ describe('PageListPage — 发布/删除交互', () => {
     const pubBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '发布')
     expect(pubBtn.show({ status: 'DRAFT' })).toBe(true)
     expect(pubBtn.show({ status: 'PUBLISHED' })).toBe(false)
-    await pubBtn.onClick({ id: 'p1', status: 'DRAFT' })
+    await pubBtn.onClick({ id: 'p1', name: '员工视图', status: 'DRAFT' })
     await flushPromises()
-    expect(ElMessageBox.confirm).toHaveBeenCalledWith('确定要发布此页面吗？', '发布确认', { type: 'warning' })
-    expect(pageApi.publishPage).toHaveBeenCalledWith('p1')
+    // A5：发布不再走 MessageBox 一键确认，由 PagePublishDialog 选端后下发
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled()
+    const dlg = wrapper.findComponent(PublishDialogStub)
+    expect(dlg.props('modelValue')).toBe(true)
+    dlg.vm.$emit('confirm', [1, 2])
+    await flushPromises()
+    expect(pageApi.publishPage).toHaveBeenCalledWith('p1', [1, 2])
     expect(ElMessage.success).toHaveBeenCalledWith('发布成功')
     wrapper.unmount()
   })
 
-  it('取消发布：确认被拒时不下发 publishPage', async () => {
+  it('发布对话框未确认：不下发 publishPage', async () => {
     ;(pageApi.getPages as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(ElMessageBox.confirm as any).mockRejectedValue(new Error('cancel'))
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const stub = wrapper.findComponent(SearchTableStub)
     const pubBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '发布')
-    await pubBtn.onClick({ id: 'p1', status: 'DRAFT' })
+    await pubBtn.onClick({ id: 'p1', name: '员工视图', status: 'DRAFT' })
     await flushPromises()
+    expect(wrapper.findComponent(PublishDialogStub).props('modelValue')).toBe(true)
     expect(pageApi.publishPage).not.toHaveBeenCalled()
     wrapper.unmount()
   })

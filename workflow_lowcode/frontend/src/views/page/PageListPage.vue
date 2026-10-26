@@ -118,6 +118,13 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- A5 发布目标端对话框（确认结果携带 clientIds 下发发布） -->
+    <PagePublishDialog
+      v-model="publishDialogVisible"
+      :page-name="publishTargetName"
+      @confirm="handlePublishConfirm"
+    />
   </div>
 </template>
 
@@ -136,6 +143,7 @@ import type { MenuTree } from '@/types/menu'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import { useAuthStore } from '@/stores/auth'
 import PageTemplateTab from './PageTemplateTab.vue'
+import PagePublishDialog from './components/PagePublishDialog.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -149,6 +157,21 @@ const publishedForms = ref<FormDefinitionDTO[]>([])
 
 /** 当前租户的首页页面 key（后端未配置或配置失效时返回 dashboard） */
 const homePageKey = ref('dashboard')
+
+// A5 发布目标端对话框：列表页发布先选端再下发
+const publishDialogVisible = ref(false)
+const publishTargetId = ref('')
+const publishTargetName = ref('')
+
+async function handlePublishConfirm(clientIds: number[]) {
+  try {
+    await pageApi.publishPage(publishTargetId.value, clientIds)
+    ElMessage.success('发布成功')
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  }
+}
 
 async function loadHomePageKey() {
   try {
@@ -392,19 +415,11 @@ const actionButtons: ActionButton[] = [
     type: 'primary',
     permission: 'page:publish',
     show: (row: any) => row.status === 'DRAFT',
-    onClick: async (row: any) => {
-      try {
-        await ElMessageBox.confirm('确定要发布此页面吗？', '发布确认', { type: 'warning' })
-      } catch {
-        return
-      }
-      try {
-        await pageApi.publishPage(row.id)
-        ElMessage.success('发布成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息
-      }
+    onClick: (row: any) => {
+      // A5：发布先经目标端对话框选端，再随请求下发
+      publishTargetId.value = row.id
+      publishTargetName.value = row.name
+      publishDialogVisible.value = true
     },
   },
   {

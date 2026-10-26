@@ -10262,3 +10262,19 @@ Work Log:
 
 Stage Summary:
 - 重供给恢复 #156，累计 156 次全部单轮闭环；内存 3.27GB，oom_kill 0；回合结束
+
+---
+Task ID: r322
+Agent: main
+Task: 轻量运维巡检 2026-10-27 07:05 (Job 446961)
+
+Work Log:
+- 沙箱单发中断 r321（累计 110 次）后本轮恢复执行
+- 巡检发现：环境重供给 #157——8080 Node 假绿 no such table: SYS_USER，bun/node 残留；mariadbd 进程在但 dump-db 判 3306 未就绪（复合型倾向，疑冷启动中），首轮 dump 跳过
+- pkill 五连 + jar-parts 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 9 次完整退出型），3306=ok；「无 jar 备份」分支提示依旧（~100s 真绿）
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3000=vite/1182、3306=mariadbd/1257、8080=java/1489）
+- 收口 dump OK（20261026-230829 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #157，累计 157 次全部单轮闭环；内存 3.31GB，oom_kill 0；回合结束

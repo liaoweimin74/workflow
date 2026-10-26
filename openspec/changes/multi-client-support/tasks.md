@@ -37,11 +37,11 @@
 
 ## 5. P1 登录泛化与端身份（client-login-identity）
 
-- [ ] 5.1 Flyway：`sys_user_openid` 加 client 维度（唯一键改 openid+client）、新表 `sys_user_device`
-- [ ] 5.2 后端：登录方式配置模型（端×渠道→方式集合）；登录 API 校验方式开通，未开通拒绝
-- [ ] 5.3 后端：token 签发携带 client/channel 声明；解析链（过滤器/菜单/守卫/数据范围主体）按声明建端上下文；历史 token 缺省 portal 的兼容与收紧开关
-- [ ] 5.4 后端：绑定码流程通用化（V64 抽取）：管理端生成→端内首登输入→openid/设备绑定；静默登录按 (client, openid)
-- [ ] 5.5 前端：A4 用户详情"端身份"Tab（openid/设备/登录记录列表，解绑/吊销/生成绑定码，`system:user:*` 管控）
+- [x] 5.1 Flyway：`sys_user_openid` 加 client 维度（唯一键改 openid+client）、新表 `sys_user_device`（Java 线 J3·V75，探针库实测跨端隔离）
+- [x] 5.2 后端：登录方式配置模型（端×渠道→方式集合）；登录 API 校验方式开通，未开通拒绝（Java 线 J3：config.loginMethods + assertMethodEnabled）
+- [ ] 5.3 后端：token 签发携带 client/channel 声明；解析链（过滤器/菜单/守卫/数据范围主体）按声明建端上下文；历史 token 缺省 portal 的兼容与收紧开关（Java 线 J4 已完成：双 claim 签发/读取缺省 portal·WEB、过滤器端上下文、菜单树/权限集合/PageAccessGuard 按端；**遗留=数据范围主体端化（裁定⑧延后）与收紧开关**）
+- [x] 5.4 后端：绑定码流程通用化（V64 抽取）：管理端生成→端内首登输入→openid/设备绑定；静默登录按 (client, openid)（Java 线 J3：issue/consume/clientLogin 静默；设备注册落 sys_user_device 本体链=9.4）
+- [x] 5.5 前端：A4 用户详情"端身份"Tab（openid/设备/登录记录列表，解绑/吊销/生成绑定码，`system:user:*` 管控）（Java 线 J5a+J5b：形态=行操作抽屉（UserPage 无详情容器，仿 A2 先例）；V76 四按钮权限码；**登录记录数据源不在 J 系列=H5 登录记录表 P2 记账**）
 
 ## 6. P1 数据范围字段策略（data-field-masking）
 

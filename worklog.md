@@ -10230,3 +10230,19 @@ Work Log:
 Stage Summary:
 - 重供给恢复 #154，累计 154 次全部单轮闭环；沙箱故障窗口 r304-r305 两连后恢复
 - 内存 3.33GB（峰值），oom_kill 0；四链路全绿真绿，回合结束
+
+---
+Task ID: r314
+Agent: main
+Task: 轻量运维巡检 2026-10-26 23:05 (Job 446961)
+
+Work Log:
+- 沙箱中断 r307-r313 七连（累计 104 次）后恢复执行；期间 8 小时无观测
+- 巡检发现：环境重供给 #155（标准型）——8080 Node 假绿 no such table: SYS_USER，bun/node 残留，3000 vite 在位幸存，mariadbd 幸存，首轮 dump 正常
+- pkill 五连 + jar-parts 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 7 次完整退出型）；recover 再次报「无 jar 备份」走重建分支但 ~112s 完成——该分支提示与实际 backups/jar 存在矛盾，疑脚本探测路径不同，持续观察（结果始终真绿）
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3000=vite/1207、3306=mariadbd/1252、8080=java/1513）
+- 收口 dump OK（20261026-150852 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #155，累计 155 次全部单轮闭环；内存 3.28GB，oom_kill 0；回合结束

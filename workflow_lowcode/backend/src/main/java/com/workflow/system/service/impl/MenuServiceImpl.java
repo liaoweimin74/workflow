@@ -5,6 +5,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.system.domain.dto.MenuCreateRequest;
 import com.workflow.system.domain.dto.MenuMoveRequest;
 import com.workflow.system.domain.dto.MenuUpdateRequest;
+import com.workflow.system.domain.entity.SysClient;
 import com.workflow.system.domain.entity.SysMenu;
 import com.workflow.system.domain.vo.MenuTree;
 import com.workflow.system.repository.SysMenuRepository;
@@ -46,6 +47,16 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
+    public List<MenuTree> tree(Long clientId) {
+        long client = clientId != null ? clientId : SysClient.PORTAL_CLIENT_ID;
+        List<SysMenu> roots = menuRepository.findByClientIdAndParentIdIsNullOrderBySortOrder(client);
+        return roots.stream()
+                .filter(m -> m.getIsDeleted() == 0)
+                .map(m -> toMenuTreeScoped(m, client))
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public MenuTree create(MenuCreateRequest request) {
         Long parentId = normalizeParentId(request.parentId());
@@ -66,6 +77,10 @@ public class MenuServiceImpl implements MenuService {
         menu.setIcon(request.icon());
         menu.setSortOrder(request.sortOrder() != null ? request.sortOrder() : nextSortOrder(parentId));
         menu.setStatus(request.status() != null ? request.status() : 1);
+        // 按端新建（Task 8 A3 前端已携带）：非 portal 端作用域落库，缺省由实体初始值 portal(1) 兜底
+        if (request.clientId() != null) {
+            menu.setClientId(request.clientId());
+        }
         menu = menuRepository.save(menu);
         return toMenuTree(menu);
     }
@@ -155,10 +170,25 @@ public class MenuServiceImpl implements MenuService {
                 .filter(c -> c.getIsDeleted() == 0)
                 .map(this::toMenuTree)
                 .collect(Collectors.toList());
+        return toVo(menu, childTrees);
+    }
+
+    /** 端作用域递归：子级同样只认本端行（历史脏数据里挂错端的子节点被过滤，对齐登录树口径） */
+    private MenuTree toMenuTreeScoped(SysMenu menu, long clientId) {
+        List<SysMenu> children = menuRepository.findByParentIdOrderBySortOrder(menu.getId());
+        List<MenuTree> childTrees = children.stream()
+                .filter(c -> c.getIsDeleted() == 0)
+                .filter(c -> c.getClientId() != null && c.getClientId() == clientId)
+                .map(c -> toMenuTreeScoped(c, clientId))
+                .collect(Collectors.toList());
+        return toVo(menu, childTrees);
+    }
+
+    private static MenuTree toVo(SysMenu menu, List<MenuTree> childTrees) {
         return new MenuTree(menu.getId(), menu.getParentId(), menu.getMenuName(),
                 menu.getMenuType(), menu.getPath(), menu.getComponent(),
                 menu.getPermission(), menu.getIcon(), menu.getSortOrder(),
-                menu.getStatus(),
+                menu.getStatus(), menu.getClientId(),
                 childTrees.isEmpty() ? null : childTrees);
     }
 

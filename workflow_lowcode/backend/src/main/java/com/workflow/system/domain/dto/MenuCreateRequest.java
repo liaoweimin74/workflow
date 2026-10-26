@@ -13,5 +13,7 @@ public record MenuCreateRequest(
         @Size(max = 100) String permission,
         @Size(max = 50) String icon,
         Integer sortOrder,
-        Integer status) {
+        Integer status,
+        /** 归属端（按端新建时显式携带）；null = portal 缺省（对齐 node createMenu client_id 透传） */
+        Long clientId) {
 }

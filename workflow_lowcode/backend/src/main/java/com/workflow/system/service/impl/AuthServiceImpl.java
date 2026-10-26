@@ -455,7 +455,7 @@ public class AuthServiceImpl implements AuthService {
                 menu.getId(), menu.getParentId(), menu.getMenuName(),
                 menu.getMenuType(), menu.getPath(), menu.getComponent(),
                 menu.getPermission(), menu.getIcon(), menu.getSortOrder(),
-                menu.getStatus(),
+                menu.getStatus(), menu.getClientId(),
                 childTrees.isEmpty() ? null : childTrees);
     }
 }

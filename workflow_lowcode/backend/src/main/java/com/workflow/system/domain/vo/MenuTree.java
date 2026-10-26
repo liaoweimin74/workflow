@@ -13,5 +13,6 @@ public record MenuTree(
         String icon,
         Integer sortOrder,
         Integer status,
+        Long clientId,
         List<MenuTree> children) {
 }

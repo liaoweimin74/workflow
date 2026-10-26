@@ -182,7 +182,7 @@ class MenuServiceMoveTest {
         stubTree();
 
         assertThatThrownBy(() -> menuService.create(new MenuCreateRequest(
-                10L, "错挂的菜单", MENU, "/x", null, null, null, null, null)))
+                10L, "错挂的菜单", MENU, "/x", null, null, null, null, null, null)))
                 .hasMessageContaining("菜单必须放在目录下");
         verify(menuRepository, never()).save(any());
     }
@@ -211,7 +211,7 @@ class MenuServiceMoveTest {
         when(menuRepository.findByParentIdOrderBySortOrder(70L)).thenReturn(new ArrayList<>());
 
         menuService.create(new MenuCreateRequest(
-                2L, "新菜单", MENU, "/new", null, null, null, null, null));
+                2L, "新菜单", MENU, "/new", null, null, null, null, null, null));
 
         var captor = org.mockito.ArgumentCaptor.forClass(SysMenu.class);
         verify(menuRepository).save(captor.capture());

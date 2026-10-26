@@ -40,7 +40,7 @@ class MenuCreateRequestValidationTest {
     void 合法请求体校验通过() {
         MenuCreateRequest request = new MenuCreateRequest(
                 1L, "物料看板", 1, "/material/demo-board", "material:demo-board",
-                "material:manage", "Files", 10, 1);
+                "material:manage", "Files", 10, 1, null);
 
         Set<ConstraintViolation<MenuCreateRequest>> violations = validator.validate(request);
 
@@ -50,7 +50,7 @@ class MenuCreateRequestValidationTest {
     @Test
     void menuType缺失时按必填拒绝() {
         MenuCreateRequest request = new MenuCreateRequest(
-                1L, "物料看板", null, "/material/demo-board", null, null, null, null, null);
+                1L, "物料看板", null, "/material/demo-board", null, null, null, null, null, null);
 
         assertThat(validator.validate(request))
                 .anySatisfy(v -> assertThat(v.getPropertyPath().toString()).isEqualTo("menuType"));
@@ -59,7 +59,7 @@ class MenuCreateRequestValidationTest {
     @Test
     void 菜单名空白仍按原有约束拒绝() {
         MenuCreateRequest request = new MenuCreateRequest(
-                1L, "  ", 1, null, null, null, null, null, null);
+                1L, "  ", 1, null, null, null, null, null, null, null);
 
         assertThat(validator.validate(request))
                 .anySatisfy(v -> assertThat(v.getPropertyPath().toString()).isEqualTo("menuName"));

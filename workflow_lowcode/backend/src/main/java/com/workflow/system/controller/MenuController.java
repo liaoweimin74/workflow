@@ -21,8 +21,8 @@ public class MenuController {
     }
 
     @GetMapping("/tree")
-    public R<List<MenuTree>> tree() {
-        return R.ok(menuService.tree());
+    public R<List<MenuTree>> tree(@RequestParam(required = false) Long clientId) {
+        return R.ok(menuService.tree(clientId));
     }
 
     @PostMapping

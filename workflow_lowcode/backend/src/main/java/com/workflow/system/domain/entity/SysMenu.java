@@ -11,6 +11,10 @@ public class SysMenu extends BaseEntity {
     @Column(name = "parent_id")
     private Long parentId;
 
+    /** 归属客户端（sys_client.id 逻辑外键）；缺省 1=portal 平台端，存量零破坏（对齐 node V51）。 */
+    @Column(name = "client_id", nullable = false)
+    private Long clientId = SysClient.PORTAL_CLIENT_ID;
+
     @Column(name = "menu_name", nullable = false, length = 100)
     private String menuName;
 
@@ -41,6 +45,8 @@ public class SysMenu extends BaseEntity {
 
     public Long getParentId() { return parentId; }
     public void setParentId(Long parentId) { this.parentId = parentId; }
+    public Long getClientId() { return clientId; }
+    public void setClientId(Long clientId) { this.clientId = clientId; }
     public String getMenuName() { return menuName; }
     public void setMenuName(String menuName) { this.menuName = menuName; }
     public Integer getMenuType() { return menuType; }

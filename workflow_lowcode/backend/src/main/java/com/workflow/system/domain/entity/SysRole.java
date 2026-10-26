@@ -6,6 +6,10 @@ import jakarta.persistence.*;
 @Entity
 @Table(name = "sys_role")
 public class SysRole extends BaseEntity {
+    /** 归属客户端（sys_client.id 逻辑外键），一角色恰属一端；缺省 1=portal（对齐 node V52、spec client-scoped-role）。 */
+    @Column(name = "client_id", nullable = false)
+    private Long clientId = SysClient.PORTAL_CLIENT_ID;
+
     @Column(name = "role_name", nullable = false, length = 100)
     private String roleName;
 
@@ -18,6 +22,8 @@ public class SysRole extends BaseEntity {
     @Column(nullable = false)
     private Integer status = 1;
 
+    public Long getClientId() { return clientId; }
+    public void setClientId(Long clientId) { this.clientId = clientId; }
     public String getRoleName() { return roleName; }
     public void setRoleName(String roleName) { this.roleName = roleName; }
     public String getRoleCode() { return roleCode; }

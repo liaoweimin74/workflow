@@ -4,7 +4,7 @@ defineOptions({ name: 'UserManagement' })
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Key } from '@element-plus/icons-vue'
+import { Key, Postcard } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
@@ -13,6 +13,7 @@ import { getUserList, createUser, updateUser, deleteUser, updateUserStatus, rese
 import { getOrgTree } from '@/api/org'
 import { getRoleList } from '@/api/role'
 import { getPostOptions } from '@/api/post'
+import ClientIdentityDrawer from './ClientIdentityDrawer.vue'
 import type { UserVO } from '@/types/user'
 import type { TreeNode } from '@/types/org'
 import type { RoleVO } from '@/types/role'
@@ -112,6 +113,14 @@ const handleResetPassword = async (row: UserVO) => {
 
 const searchTableRef = ref()
 
+// ---------- A4 端身份抽屉（J5b） ----------
+const identityVisible = ref(false)
+const identityUser = ref<UserVO | null>(null)
+const handleShowIdentity = (row: UserVO) => {
+  identityUser.value = row
+  identityVisible.value = true
+}
+
 const actionButtons: ActionButton[] = [
   {
     label: '重置密码',
@@ -120,6 +129,14 @@ const actionButtons: ActionButton[] = [
     link: true,
     confirm: '确定重置密码吗？',
     onClick: handleResetPassword,
+  },
+  {
+    label: '端身份',
+    icon: Postcard,
+    size: 'small',
+    link: true,
+    permission: 'system:user:identity',
+    onClick: handleShowIdentity,
   },
 ]
 
@@ -282,4 +299,7 @@ onUnmounted(unregisterAi)
       <el-switch :model-value="row.status === 1" @change="handleStatusChange(row)" />
     </template>
   </SearchTable>
+
+  <!-- A4 端身份抽屉（行操作「端身份」，system:user:identity 管控入口） -->
+  <ClientIdentityDrawer v-model="identityVisible" :user="identityUser" />
 </template>

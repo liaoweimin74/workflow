@@ -38,6 +38,9 @@ importers:
       '@form-create/element-ui':
         specifier: ^3.3.1
         version: 3.3.5(vue@3.5.40(typescript@6.0.3))
+      '@form-create/vant':
+        specifier: ^3.3.5
+        version: 3.3.5(vue@3.5.40(typescript@6.0.3))
       '@lc/runtime':
         specifier: file:packages/lc-runtime
         version: file:packages/lc-runtime(@element-plus/icons-vue@2.3.2(vue@3.5.40(typescript@6.0.3)))(@form-create/designer@3.5.0(vue@3.5.40(typescript@6.0.3)))(@form-create/element-ui@3.3.5(vue@3.5.40(typescript@6.0.3)))(axios@1.18.1(debug@4.4.3))(echarts@5.6.0)(element-plus@2.14.3(vue@3.5.40(typescript@6.0.3)))(markdown-it@15.0.2)(pinia@4.0.2(@vue/devtools-api@8.1.5)(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(vue-router@4.6.4(vue@3.5.40(typescript@6.0.3)))(vue@3.5.40(typescript@6.0.3))
@@ -92,6 +95,9 @@ importers:
       sortablejs:
         specifier: ^1.15.7
         version: 1.15.7
+      vant:
+        specifier: ^4.10.2
+        version: 4.10.2(vue@3.5.40(typescript@6.0.3))
       vue:
         specifier: ^3.5.40
         version: 3.5.40(typescript@6.0.3)
@@ -395,6 +401,11 @@ packages:
 
   '@form-create/utils@3.3.0':
     resolution: {integrity: sha512-4VGI3Qowkc0HsrxmC6NT1eUlEnN2xURqStjJXD+PjgbYKqzR01pNHJbz1UyfkrmcFE9HTUaWrH7IgPPxjlSo2g==}
+
+  '@form-create/vant@3.3.5':
+    resolution: {integrity: sha512-c/7h9tZJ2rPaqX9nPxtXMHOvqmdLXZqcA7uoji0zlOr3NGL5JzHXNlE1EGPFCoB0BDw7egdxi7Lw5JrjH2wzEw==}
+    peerDependencies:
+      vue: ^3.5.12
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -719,6 +730,14 @@ packages:
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
 
+  '@vant/popperjs@1.3.0':
+    resolution: {integrity: sha512-hB+czUG+aHtjhaEmCJDuXOep0YTZjdlRR+4MSmIFnkCQIxJaXLQdSsR90XWvAI2yvKUI7TCGqR8pQg2RtvkMHw==}
+
+  '@vant/use@1.6.0':
+    resolution: {integrity: sha512-PHHxeAASgiOpSmMjceweIrv2AxDZIkWXyaczksMoWvKV2YAYEhoizRuk/xFnKF+emUIi46TsQ+rvlm/t2BBCfA==}
+    peerDependencies:
+      vue: ^3.0.0
+
   '@vitejs/plugin-vue@6.0.8':
     resolution: {integrity: sha512-0ZjgOg7oO6farnNGup7yvoM/YXZV84OZxHAwtflItNa/6zzQyVb5LNxyea3FEKEX2XlagIKzrlH7wwxkKgtiew==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -828,6 +847,9 @@ packages:
 
   '@vue/shared@3.5.40':
     resolution: {integrity: sha512-WxnBtruIqOoV3rA4jeKDWzrYI5h7Cp4+pjwDi8kWGHz+IslhiN+wguLVVhtv2l8VoU02rzDCVfDjgCl1lNpZVg==}
+
+  '@vue/shared@3.5.44':
+    resolution: {integrity: sha512-H82XLH0DjmSOdbEwO15x3QTo1f5PWEtv237eLpYKc0mqLu+B8hnq16lFWmuBmNurkeiG3wr+oM1FhOll/YVFRg==}
 
   '@vue/test-utils@2.4.11':
     resolution: {integrity: sha512-GDqaqZsA6m2E5vNzej0aYiIb6BX8xV9pNSbbbXKOfEYwg7ZNblVX8suyqmUBThq8VIrgAJNxn+z72hVtUeiWHA==}
@@ -1796,6 +1818,11 @@ packages:
     resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
 
+  vant@4.10.2:
+    resolution: {integrity: sha512-7lm1KtFub11ozleFqQ6rL8oa3Z8i33G3IUEuJGWBXlQwPTRfu8BYWGGZ/GhA5QdWhERp5mtBq6TjpYEmLcwwow==}
+    peerDependencies:
+      vue: ^3.0.0
+
   vite@8.1.5:
     resolution: {integrity: sha512-7ULLwsCdYx/nRyrpiEwvqb5TFHrMVZyBt+rg/OAXT7rgj/z+DtTDyKFeLAdDkubDVDKD8jOsndmy7m55XcfUsw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2329,6 +2356,14 @@ snapshots:
 
   '@form-create/utils@3.3.0': {}
 
+  '@form-create/vant@3.3.5(vue@3.5.40(typescript@6.0.3))':
+    dependencies:
+      '@form-create/component-subform': 3.3.0(vue@3.5.40(typescript@6.0.3))
+      '@form-create/core': 3.3.5(vue@3.5.40(typescript@6.0.3))
+      '@form-create/utils': 3.3.0
+      dayjs: 1.11.21
+      vue: 3.5.40(typescript@6.0.3)
+
   '@isaacs/cliui@8.0.2':
     dependencies:
       string-width: 5.1.2
@@ -2591,6 +2626,12 @@ snapshots:
 
   '@types/web-bluetooth@0.0.21': {}
 
+  '@vant/popperjs@1.3.0': {}
+
+  '@vant/use@1.6.0(vue@3.5.40(typescript@6.0.3))':
+    dependencies:
+      vue: 3.5.40(typescript@6.0.3)
+
   '@vitejs/plugin-vue@6.0.8(vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
@@ -2756,6 +2797,8 @@ snapshots:
       '@vue/shared': 3.5.40
 
   '@vue/shared@3.5.40': {}
+
+  '@vue/shared@3.5.44': {}
 
   '@vue/test-utils@2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))':
     dependencies:
@@ -3639,6 +3682,13 @@ snapshots:
   undici-types@8.3.0: {}
 
   undici@7.29.0: {}
+
+  vant@4.10.2(vue@3.5.40(typescript@6.0.3)):
+    dependencies:
+      '@vant/popperjs': 1.3.0
+      '@vant/use': 1.6.0(vue@3.5.40(typescript@6.0.3))
+      '@vue/shared': 3.5.44
+      vue: 3.5.40(typescript@6.0.3)
 
   vite@8.1.5(@types/node@26.1.1)(jiti@2.7.0):
     dependencies:

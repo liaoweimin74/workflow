@@ -11,4 +11,7 @@ import java.util.List;
 public interface SysUserDeviceRepository extends JpaRepository<SysUserDevice, Long> {
 
     List<SysUserDevice> findByUserIdAndClientIdAndIsDeleted(Long userId, Long clientId, Integer isDeleted);
+
+    /** A4 端身份 Tab：某账号全部推送设备（跨端聚合展示，J5a）。 */
+    List<SysUserDevice> findByUserIdAndIsDeleted(Long userId, Integer isDeleted);
 }

@@ -12,4 +12,7 @@ public interface SysClientChannelRepository extends JpaRepository<SysClientChann
     Optional<SysClientChannel> findByClientIdAndChannelType(Long clientId, String channelType);
 
     List<SysClientChannel> findByClientIdIn(Collection<Long> clientIds);
+
+    /** 列表/详情组装：批量取渠道，按 channel_type 升序稳定输出（对齐 node listChannelsByClientIds）。 */
+    List<SysClientChannel> findByClientIdInOrderByChannelTypeAsc(Collection<Long> clientIds);
 }

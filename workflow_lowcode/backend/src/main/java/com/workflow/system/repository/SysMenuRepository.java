@@ -18,4 +18,7 @@ public interface SysMenuRepository extends JpaRepository<SysMenu, Long>,
 
     /** 物料删除前置检查：按 component（material:&lt;key&gt;）找出引用该物料的菜单。 */
     List<SysMenu> findByComponentAndIsDeleted(String component, int isDeleted);
+
+    /** D2 分区根播种幂等检查：该端是否已有指定 component 的根级、未删菜单（对齐 node client.repository countZoneRoot）。 */
+    long countByClientIdAndComponentAndParentIdIsNullAndIsDeleted(Long clientId, String component, Integer isDeleted);
 }

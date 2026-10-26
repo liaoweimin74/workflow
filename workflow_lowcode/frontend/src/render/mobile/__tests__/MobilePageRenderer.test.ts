@@ -72,6 +72,38 @@ describe('MobilePageRenderer（Vant 渲染器骨架）', () => {
     expect(dataSourceApi.queryData).toHaveBeenCalledWith('ref-9', expect.anything())
   })
 
+  it('applies channelProfiles overlay for the active channel to card blocks', async () => {
+    queryData.mockResolvedValue({
+      data: { records: [{ id: 'r0', data: { code: 'C001', name: '张三' }, version: 1 }], total: 1, page: 1, size: 20 },
+    } as never)
+    const wrapper = mount(MobilePageRenderer, {
+      props: {
+        rule: [
+          {
+            type: 'page-table',
+            field: 'tbl',
+            props: {
+              dataSourceId: 'ds-1',
+              columns: [
+                { key: 'code', label: '编号' },
+                { key: 'name', label: '名称' },
+              ],
+            },
+          },
+        ],
+        dataSources: [{ id: 'ds-1', refId: 'ref-9' }],
+        channel: 'H5',
+        channelProfiles: { H5: { tbl: { card: { title: 'name' } } }, WEB: { tbl: { card: { title: 'code' } } } },
+      },
+      global: GLOBALS,
+    })
+    await flushPromises()
+    wrapper.findComponent(MobileCardList).findComponent(VanList).vm.$emit('load')
+    await flushPromises()
+    // 生效渠道=H5：标题槽=name（缺省会拿第1列 code）
+    expect(wrapper.find('.m-card__title').text()).toBe('张三')
+  })
+
   it('normalizes a saved data container into childRules and renders it with the mobile container', async () => {
     queryData.mockResolvedValue({
       data: { records: [{ id: 'r0', data: { name: '张三' }, version: 1 }], total: 1, page: 1, size: 20 },

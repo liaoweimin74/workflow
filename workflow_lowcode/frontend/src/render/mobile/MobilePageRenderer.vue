@@ -12,6 +12,7 @@ import { computed } from 'vue'
 
 import { createMobileForm, MOBILE_IMPLEMENTED_TEMPLATES } from './vantRegistry'
 import MobileDataContainer from './blocks/MobileDataContainer.vue'
+import { applyChannelProfiles, type ChannelProfiles } from './channelProfiles'
 import { prepareMobileRule, type MobileDataSourceBinding, type MobileRuleNode } from './mobileRulePrepare'
 import { rewriteFieldTypesForMobile } from './fieldTemplates'
 import { transformRuleForMobile } from './mobileRuleTransform'
@@ -29,12 +30,18 @@ const props = withDefaults(
     rule?: unknown[]
     /** 页面内数据源绑定（id→refId；dsRefId 注入依据） */
     dataSources?: MobileDataSourceBinding[]
+    /** 生效渠道类型（覆盖层读取键：H5/APP/MP） */
+    channel?: string
+    /** schema 顶层端覆盖层（按渠道存；缺省块走自动映射） */
+    channelProfiles?: ChannelProfiles
     /** form-create option（缺省交给实例默认值） */
     option?: Record<string, unknown>
   }>(),
   {
     rule: () => [],
     dataSources: () => [],
+    channel: 'H5',
+    channelProfiles: undefined,
     option: undefined,
   },
 )
@@ -43,7 +50,8 @@ const FormCreateMobile = createMobileForm()
 
 const effectiveRule = computed<RuleNode[]>(() => {
   const prepared = prepareMobileRule(props.rule as MobileRuleNode[], props.dataSources)
-  const withFieldPlaceholders = rewriteFieldTypesForMobile(prepared as RuleNode[])
+  const profiled = applyChannelProfiles(prepared, props.channelProfiles, props.channel)
+  const withFieldPlaceholders = rewriteFieldTypesForMobile(profiled as RuleNode[])
   return transformRuleForMobile(withFieldPlaceholders, MOBILE_IMPLEMENTED_TEMPLATES)
 })
 </script>

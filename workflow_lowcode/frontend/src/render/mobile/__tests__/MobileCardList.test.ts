@@ -159,4 +159,25 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     const payload = wrapper.emitted('row-click')?.[0]?.[0] as Record<string, unknown>
     expect(payload).toMatchObject({ id: 'r0', code: 'C001', name: '张三' })
   })
+
+  it('honors cardSlotsOverride from the channel overlay (title/kv by key, hidden dropped)', async () => {
+    queryData.mockResolvedValue(
+      pageResponse([{ code: 'C001', name: '张三', phone: '13900000001' }]) as never,
+    )
+    const wrapper = mountList({
+      cardSlotsOverride: { title: 'name', kv: ['phone'] },
+      columns: [
+        { key: 'code', label: '客户编号' },
+        { key: 'name', label: '客户名称' },
+        { key: 'phone', label: '手机号' },
+      ],
+    })
+    await fireLoad(wrapper)
+    const text = wrapper.text()
+    // 覆盖：副标题槽=name（缺省第1列=code），键值区只剩 phone，code 不进任何槽
+    expect(wrapper.find('.m-card__subtitle').text()).toBe('张三')
+    expect(text).toContain('13900000001')
+    expect(text).not.toContain('C001')
+    expect(wrapper.findAll('.m-card__kv')).toHaveLength(1)
+  })
 })

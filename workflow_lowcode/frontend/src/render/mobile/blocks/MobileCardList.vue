@@ -13,7 +13,8 @@ import { Empty as VanEmpty, List as VanList, PullRefresh as VanPullRefresh, Sear
 import { dataSourceApi } from '@/api/data-source'
 import type { DataSourceQueryParams } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { deriveCardSlots, type CardSlotColumn } from '../cardSlots'
+import { resolveCardSlots, type CardSlotsOverride } from '../channelProfiles'
+import type { CardSlotColumn } from '../cardSlots'
 
 interface SearchFieldLike {
   key: string
@@ -31,6 +32,8 @@ const props = withDefaults(
     searchFields?: SearchFieldLike[]
     showSearch?: boolean
     pageSize?: number
+    /** 端覆盖层槽位配置（宿主按渠道注入；缺省走列序自动映射） */
+    cardSlotsOverride?: CardSlotsOverride
   }>(),
   {
     dataSourceId: undefined,
@@ -39,6 +42,7 @@ const props = withDefaults(
     searchFields: () => [],
     showSearch: false,
     pageSize: 20,
+    cardSlotsOverride: undefined,
   },
 )
 
@@ -51,7 +55,7 @@ const refreshing = ref(false)
 const keyword = ref('')
 const page = ref(0)
 
-const slots = computed(() => deriveCardSlots(props.columns ?? []))
+const slots = computed(() => resolveCardSlots(props.columns ?? [], props.cardSlotsOverride))
 const showSearchBar = computed(() => props.showSearch && (props.searchFields?.length ?? 0) > 0)
 
 /** 数据源解析：宿主 prepare 注入的 dsRefId 优先，其次页面内 dataSourceId 查全局绑定（对齐桌面） */

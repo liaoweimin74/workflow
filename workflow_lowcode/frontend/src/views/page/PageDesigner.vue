@@ -126,6 +126,14 @@
       @confirm="handleCardStyleConfirm"
     />
 
+    <!-- 移动卡片配置（§5.1 第2层覆盖层编辑面：列→槽位/显隐/排序，写回 channelProfiles[H5]） -->
+    <MobileCardProfileDialog
+      v-model="mobileCardDialogVisible"
+      :columns="mobileCardColumns"
+      :override="mobileCardOverride"
+      @confirm="handleMobileCardConfirm"
+    />
+
     <!-- 轻量数据源绑定（page-form/page-detail/page-chart/page-tree-table 专用：容器模式仅写 dataSourceId+filter，不产生列配置，保护各组件专属 props） -->
     <DsBindingConfigDialog
       v-model="lightDsDialogVisible"
@@ -355,6 +363,11 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import MobileCardProfileDialog from '@/render/mobile/MobileCardProfileDialog.vue'
+import { writeChannelCardProfile } from '@/render/mobile/mobileCardPanel'
+import { resolveChannelBlockProfile } from '@/render/mobile/channelProfiles'
+import type { CardSlotsOverride, ChannelProfiles } from '@/render/mobile/channelProfiles'
+import type { CardSlotColumn } from '@/render/mobile/cardSlots'
 import DataContainerConfigDialog from './components/DataContainerConfigDialog.vue'
 import DashConfigDialog, { type DashConfigMode } from '@/views/dashboard/components/DashConfigDialog.vue'
 import { clampDashSpan } from '@/views/dashboard/components/dash-shared'
@@ -609,6 +622,7 @@ function canvasSchema() {
     option: designerRef.value?.getOption() || {},
     dataSources: schema.dataSources,
     actions: schema.actions,
+    channelProfiles: schema.channelProfiles,
   }
 }
 
@@ -751,13 +765,16 @@ const designerConfig = {
 
 const designerHeight = '100%'
 
-/** 页面 schema：dataSources 与 actions（rule 由 FcDesigner 管理） */
+/** 页面 schema：dataSources、actions 与 channelProfiles（rule 由 FcDesigner 管理） */
 const schema = reactive<{
   dataSources: { id: string; refId: string; searchFields?: string[] }[]
   actions: any[]
+  /** 端覆盖层（designs §5.1 第2层）：渠道类型 → 块 field → 配置；缺省键=自动映射 */
+  channelProfiles: ChannelProfiles
 }>({
   dataSources: [],
   actions: [],
+  channelProfiles: {},
 })
 
 /** 当前设计器 rule（供数据引用/查找带回配置与字段回写） */
@@ -902,6 +919,29 @@ function handleCardStyleConfirm(style: CardStyle) {
     }
   }
   ElMessage.success('卡片样式已保存')
+}
+
+// ===== 移动卡片配置（批C C1b：§5.1 第2层覆盖层的编辑面，渠道 v1 固定 H5） =====
+const mobileCardDialogVisible = ref(false)
+/** 当前选中卡片块的桌面显示列：面板行唯一数据源（未配列=对话框内给指引） */
+const mobileCardColumns = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return (active?.props?.columns || []) as CardSlotColumn[]
+})
+/** 该块在 H5 渠道的既有 card 覆盖；缺省=面板展示自动映射初值 */
+const mobileCardOverride = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.field) return undefined
+  return resolveChannelBlockProfile(schema.channelProfiles, 'H5', active.field)?.card
+})
+function openMobileCardConfig() {
+  mobileCardDialogVisible.value = true
+}
+function handleMobileCardConfirm(override: CardSlotsOverride | null) {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.field) return
+  schema.channelProfiles = writeChannelCardProfile(schema.channelProfiles, 'H5', active.field as string, override ?? undefined)
+  ElMessage.success(override ? '移动卡片配置已保存' : '已恢复自动映射')
 }
 
 function enableCardDesignMode(rules: any[]): any[] {
@@ -1123,9 +1163,24 @@ function registerPageComponents() {
     },
   ]
 
-  /** 卡片列表专属配置：配置数据源 + 卡片样式脚本（样式脚本位于数据源下方） */
+  /** 移动卡片配置按钮（page-table/page-list-cards 共用；选中块后按 field 定位 H5 覆盖条目） */
+  const mobileCardButton = () => [
+    {
+      type: 'button',
+      field: 'mobileCardTrigger',
+      title: '移动卡片',
+      children: ['移动卡片配置'],
+      native: true,
+      style: { width: '100%', marginLeft: '0', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: () => openMobileCardConfig() },
+    },
+  ]
+
+  /** 卡片列表专属配置：配置数据源 + 移动卡片 + 卡片样式脚本 */
   const cardListProps = () => [
     ...dataSourceProps(),
+    ...mobileCardButton(),
     {
       type: 'button',
       field: 'cardStyleTrigger',
@@ -1198,7 +1253,7 @@ function registerPageComponents() {
     }),
   })
   // 属性面板"属性配置"区注入数据源下拉 + 表格配置（选中画布中该组件时动态求值）
-  designerRef.value?.setComponentRuleConfig('page-table', dataSourceProps, true)
+  designerRef.value?.setComponentRuleConfig('page-table', () => [...dataSourceProps(), ...mobileCardButton()], true)
 
   designerRef.value?.addComponent({
     label: '卡片列表',
@@ -1809,6 +1864,7 @@ onMounted(async () => {
         // 否则依赖运行态残留才显示（先开运行页再开设计页才有数据）
         setActiveDsBindings(schema.dataSources as any)
         schema.actions = parsed.actions || []
+        schema.channelProfiles = parsed.channelProfiles || {}
         parsedRule = parsed.rule || []
         parsedOption = parsed.option || {}
       } catch {
@@ -1866,12 +1922,7 @@ async function handleSave() {
       key: pageKey.value,
       type: 'PAGE',
       formKey: null,
-      schema: JSON.stringify({
-        rule: designerRef.value?.getRule() || [],
-        option: designerRef.value?.getOption() || {},
-        dataSources: schema.dataSources,
-        actions: schema.actions,
-      }),
+      schema: currentSchemaJson(),
     })
     ElMessage.success('保存成功')
   } catch {

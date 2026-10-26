@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+﻿import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Empty as VanEmpty, List as VanList, PullRefresh as VanPullRefresh, Search as VanSearch } from 'vant'
 
@@ -13,8 +13,9 @@ const queryData = vi.mocked(dataSourceApi.queryData)
 
 /**
  * 移动端卡片列表块（page-table / page-list-cards 的移动实现）。
- * 取数协议对齐桌面 PageDataCards：dataSourceApi.queryData(dsId, {page,size,keyword})，
+ * 取数协议对齐桌面 PageDataCards：dataSourceApi.queryData(refId, {page,size,keyword})，
  * records[].data 展平 + id/version 附带；total 决定 finished。槽位=deriveCardSlots 缺省映射。
+ * 数据源解析走宿主 prepare 注入的 dsRefId（桌面同款协议）。
  */
 
 function pageResponse(rows: Array<Record<string, unknown>>, total = rows.length) {
@@ -38,7 +39,7 @@ const COLUMNS = [
 ]
 
 function mountList(props: Record<string, unknown> = {}) {
-  return mount(MobileCardList, { props: { dataSourceId: 'ds-1', columns: COLUMNS, ...props } })
+  return mount(MobileCardList, { props: { dsRefId: 'ref-1', columns: COLUMNS, ...props } })
 }
 
 async function fireLoad(wrapper: ReturnType<typeof mountList>) {
@@ -62,7 +63,7 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     expect(wrapper.findComponent(VanSearch).exists()).toBe(false)
     await fireLoad(wrapper)
 
-    expect(queryData).toHaveBeenCalledWith('ds-1', { page: 1, size: 20 })
+    expect(queryData).toHaveBeenCalledWith('ref-1', { page: 1, size: 20 })
     expect(wrapper.findAll('.m-card')).toHaveLength(1)
     const text = wrapper.text()
     expect(text).toContain('C001') // 第1列=标题
@@ -90,7 +91,7 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     await flushPromises()
 
     expect(queryData).toHaveBeenCalledTimes(2)
-    expect(queryData).toHaveBeenLastCalledWith('ds-1', { page: 1, size: 20, keyword: '张三' })
+    expect(queryData).toHaveBeenLastCalledWith('ref-1', { page: 1, size: 20, keyword: '张三' })
     // 搜索后重新加载不叠加旧页
     expect(wrapper.findAll('.m-card')).toHaveLength(1)
   })
@@ -112,7 +113,7 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     expect(wrapper.findAll('.m-card')).toHaveLength(2)
 
     await fireLoad(wrapper)
-    expect(queryData).toHaveBeenLastCalledWith('ds-1', { page: 2, size: 2 })
+    expect(queryData).toHaveBeenLastCalledWith('ref-1', { page: 2, size: 2 })
     expect(wrapper.findAll('.m-card')).toHaveLength(3)
     expect(wrapper.findComponent(VanList).props('finished')).toBe(true)
 
@@ -139,12 +140,12 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     await flushPromises()
 
     expect(queryData).toHaveBeenCalledTimes(2)
-    expect(queryData).toHaveBeenLastCalledWith('ds-1', { page: 1, size: 20 })
+    expect(queryData).toHaveBeenLastCalledWith('ref-1', { page: 1, size: 20 })
     expect(wrapper.findAll('.m-card')).toHaveLength(1)
   })
 
   it('skips request and finishes immediately without a bound data source', async () => {
-    const wrapper = mountList({ dataSourceId: undefined })
+    const wrapper = mountList({ dsRefId: undefined })
     await fireLoad(wrapper)
     expect(queryData).not.toHaveBeenCalled()
     expect(wrapper.findComponent(VanList).props('finished')).toBe(true)

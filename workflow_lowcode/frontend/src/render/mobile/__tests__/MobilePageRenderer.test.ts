@@ -1,14 +1,17 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Vant from 'vant'
+import Vant, { List as VanList } from 'vant'
 
 import { dataSourceApi } from '@/api/data-source'
 import MobileCardList from '../blocks/MobileCardList.vue'
+import MobileDataContainer from '../blocks/MobileDataContainer.vue'
 import MobilePageRenderer from '../MobilePageRenderer.vue'
 
 vi.mock('@/api/data-source', () => ({
   dataSourceApi: { queryData: vi.fn() },
 }))
+
+const queryData = vi.mocked(dataSourceApi.queryData)
 
 /** @form-create/vant 内置按 app 注册表解析 van-*；测试挂载环境对齐 main.ts 的 app.use(Vant) */
 const GLOBALS = { plugins: [Vant] }
@@ -52,6 +55,45 @@ describe('MobilePageRenderer（Vant 渲染器骨架）', () => {
     })
     await flushPromises()
     expect(wrapper.text()).not.toContain('暂不支持')
+    expect(wrapper.text()).not.toContain('暂未支持')
+  })
+
+  it('injects dsRefId from page dataSources so blocks fetch the real source', async () => {
+    const wrapper = mount(MobilePageRenderer, {
+      props: {
+        rule: [{ type: 'page-table', field: 'tbl', props: { dataSourceId: 'ds-1', columns: [{ key: 'code', label: '编号' }] } }],
+        dataSources: [{ id: 'ds-1', refId: 'ref-9' }],
+      },
+      global: GLOBALS,
+    })
+    await flushPromises()
+    wrapper.findComponent(MobileCardList).findComponent(VanList).vm.$emit('load')
+    await flushPromises()
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith('ref-9', expect.anything())
+  })
+
+  it('normalizes a saved data container into childRules and renders it with the mobile container', async () => {
+    queryData.mockResolvedValue({
+      data: { records: [{ id: 'r0', data: { name: '张三' }, version: 1 }], total: 1, page: 1, size: 20 },
+    } as never)
+    const wrapper = mount(MobilePageRenderer, {
+      props: {
+        rule: [
+          {
+            type: 'page-data-container',
+            field: 'dc1',
+            props: { dataSourceId: 'ds-1', rule: [{ type: 'input', field: 'x', title: '{rows[0].name}的记录' }] },
+          },
+        ],
+        dataSources: [{ id: 'ds-1', refId: 'ref-9' }],
+      },
+      global: GLOBALS,
+    })
+    await flushPromises()
+    // 容器移动实现挂载，保存态 rule → childRules，内嵌 vant 渲染作用域插值后的子规则
+    expect(wrapper.findComponent(MobileDataContainer).exists()).toBe(true)
+    expect(wrapper.text()).toContain('张三的记录')
+    expect(wrapper.text()).not.toContain('该端不支持')
     expect(wrapper.text()).not.toContain('暂未支持')
   })
 

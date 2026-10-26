@@ -1,18 +1,25 @@
 <script setup lang="ts">
 /**
- * 移动端页面渲染器骨架：@form-create/vant 独立实例渲染与桌面同一份 rule（designs §5
+ * 移动端页面渲染器：@form-create/vant 独立实例渲染与桌面同一份 rule（designs §5
  * 「逻辑 schema 唯一 + 按渠道模板映射」的兑现点；设计预览与 H5 运行时共用此单实现，
  * §5.2 用户复核裁定）。
  *
- * 注册面：块语义 → 移动组件按渠道各注册各的——桌面实例（@form-create/element-ui）与本
- * vant 实例互不影响；实现分批补齐，未落地/无等价的块由 transformRuleForMobile 换成占位。
+ * 处理链（对齐桌面宿主 PageRendererPage 的协议）：
+ *   prepareMobileRule（dsRefId 注入 + 容器归一）→ rewriteFieldTypesForMobile（EP-only 字段占位）
+ *   → transformRuleForMobile（未实现/无等价块占位）。块/字段实现注册见 vantRegistry。
  */
 import { computed } from 'vue'
-import formCreateMobile from '@form-create/vant'
 
-import MobileCardList from './blocks/MobileCardList.vue'
-import MobileBlockPlaceholder from './blocks/MobileBlockPlaceholder.vue'
+import { createMobileForm, MOBILE_IMPLEMENTED_TEMPLATES } from './vantRegistry'
+import MobileDataContainer from './blocks/MobileDataContainer.vue'
+import { prepareMobileRule, type MobileDataSourceBinding, type MobileRuleNode } from './mobileRulePrepare'
+import { rewriteFieldTypesForMobile } from './fieldTemplates'
 import { transformRuleForMobile } from './mobileRuleTransform'
+import type { RuleNode } from './mobileRuleTransform'
+
+// 容器注册归宿主（vantRegistry 不 import 容器以免循环；内嵌实例共享此组件表）
+import formCreateMobile from '@form-create/vant'
+formCreateMobile.component('page-data-container', MobileDataContainer)
 
 defineOptions({ name: 'MobilePageRenderer' })
 
@@ -20,26 +27,25 @@ const props = withDefaults(
   defineProps<{
     /** 页面 schema 的 form-create rule 树（与桌面渲染同一份） */
     rule?: unknown[]
+    /** 页面内数据源绑定（id→refId；dsRefId 注入依据） */
+    dataSources?: MobileDataSourceBinding[]
     /** form-create option（缺省交给实例默认值） */
     option?: Record<string, unknown>
   }>(),
   {
     rule: () => [],
+    dataSources: () => [],
     option: undefined,
   },
 )
 
-/** 模板键→实现 注册表：本批落地 card-list，后续批次在这里补 form/detail/chart/... */
-const IMPLEMENTED_TEMPLATES: readonly string[] = ['card-list']
+const FormCreateMobile = createMobileForm()
 
-// 模块级注册（幂等，PageRendererPage 同规）
-formCreateMobile.component('page-table', MobileCardList)
-formCreateMobile.component('page-list-cards', MobileCardList)
-formCreateMobile.component('mobile-block-placeholder', MobileBlockPlaceholder)
-
-const FormCreateMobile = formCreateMobile.$form()
-
-const effectiveRule = computed(() => transformRuleForMobile(props.rule as Parameters<typeof transformRuleForMobile>[0], IMPLEMENTED_TEMPLATES))
+const effectiveRule = computed<RuleNode[]>(() => {
+  const prepared = prepareMobileRule(props.rule as MobileRuleNode[], props.dataSources)
+  const withFieldPlaceholders = rewriteFieldTypesForMobile(prepared as RuleNode[])
+  return transformRuleForMobile(withFieldPlaceholders, MOBILE_IMPLEMENTED_TEMPLATES)
+})
 </script>
 
 <template>

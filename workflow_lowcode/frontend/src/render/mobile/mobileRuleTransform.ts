@@ -18,7 +18,7 @@ export interface RuleNode {
 }
 
 /** 页面块判定：显式登记过的块，或 page-/dash- 前缀的未知类型（安全兜底 pending） */
-function isPageBlockType(type: unknown): type is string {
+export function isPageBlockType(type: unknown): type is string {
   return (
     typeof type === 'string' &&
     (/^(page|dash)-/.test(type) ||

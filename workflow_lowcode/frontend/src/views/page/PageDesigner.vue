@@ -49,6 +49,13 @@
         <!-- 预览弹窗加一页「出码」：动手出码前先看这一页会出成什么 Vue3 源码。
              vendor 侧把插槽放在 el-tabs 内并带出当前页签名，页签内容只在被点亮时才生成。 -->
         <template #previewTabs="{ status }">
+          <el-tab-pane name="mobile" label="移动" lazy>
+            <MobilePreviewFrame
+              :active="status === 'mobile'"
+              :page-key="pageKey"
+              :get-schema="canvasSchema"
+            />
+          </el-tab-pane>
           <el-tab-pane v-if="CodegenPreviewPane" name="codegen" label="出码" lazy>
             <component
               :is="CodegenPreviewPane"
@@ -363,6 +370,7 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import MobilePreviewFrame from './components/MobilePreviewFrame.vue'
 import MobileCardProfileDialog from '@/render/mobile/MobileCardProfileDialog.vue'
 import { writeChannelCardProfile } from '@/render/mobile/mobileCardPanel'
 import { resolveChannelBlockProfile } from '@/render/mobile/channelProfiles'

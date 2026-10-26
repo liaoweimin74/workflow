@@ -75,6 +75,15 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面设计器', fullScreen: true }
   },
   {
+    // 移动预览宿主（批C C2）：设计器预览弹窗 iframe 装载，同源推 schema 实时渲染；
+    // pageKey 走 query（路由 props 透传，iframe 自加载 DRAFT 兜首帧），fullScreen 不进 AdminLayout 壳
+    path: '/mobile/preview',
+    name: 'MobilePreview',
+    component: () => import('@/views/page/MobilePreviewPage.vue'),
+    props: (route) => ({ pageKey: route.query.pageKey as string }),
+    meta: { title: '移动预览', fullScreen: true }
+  },
+  {
     // 逻辑流设计器：全屏顶层路由（与 /designer 平级），从列表页 /logic-flow 进入
     path: '/logic-flow/design/:id',
     name: 'LogicFlowDesigner',

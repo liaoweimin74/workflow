@@ -10198,3 +10198,19 @@ Work Log:
 
 Stage Summary:
 - 事件 #152 单轮闭环，累计恢复 152 次，零 mvn 136 次；沙箱最长连续故障纪录更新为 8 轮
+
+---
+Task ID: r302
+Agent: main (ops loop)
+Task: 巡检 2026-10-26 10:05（Job 446961）——事件 #153 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r299-301 连续 3 轮故障后恢复，累计 #92-#94）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1284），Java 消失 → 事件 #153
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 5 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1478)/3000=vite(1137)/3306=mariadbd(1284)，104 表
+- 收口 dump 020730（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #153 单轮闭环，累计恢复 153 次，零 mvn 137 次

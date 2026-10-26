@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.constant.GlobalConstant;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.framework.security.ClientCrypto;
-import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
 import com.workflow.system.domain.dto.BindCodeIssueRequest;
 import com.workflow.system.domain.dto.ChangePasswordRequest;
@@ -101,7 +100,8 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != 1) {
             throw new BusinessException("账号已被禁用");
         }
-        return tokenResponse(user);
+        // J4：账密登录 = 平台端 portal × WEB，端声明随 token 签发（spec「token 携带端声明」）
+        return tokenResponse(user, SysClient.PORTAL_CLIENT_ID, "WEB");
     }
 
     @Override
@@ -129,9 +129,12 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException("Refresh Token 无效或已过期");
         }
         Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
+        // J4：续期继承 refresh token 的端声明，端上下文不降级（历史 refresh token 缺省平台端）
+        Long clientId = jwtTokenProvider.getClientIdFromToken(refreshToken);
+        String channel = jwtTokenProvider.getChannelFromToken(refreshToken);
         SysUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
-        return tokenResponse(user);
+        return tokenResponse(user, clientId, channel);
     }
 
     // ------------------------------------------------------------ J3 端身份泛化
@@ -147,7 +150,8 @@ public class AuthServiceImpl implements AuthService {
         SysUserOpenid binding = userOpenidRepository
                 .findByClientIdAndOpenidAndIsDeleted(channel.getClientId(), session.openid(), GlobalConstant.DELETED_NO)
                 .orElseThrow(() -> new BusinessException(401, "该微信未绑定平台账号，请先使用账号密码绑定"));
-        return tokenResponse(requireActiveUser(binding.getUserId(), "绑定账号不存在或已删除"));
+        return tokenResponse(requireActiveUser(binding.getUserId(), "绑定账号不存在或已删除"),
+                channel.getClientId(), channelType);
     }
 
     @Override
@@ -187,7 +191,7 @@ public class AuthServiceImpl implements AuthService {
                 .findByClientIdAndOpenidAndIsDeleted(channel.getClientId(), session.openid(), GlobalConstant.DELETED_NO);
         if (byOpenid.isPresent()) {
             if (byOpenid.get().getUserId().equals(user.getId())) {
-                return tokenResponse(user); // 幂等：同一 openid 重绑同一账号直接登录
+                return tokenResponse(user, channel.getClientId(), channelType); // 幂等：同一 openid 重绑同一账号直接登录
             }
             throw new BusinessException(409, "该微信已绑定其他平台账号，请联系管理员解绑");
         }
@@ -204,7 +208,7 @@ public class AuthServiceImpl implements AuthService {
         binding.setOpenid(session.openid());
         binding.setUnionid(session.unionid());
         userOpenidRepository.save(binding);
-        return tokenResponse(user);
+        return tokenResponse(user, channel.getClientId(), channelType);
     }
 
     @Override
@@ -320,45 +324,22 @@ public class AuthServiceImpl implements AuthService {
         return user;
     }
 
-    private LoginResponse tokenResponse(SysUser user) {
-        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername());
-        return new LoginResponse(accessToken, refreshToken, buildUserInfo(user));
+    private LoginResponse tokenResponse(SysUser user, Long clientId, String channel) {
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername(), clientId, channel);
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername(), clientId, channel);
+        return new LoginResponse(accessToken, refreshToken, buildUserInfo(user, clientId));
     }
 
     @Override
-    public LoginResponse getCurrentUser(Long userId) {
+    public LoginResponse getCurrentUser(Long userId, Long clientId) {
         SysUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("用户不存在"));
-        UserInfo userInfo = buildUserInfo(user);
+        UserInfo userInfo = buildUserInfo(user, clientId);
         return new LoginResponse(null, null, userInfo);
     }
 
     @Override
-    public LoginUser buildLoginUser(Long userId) {
-        SysUser user = userRepository.findById(userId).orElse(null);
-        if (user == null || user.getStatus() == null || user.getStatus() != 1) {
-            return null;
-        }
-        List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
-        Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
-        List<String> roles = roleRepository.findAllById(roleIds).stream()
-                .map(SysRole::getRoleCode)
-                .collect(Collectors.toList());
-
-        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
-                .map(SysRoleMenu::getMenuId)
-                .collect(Collectors.toSet());
-        Set<String> permissions = menuRepository.findAllById(menuIds).stream()
-                .map(SysMenu::getPermission)
-                .filter(p -> p != null && !p.isEmpty())
-                .collect(Collectors.toSet());
-
-        return new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true);
-    }
-
-    @Override
-    public List<MenuTree> getCurrentUserMenus(Long userId) {
+    public List<MenuTree> getCurrentUserMenus(Long userId, Long clientId) {
         List<SysUserRole> userRoles = userRoleRepository.findByUserId(userId);
         Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
 
@@ -370,7 +351,8 @@ public class AuthServiceImpl implements AuthService {
         Set<Long> authorizedMenuIds = null;
         Map<Long, SysMenu> menuCache = new HashMap<>();
         if (isAdmin) {
-            allMenus = menuRepository.findByParentIdIsNullOrderBySortOrder();
+            // J4 统一按端取根（裁定③）：portal=1 取平台端树；业务端取本端树（spec：司机端 token 得司机端树）
+            allMenus = menuRepository.findByClientIdAndParentIdIsNullOrderBySortOrder(clientId);
         } else {
             Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
                     .map(SysRoleMenu::getMenuId)
@@ -406,6 +388,7 @@ public class AuthServiceImpl implements AuthService {
             allMenus = rootMenuIds.stream()
                     .map(menuCache::get)
                     .filter(Objects::nonNull)
+                    .filter(m -> isPortal(clientId) || clientId.equals(m.getClientId()))
                     .sorted(Comparator.comparingInt(SysMenu::getSortOrder))
                     .collect(Collectors.toList());
         }
@@ -413,10 +396,14 @@ public class AuthServiceImpl implements AuthService {
         // 收集所有有权限的菜单 ID（原始授权 + 祖先目录）
         authorizedMenuIds = isAdmin ? null : menuCache.keySet();
 
-        return buildMenuTree(allMenus, authorizedMenuIds);
+        return buildMenuTree(allMenus, authorizedMenuIds, clientId);
     }
 
-    private UserInfo buildUserInfo(SysUser user) {
+    private static boolean isPortal(Long clientId) {
+        return clientId == null || clientId == SysClient.PORTAL_CLIENT_ID;
+    }
+
+    private UserInfo buildUserInfo(SysUser user, Long clientId) {
         List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
         Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
         List<SysRole> roles = roleRepository.findAllById(roleIds);
@@ -424,7 +411,9 @@ public class AuthServiceImpl implements AuthService {
         Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
                 .map(SysRoleMenu::getMenuId)
                 .collect(Collectors.toSet());
+        // 端隔离沿用裁定：仅非 portal 端只认本端菜单权限码，portal 全量（存量零破坏）
         Set<String> permissions = menuRepository.findAllById(menuIds).stream()
+                .filter(m -> isPortal(clientId) || clientId.equals(m.getClientId()))
                 .map(SysMenu::getPermission)
                 .filter(p -> p != null && !p.isEmpty())
                 .collect(Collectors.toSet());
@@ -443,22 +432,23 @@ public class AuthServiceImpl implements AuthService {
                 permissions);
     }
 
-    private List<MenuTree> buildMenuTree(List<SysMenu> menus, Set<Long> authorizedMenuIds) {
+    private List<MenuTree> buildMenuTree(List<SysMenu> menus, Set<Long> authorizedMenuIds, Long clientId) {
         return menus.stream()
                 .filter(m -> m.getIsDeleted() == 0)
                 .filter(m -> m.getStatus() == 1)
                 .filter(m -> authorizedMenuIds == null || authorizedMenuIds.contains(m.getId()))
-                .map(m -> toMenuTree(m, authorizedMenuIds))
+                .map(m -> toMenuTree(m, authorizedMenuIds, clientId))
                 .collect(Collectors.toList());
     }
 
-    private MenuTree toMenuTree(SysMenu menu, Set<Long> authorizedMenuIds) {
+    private MenuTree toMenuTree(SysMenu menu, Set<Long> authorizedMenuIds, Long clientId) {
         List<SysMenu> children = menuRepository.findByParentIdOrderBySortOrder(menu.getId());
         List<MenuTree> childTrees = children.stream()
                 .filter(c -> c.getIsDeleted() == 0)
                 .filter(c -> c.getStatus() == 1)
                 .filter(c -> authorizedMenuIds == null || authorizedMenuIds.contains(c.getId()))
-                .map(c -> toMenuTree(c, authorizedMenuIds))
+                .filter(c -> isPortal(clientId) || clientId.equals(c.getClientId()))
+                .map(c -> toMenuTree(c, authorizedMenuIds, clientId))
                 .collect(Collectors.toList());
 
         return new MenuTree(

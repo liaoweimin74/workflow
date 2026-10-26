@@ -75,7 +75,8 @@ public class AuthController {
 
     @GetMapping("/userinfo")
     public R<LoginResponse> getCurrentUser(@AuthenticationPrincipal LoginUser loginUser) {
-        return R.ok(authService.getCurrentUser(loginUser.getUserId()));
+        // J4：端上下文取自 token claim 灌入的 LoginUser（历史 token=平台端缺省）
+        return R.ok(authService.getCurrentUser(loginUser.getUserId(), loginUser.getClientId()));
     }
 
     /** 改密对象只取 token 里的账号，不接受 userId 入参，否则任何人都能改别人的密码。 */
@@ -88,7 +89,7 @@ public class AuthController {
 
     @GetMapping("/menus")
     public R<List<MenuTree>> getMenus(@AuthenticationPrincipal LoginUser loginUser) {
-        return R.ok(authService.getCurrentUserMenus(loginUser.getUserId()));
+        return R.ok(authService.getCurrentUserMenus(loginUser.getUserId(), loginUser.getClientId()));
     }
 
     public record RefreshTokenRequest(String refreshToken) {}

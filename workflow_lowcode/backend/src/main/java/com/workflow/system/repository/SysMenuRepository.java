@@ -21,4 +21,7 @@ public interface SysMenuRepository extends JpaRepository<SysMenu, Long>,
 
     /** D2 分区根播种幂等检查：该端是否已有指定 component 的根级、未删菜单（对齐 node client.repository countZoneRoot）。 */
     long countByClientIdAndComponentAndParentIdIsNullAndIsDeleted(Long clientId, String component, Integer isDeleted);
+
+    /** J4 按端取菜单树根（spec：菜单接口依 token 端声明返回该端树；存量菜单全属 portal=1，历史会话缺省端取树不变）。 */
+    List<SysMenu> findByClientIdAndParentIdIsNullOrderBySortOrder(Long clientId);
 }

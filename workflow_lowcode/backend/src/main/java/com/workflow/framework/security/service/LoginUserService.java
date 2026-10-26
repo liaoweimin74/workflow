@@ -1,7 +1,9 @@
 package com.workflow.framework.security.service;
 
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.system.domain.entity.SysClient;
 import com.workflow.system.domain.entity.SysMenu;
+import com.workflow.system.domain.entity.SysRole;
 import com.workflow.system.domain.entity.SysRole;
 import com.workflow.system.domain.entity.SysRoleMenu;
 import com.workflow.system.domain.entity.SysUser;
@@ -44,10 +46,10 @@ public class LoginUserService {
     }
 
     /**
-     * 按 userId 构造带角色与权限集合的 LoginUser。
+     * 按 userId + 端上下文构造带角色与权限集合的 LoginUser。
      * 用户不存在或被禁用 → null（调用方不设置认证上下文）。
      */
-    public LoginUser buildLoginUser(Long userId) {
+    public LoginUser buildLoginUser(Long userId, Long clientId, String channel) {
         SysUser user = userRepository.findById(userId).orElse(null);
         if (user == null || user.getStatus() == null || user.getStatus() != 1) {
             return null;
@@ -61,13 +63,20 @@ public class LoginUserService {
         Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
                 .map(SysRoleMenu::getMenuId)
                 .collect(Collectors.toSet());
+        // 端隔离沿用 PageAccessGuard 裁定：仅非 portal 端只认本端菜单权限码，portal 全量（存量零破坏）
         Set<String> permissions = menuRepository.findAllById(menuIds).stream()
+                .filter(m -> isPortal(clientId) || clientId.equals(m.getClientId()))
                 .map(SysMenu::getPermission)
                 .filter(p -> p != null && !p.isEmpty())
                 .collect(Collectors.toSet());
 
-        LoginUser loginUser = new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true);
+        LoginUser loginUser = new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true,
+                clientId, channel);
         loginUser.setOrgId(user.getOrgId());
         return loginUser;
+    }
+
+    private static boolean isPortal(Long clientId) {
+        return clientId == null || clientId == SysClient.PORTAL_CLIENT_ID;
     }
 }

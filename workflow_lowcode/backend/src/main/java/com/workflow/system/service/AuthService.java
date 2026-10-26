@@ -1,6 +1,5 @@
 package com.workflow.system.service;
 
-import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.system.domain.dto.BindCodeIssueRequest;
 import com.workflow.system.domain.dto.ChangePasswordRequest;
 import com.workflow.system.domain.dto.ClientBindRequest;
@@ -26,9 +25,16 @@ public interface AuthService {
      */
     void changePassword(Long userId, ChangePasswordRequest request);
 
-    LoginResponse getCurrentUser(Long userId);
+    /**
+     * 当前用户信息（J4）：权限集合按 token 端上下文过滤——仅非 portal 端隔离（沿用 PageAccessGuard 裁定）。
+     */
+    LoginResponse getCurrentUser(Long userId, Long clientId);
 
-    List<MenuTree> getCurrentUserMenus(Long userId);
+    /**
+     * 当前用户菜单树（J4）：统一按端取根（spec「菜单接口依 token 端声明返回该端树」）；
+     * 历史 token 缺声明 → 平台端，存量树零破坏。
+     */
+    List<MenuTree> getCurrentUserMenus(Long userId, Long clientId);
 
     /**
      * 端登录（J3 泛化，替代 V64 loginByMiniprogram）：按 clientId+channel 门禁登录方式后，
@@ -49,10 +55,4 @@ public interface AuthService {
 
     /** 管理端为「账号 × 端」签发一次性绑定码（A4 端身份 Tab 调用）。 */
     BindCodeVO issueBindCode(BindCodeIssueRequest request);
-
-    /**
-     * 按 userId 构造带角色与权限集合的 LoginUser（JWT 过滤器用）。
-     * 角色为空（用户不存在）时返回 null。
-     */
-    LoginUser buildLoginUser(Long userId);
 }

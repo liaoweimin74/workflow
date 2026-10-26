@@ -37,8 +37,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             Long userId = jwtTokenProvider.getUserIdFromToken(token);
+            // 端上下文取自 token claim（J4）：历史 token 无声明 → provider 缺省平台端（过渡兼容）
+            Long clientId = jwtTokenProvider.getClientIdFromToken(token);
+            String channel = jwtTokenProvider.getChannelFromToken(token);
             // 加载完整角色与权限集合（后端鉴权依赖，不能为空）
-            LoginUser loginUser = loginUserService.buildLoginUser(userId);
+            LoginUser loginUser = loginUserService.buildLoginUser(userId, clientId, channel);
             if (loginUser != null) {
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());

@@ -51,6 +51,10 @@ class AuthServiceImplClientIdentityTest {
     private static final Long CLIENT7 = 7L;
 
     private SysUserRepository userRepository;
+    private SysRoleRepository roleRepository;
+    private SysMenuRepository menuRepository;
+    private SysUserRoleRepository userRoleRepository;
+    private SysRoleMenuRepository roleMenuRepository;
     private SysUserOpenidRepository openidRepository;
     private SysClientChannelRepository channelRepository;
     private WechatMiniprogramClient miniprogramClient;
@@ -63,10 +67,10 @@ class AuthServiceImplClientIdentityTest {
     @BeforeEach
     void setUp() {
         userRepository = mock(SysUserRepository.class);
-        SysRoleRepository roleRepository = mock(SysRoleRepository.class);
-        SysMenuRepository menuRepository = mock(SysMenuRepository.class);
-        SysUserRoleRepository userRoleRepository = mock(SysUserRoleRepository.class);
-        SysRoleMenuRepository roleMenuRepository = mock(SysRoleMenuRepository.class);
+        roleRepository = mock(SysRoleRepository.class);
+        menuRepository = mock(SysMenuRepository.class);
+        userRoleRepository = mock(SysUserRoleRepository.class);
+        roleMenuRepository = mock(SysRoleMenuRepository.class);
         SysOrganizationRepository orgRepository = mock(SysOrganizationRepository.class);
         openidRepository = mock(SysUserOpenidRepository.class);
         channelRepository = mock(SysClientChannelRepository.class);
@@ -83,8 +87,8 @@ class AuthServiceImplClientIdentityTest {
         when(roleRepository.findAllById(any())).thenReturn(List.of());
         when(roleMenuRepository.findByRoleIdIn(any())).thenReturn(List.of());
         when(menuRepository.findAllById(any())).thenReturn(List.of());
-        when(jwtTokenProvider.createAccessToken(any(), any())).thenReturn("access-token");
-        when(jwtTokenProvider.createRefreshToken(any(), any())).thenReturn("refresh-token");
+        when(jwtTokenProvider.createAccessToken(any(), any(), any(), any())).thenReturn("access-token");
+        when(jwtTokenProvider.createRefreshToken(any(), any(), any(), any())).thenReturn("refresh-token");
     }
 
     // ------------------------------------------------------------ 工具
@@ -442,5 +446,136 @@ class AuthServiceImplClientIdentityTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("该端暂无身份绑定")
                 .extracting(e -> ((BusinessException) e).getCode()).isEqualTo(400);
+    }
+
+    // ------------------------------------------------------------ J4 端 claim 与按端过滤
+
+    @Test
+    void login_issuesTokenWithPortalWebClaims() {
+        when(channelRepository.findByClientIdAndChannelType(1L, "WEB"))
+                .thenReturn(Optional.of(channel(1L, "WEB", 1, null)));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user(1L, "admin", 1)));
+        when(passwordEncoder.matches("pass", "encoded")).thenReturn(true);
+
+        service.login(new LoginRequest("admin", "pass"));
+
+        verify(jwtTokenProvider).createAccessToken(1L, "admin", 1L, "WEB");
+        verify(jwtTokenProvider).createRefreshToken(1L, "admin", 1L, "WEB");
+    }
+
+    @Test
+    void clientLogin_issuesTokenWithClientScopedClaims() {
+        when(channelRepository.findByClientIdAndChannelType(CLIENT7, "MP"))
+                .thenReturn(Optional.of(mpChannelEnabled("[\"OPENID_SILENT\"]")));
+        stubSession();
+        when(openidRepository.findByClientIdAndOpenidAndIsDeleted(CLIENT7, OPENID, 0))
+                .thenReturn(Optional.of(binding(CLIENT7, 7L, OPENID)));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "customer", 1)));
+
+        service.clientLogin(new ClientLoginRequest(CLIENT7, "MP", CODE));
+
+        // spec：token SHALL 携带 client/channel——下游过滤器/菜单/guard 端上下文的唯一来源
+        verify(jwtTokenProvider).createAccessToken(7L, "customer", 7L, "MP");
+        verify(jwtTokenProvider).createRefreshToken(7L, "customer", 7L, "MP");
+    }
+
+    @Test
+    void refreshToken_inheritsClientClaimsFromRefreshToken() {
+        when(jwtTokenProvider.validateToken("refresh-token")).thenReturn(true);
+        when(jwtTokenProvider.getUserIdFromToken("refresh-token")).thenReturn(7L);
+        when(jwtTokenProvider.getClientIdFromToken("refresh-token")).thenReturn(7L);
+        when(jwtTokenProvider.getChannelFromToken("refresh-token")).thenReturn("MP");
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "customer", 1)));
+
+        service.refreshToken("refresh-token");
+
+        verify(jwtTokenProvider).createAccessToken(7L, "customer", 7L, "MP");
+    }
+
+    @Test
+    void getCurrentUserMenus_nonPortalAdmin_getsClientScopedRoots() {
+        com.workflow.system.domain.entity.SysUserRole ur = new com.workflow.system.domain.entity.SysUserRole();
+        ur.setUserId(1L);
+        ur.setRoleId(5L);
+        when(userRoleRepository.findByUserId(1L)).thenReturn(List.of(ur));
+        com.workflow.system.domain.entity.SysRole adminRole = new com.workflow.system.domain.entity.SysRole();
+        adminRole.setId(5L);
+        adminRole.setRoleCode("ROLE_ADMIN");
+        when(roleRepository.findAllById(any())).thenReturn(List.of(adminRole));
+
+        com.workflow.system.domain.entity.SysMenu mpMenu = new com.workflow.system.domain.entity.SysMenu();
+        mpMenu.setId(900L);
+        mpMenu.setClientId(7L);
+        mpMenu.setMenuName("司机订单");
+        mpMenu.setMenuType(1);
+        mpMenu.setSortOrder(1);
+        mpMenu.setStatus(1);
+        when(menuRepository.findByClientIdAndParentIdIsNullOrderBySortOrder(7L)).thenReturn(List.of(mpMenu));
+        when(menuRepository.findByParentIdOrderBySortOrder(900L)).thenReturn(List.of());
+
+        assertThat(service.getCurrentUserMenus(1L, 7L))
+                .extracting(com.workflow.system.domain.vo.MenuTree::id).containsExactly(900L);
+        // 按端取树：不得回退到全量根查询（portal 树≠司机端树，spec Scenario）
+        verify(menuRepository, never()).findByParentIdIsNullOrderBySortOrder();
+    }
+
+    @Test
+    void getCurrentUser_nonPortal_permissionsScopedToOwnClient() {
+        com.workflow.system.domain.entity.SysUserRole ur = new com.workflow.system.domain.entity.SysUserRole();
+        ur.setUserId(7L);
+        ur.setRoleId(5L);
+        when(userRoleRepository.findByUserId(7L)).thenReturn(List.of(ur));
+        com.workflow.system.domain.entity.SysRole role = new com.workflow.system.domain.entity.SysRole();
+        role.setId(5L);
+        role.setRoleCode("ROLE_DRIVER");
+        when(roleRepository.findAllById(any())).thenReturn(List.of(role));
+        com.workflow.system.domain.entity.SysRoleMenu rm1 = new com.workflow.system.domain.entity.SysRoleMenu();
+        rm1.setRoleId(5L);
+        rm1.setMenuId(61L);
+        com.workflow.system.domain.entity.SysRoleMenu rm2 = new com.workflow.system.domain.entity.SysRoleMenu();
+        rm2.setRoleId(5L);
+        rm2.setMenuId(62L);
+        when(roleMenuRepository.findByRoleIdIn(any())).thenReturn(List.of(rm1, rm2));
+        com.workflow.system.domain.entity.SysMenu ownMenu = new com.workflow.system.domain.entity.SysMenu();
+        ownMenu.setId(61L);
+        ownMenu.setClientId(7L);
+        ownMenu.setPermission("order:list");
+        com.workflow.system.domain.entity.SysMenu portalMenu = new com.workflow.system.domain.entity.SysMenu();
+        portalMenu.setId(62L);
+        portalMenu.setClientId(1L);
+        portalMenu.setPermission("sys:user:list");
+        when(menuRepository.findAllById(any())).thenReturn(List.of(ownMenu, portalMenu));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "customer", 1)));
+
+        LoginResponse response = service.getCurrentUser(7L, 7L);
+
+        assertThat(response.user().permissions()).containsExactly("order:list");
+    }
+
+    @Test
+    void getCurrentUser_portal_keepsAllPermissions() {
+        // client=1 全量（非 portal 才隔离裁定）：存量权限语义零破坏
+        com.workflow.system.domain.entity.SysUserRole ur = new com.workflow.system.domain.entity.SysUserRole();
+        ur.setUserId(7L);
+        ur.setRoleId(5L);
+        when(userRoleRepository.findByUserId(7L)).thenReturn(List.of(ur));
+        com.workflow.system.domain.entity.SysRole role = new com.workflow.system.domain.entity.SysRole();
+        role.setId(5L);
+        role.setRoleCode("ROLE_STAFF");
+        when(roleRepository.findAllById(any())).thenReturn(List.of(role));
+        com.workflow.system.domain.entity.SysRoleMenu rm1 = new com.workflow.system.domain.entity.SysRoleMenu();
+        rm1.setRoleId(5L);
+        rm1.setMenuId(61L);
+        when(roleMenuRepository.findByRoleIdIn(any())).thenReturn(List.of(rm1));
+        com.workflow.system.domain.entity.SysMenu otherMenu = new com.workflow.system.domain.entity.SysMenu();
+        otherMenu.setId(61L);
+        otherMenu.setClientId(9L);
+        otherMenu.setPermission("order:list");
+        when(menuRepository.findAllById(any())).thenReturn(List.of(otherMenu));
+        when(userRepository.findById(7L)).thenReturn(Optional.of(user(7L, "customer", 1)));
+
+        LoginResponse response = service.getCurrentUser(7L, 1L);
+
+        assertThat(response.user().permissions()).containsExactly("order:list");
     }
 }

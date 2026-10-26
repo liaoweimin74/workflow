@@ -41,8 +41,8 @@ public class SecurityConfig {
                 .accessDeniedHandler(accessDeniedHandler))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login",
-                        "/api/auth/miniprogram/login",
-                        "/api/auth/miniprogram/bind").permitAll()
+                        "/api/auth/client/login",
+                        "/api/auth/client/bind").permitAll()
                 // SSE 端点：浏览器 EventSource 无法自定义 header，通过 query token 自行认证
                 .requestMatchers("/api/v1/notifications/sse").permitAll()
                 // 物料 bundle：ESM import() 无法携带 Authorization 头，公开读（design D3）；

@@ -5,7 +5,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -17,8 +16,13 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+/**
+ * code2session 封装单测（J3 参数化后：appid/secret 由调用方按端渠道配置传入）。
+ */
 class WechatMiniprogramClientTest {
 
+    private static final String APP_ID = "wx-test-app";
+    private static final String APP_SECRET = "test-secret";
     private static final String SESSION_URL = "https://api.weixin.qq.com/sns/jscode2session"
             + "?appid=wx-test-app&secret=test-secret&js_code=CODE-1&grant_type=authorization_code";
 
@@ -30,8 +34,6 @@ class WechatMiniprogramClientTest {
         RestClient.Builder builder = RestClient.builder();
         mockServer = MockRestServiceServer.bindTo(builder).build();
         client = new WechatMiniprogramClient(builder);
-        ReflectionTestUtils.setField(client, "appId", "wx-test-app");
-        ReflectionTestUtils.setField(client, "appSecret", "test-secret");
     }
 
     @Test
@@ -41,7 +43,7 @@ class WechatMiniprogramClientTest {
                 .andRespond(withSuccess("{\"openid\":\"openid-1\",\"unionid\":\"union-1\",\"session_key\":\"sk\"}",
                         MediaType.APPLICATION_JSON));
 
-        WechatMiniprogramClient.SessionInfo session = client.code2Session("CODE-1");
+        WechatMiniprogramClient.SessionInfo session = client.code2Session(APP_ID, APP_SECRET, "CODE-1");
 
         mockServer.verify();
         assertEquals("wx-test-app", session.appId());
@@ -54,7 +56,7 @@ class WechatMiniprogramClientTest {
         mockServer.expect(requestTo(SESSION_URL))
                 .andRespond(withSuccess("{\"openid\":\"openid-1\",\"unionid\":\"\"}", MediaType.APPLICATION_JSON));
 
-        assertNull(client.code2Session("CODE-1").unionid());
+        assertNull(client.code2Session(APP_ID, APP_SECRET, "CODE-1").unionid());
     }
 
     @Test
@@ -62,7 +64,8 @@ class WechatMiniprogramClientTest {
         mockServer.expect(requestTo(SESSION_URL))
                 .andRespond(withSuccess("{\"errcode\":40029,\"errmsg\":\"invalid code\"}", MediaType.APPLICATION_JSON));
 
-        BusinessException e = assertThrows(BusinessException.class, () -> client.code2Session("CODE-1"));
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> client.code2Session(APP_ID, APP_SECRET, "CODE-1"));
 
         assertEquals(401, e.getCode());
         assertEquals("微信登录凭证无效或已过期，请重试", e.getMessage());
@@ -73,7 +76,8 @@ class WechatMiniprogramClientTest {
         mockServer.expect(requestTo(SESSION_URL))
                 .andRespond(withSuccess("{\"errcode\":40226,\"errmsg\":\"high risk\"}", MediaType.APPLICATION_JSON));
 
-        BusinessException e = assertThrows(BusinessException.class, () -> client.code2Session("CODE-1"));
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> client.code2Session(APP_ID, APP_SECRET, "CODE-1"));
 
         assertEquals(403, e.getCode());
     }
@@ -83,7 +87,8 @@ class WechatMiniprogramClientTest {
         mockServer.expect(requestTo(SESSION_URL))
                 .andRespond(withSuccess("{\"session_key\":\"sk\"}", MediaType.APPLICATION_JSON));
 
-        BusinessException e = assertThrows(BusinessException.class, () -> client.code2Session("CODE-1"));
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> client.code2Session(APP_ID, APP_SECRET, "CODE-1"));
 
         assertEquals(502, e.getCode());
     }
@@ -92,16 +97,17 @@ class WechatMiniprogramClientTest {
     void code2Session_http_failure_is_502() {
         mockServer.expect(requestTo(SESSION_URL)).andRespond(withServerError());
 
-        BusinessException e = assertThrows(BusinessException.class, () -> client.code2Session("CODE-1"));
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> client.code2Session(APP_ID, APP_SECRET, "CODE-1"));
 
         assertEquals(502, e.getCode());
     }
 
     @Test
-    void code2Session_rejects_missing_config_without_calling_wechat() {
-        ReflectionTestUtils.setField(client, "appSecret", "");
-
-        BusinessException e = assertThrows(BusinessException.class, () -> client.code2Session("CODE-1"));
+    void code2Session_rejects_blank_credential_without_calling_wechat() {
+        // 纵深防御：调用方（AuthServiceImpl 端凭据解析）已挡 503，此处再挡空参不误发微信请求
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> client.code2Session("", APP_SECRET, "CODE-1"));
 
         assertEquals(503, e.getCode());
         mockServer.verify();

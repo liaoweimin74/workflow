@@ -1,30 +1,47 @@
 package com.workflow.system.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.constant.GlobalConstant;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.framework.security.ClientCrypto;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
-import com.workflow.framework.redis.RedisCache;
+import com.workflow.system.domain.dto.BindCodeIssueRequest;
 import com.workflow.system.domain.dto.ChangePasswordRequest;
+import com.workflow.system.domain.dto.ClientBindRequest;
+import com.workflow.system.domain.dto.ClientLoginRequest;
+import com.workflow.system.domain.dto.ClientUnbindRequest;
 import com.workflow.system.domain.dto.LoginRequest;
 import com.workflow.system.domain.entity.*;
+import com.workflow.system.domain.vo.BindCodeVO;
 import com.workflow.system.domain.vo.LoginResponse;
 import com.workflow.system.domain.vo.MenuTree;
 import com.workflow.system.domain.vo.UserInfo;
 import com.workflow.system.repository.*;
 import com.workflow.system.service.AuthService;
+import com.workflow.system.service.BindCodeService;
 import com.workflow.system.service.WechatMiniprogramClient;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+
+    /** 登录方式枚举值——与前端 A2 渠道勾选项一致（ClientSettingDrawer LOGIN_METHOD_OPTIONS）。 */
+    private static final String METHOD_PWD = "PWD";
+    private static final String METHOD_OPENID_SILENT = "OPENID_SILENT";
+    private static final String METHOD_BIND_CODE = "BIND_CODE";
+
+    /** 渠道配置 JSON 解析（宽松降级）；只读取 loginMethods/appid，不外泄 config 原文。 */
+    private static final ObjectMapper CONFIG_MAPPER = new ObjectMapper();
+
     private final SysUserRepository userRepository;
     private final SysRoleRepository roleRepository;
     private final SysMenuRepository menuRepository;
@@ -32,15 +49,28 @@ public class AuthServiceImpl implements AuthService {
     private final SysRoleMenuRepository roleMenuRepository;
     private final SysOrganizationRepository orgRepository;
     private final SysUserOpenidRepository userOpenidRepository;
+    private final SysClientChannelRepository clientChannelRepository;
     private final WechatMiniprogramClient miniprogramClient;
+    private final ClientCrypto clientCrypto;
+    private final BindCodeService bindCodeService;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
+
+    /** D5 过渡兼容：端渠道未配 appid/secret 时回退全局 env 配置（V64 存量部署不破）。 */
+    @Value("${workflow.auth.miniprogram.app-id:}")
+    private String globalMpAppId;
+
+    @Value("${workflow.auth.miniprogram.app-secret:}")
+    private String globalMpAppSecret;
 
     public AuthServiceImpl(SysUserRepository userRepository, SysRoleRepository roleRepository,
                            SysMenuRepository menuRepository, SysUserRoleRepository userRoleRepository,
                            SysRoleMenuRepository roleMenuRepository, SysOrganizationRepository orgRepository,
                            SysUserOpenidRepository userOpenidRepository,
+                           SysClientChannelRepository clientChannelRepository,
                            WechatMiniprogramClient miniprogramClient,
+                           ClientCrypto clientCrypto,
+                           BindCodeService bindCodeService,
                            JwtTokenProvider jwtTokenProvider, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -49,7 +79,10 @@ public class AuthServiceImpl implements AuthService {
         this.roleMenuRepository = roleMenuRepository;
         this.orgRepository = orgRepository;
         this.userOpenidRepository = userOpenidRepository;
+        this.clientChannelRepository = clientChannelRepository;
         this.miniprogramClient = miniprogramClient;
+        this.clientCrypto = clientCrypto;
+        this.bindCodeService = bindCodeService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordEncoder = passwordEncoder;
     }
@@ -57,6 +90,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public LoginResponse login(LoginRequest request) {
+        // J3 门禁：账密登录=默认平台端 portal × WEB × PWD（spec「未开通方式拒绝」；
+        // portal WEB seed config NULL=缺省放行，存量零破坏——ledger D3）。
+        assertMethodEnabled(SysClient.PORTAL_CLIENT_ID, "WEB", METHOD_PWD);
         SysUser user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BusinessException("用户名或密码错误"));
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
@@ -98,47 +134,71 @@ public class AuthServiceImpl implements AuthService {
         return tokenResponse(user);
     }
 
+    // ------------------------------------------------------------ J3 端身份泛化
+
     @Override
     @Transactional
-    public LoginResponse loginByMiniprogram(String code) {
-        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
+    public LoginResponse clientLogin(ClientLoginRequest request) {
+        String channelType = normalizeChannel(request.channel());
+        assertMpChannel(channelType);
+        SysClientChannel channel = assertMethodEnabled(request.clientId(), channelType, METHOD_OPENID_SILENT);
+
+        WechatMiniprogramClient.SessionInfo session = exchangeSession(channel, request.code());
         SysUserOpenid binding = userOpenidRepository
-                .findByAppIdAndOpenidAndIsDeleted(session.appId(), session.openid(), GlobalConstant.DELETED_NO)
+                .findByClientIdAndOpenidAndIsDeleted(channel.getClientId(), session.openid(), GlobalConstant.DELETED_NO)
                 .orElseThrow(() -> new BusinessException(401, "该微信未绑定平台账号，请先使用账号密码绑定"));
         return tokenResponse(requireActiveUser(binding.getUserId(), "绑定账号不存在或已删除"));
     }
 
     @Override
     @Transactional
-    public LoginResponse bindMiniprogram(String code, String username, String password) {
-        WechatMiniprogramClient.SessionInfo session = miniprogramClient.code2Session(code);
-        SysUser user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new BusinessException(401, "用户名或密码错误");
+    public LoginResponse clientBind(ClientBindRequest request) {
+        String channelType = normalizeChannel(request.channel());
+        assertMpChannel(channelType);
+        boolean passwordMode = hasText(request.username()) || hasText(request.password());
+        if (!passwordMode && !hasText(request.bindCode())) {
+            throw new BusinessException(400, "绑定凭据不能为空（账号密码或绑定码）");
         }
-        if (user.getIsDeleted() != GlobalConstant.DELETED_NO) {
-            throw new BusinessException(401, "用户名或密码错误");
-        }
-        if (user.getStatus() == null || user.getStatus() != 1) {
-            throw new BusinessException(403, "账号已被禁用");
+        // D4 裁定：口令 bind 是 openid 静默登录的前置设置步 → 门禁 OPENID_SILENT；绑定码 → BIND_CODE。
+        String method = passwordMode ? METHOD_OPENID_SILENT : METHOD_BIND_CODE;
+        SysClientChannel channel = assertMethodEnabled(request.clientId(), channelType, method);
+        WechatMiniprogramClient.SessionInfo session = exchangeSession(channel, request.code());
+
+        SysUser user;
+        if (passwordMode) {
+            user = userRepository.findByUsername(request.username())
+                    .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+                throw new BusinessException(401, "用户名或密码错误");
+            }
+            if (user.getIsDeleted() != GlobalConstant.DELETED_NO) {
+                throw new BusinessException(401, "用户名或密码错误");
+            }
+            if (user.getStatus() == null || user.getStatus() != 1) {
+                throw new BusinessException(403, "账号已被禁用");
+            }
+        } else {
+            SysBindCode code = bindCodeService.consume(request.bindCode().trim(), channel.getClientId());
+            user = requireActiveUser(code.getUserId(), "绑定目标账号不存在或已删除");
         }
 
+        // 端身份判定按 clientId 隔离（spec「openid 跨端隔离」：各端绑定互不影响）
         Optional<SysUserOpenid> byOpenid = userOpenidRepository
-                .findByAppIdAndOpenidAndIsDeleted(session.appId(), session.openid(), GlobalConstant.DELETED_NO);
+                .findByClientIdAndOpenidAndIsDeleted(channel.getClientId(), session.openid(), GlobalConstant.DELETED_NO);
         if (byOpenid.isPresent()) {
             if (byOpenid.get().getUserId().equals(user.getId())) {
-                return tokenResponse(user);
+                return tokenResponse(user); // 幂等：同一 openid 重绑同一账号直接登录
             }
             throw new BusinessException(409, "该微信已绑定其他平台账号，请联系管理员解绑");
         }
         Optional<SysUserOpenid> byUser = userOpenidRepository
-                .findByAppIdAndUserIdAndIsDeleted(session.appId(), user.getId(), GlobalConstant.DELETED_NO);
+                .findByClientIdAndUserIdAndIsDeleted(channel.getClientId(), user.getId(), GlobalConstant.DELETED_NO);
         if (byUser.isPresent()) {
             throw new BusinessException(409, "该平台账号已绑定其他微信，请联系管理员解绑");
         }
 
         SysUserOpenid binding = new SysUserOpenid();
+        binding.setClientId(channel.getClientId());
         binding.setUserId(user.getId());
         binding.setAppId(session.appId());
         binding.setOpenid(session.openid());
@@ -146,6 +206,109 @@ public class AuthServiceImpl implements AuthService {
         userOpenidRepository.save(binding);
         return tokenResponse(user);
     }
+
+    @Override
+    @Transactional
+    public void clientUnbind(Long userId, ClientUnbindRequest request) {
+        SysUserOpenid binding = userOpenidRepository
+                .findByClientIdAndUserIdAndIsDeleted(request.clientId(), userId, GlobalConstant.DELETED_NO)
+                .orElseThrow(() -> new BusinessException(400, "该端暂无身份绑定"));
+        binding.setIsDeleted(1);
+        userOpenidRepository.save(binding);
+    }
+
+    @Override
+    public BindCodeVO issueBindCode(BindCodeIssueRequest request) {
+        return bindCodeService.issue(request.userId(), request.clientId());
+    }
+
+    // ------------------------------------------------------------ 端门禁与渠道凭据
+
+    /**
+     * 登录方式门禁（spec client-login-identity Requirement 1；ledger D3 语义）：
+     * <ul>
+     *   <li>渠道行缺失或 enabled≠1 → 拒；</li>
+     *   <li>config_json NULL/空 → 缺省放行（V71 portal seed 无 config，存量链零破坏）；</li>
+     *   <li>config_json 非空 → 严格按 config.loginMethods（A2「未勾选不落键」= 显式关停）。</li>
+     * </ul>
+     */
+    private SysClientChannel assertMethodEnabled(Long clientId, String channelType, String method) {
+        SysClientChannel channel = clientChannelRepository
+                .findByClientIdAndChannelType(clientId, channelType).orElse(null);
+        if (channel == null || !Integer.valueOf(1).equals(channel.getEnabled())) {
+            throw new BusinessException(403, "该端未开通此登录方式");
+        }
+        String configJson = channel.getConfigJson();
+        if (configJson == null || configJson.isEmpty()) {
+            return channel; // 未配置过 = 缺省放行
+        }
+        JsonNode methods = tryReadConfig(configJson).get("loginMethods");
+        boolean enabled = methods != null && methods.isArray() &&
+                StreamSupport.stream(methods.spliterator(), false)
+                        .anyMatch(m -> method.equals(m.asText()));
+        if (!enabled) {
+            throw new BusinessException(403, "该端未开通此登录方式");
+        }
+        return channel;
+    }
+
+    /** 本期端登录/绑定仅实现 MP 渠道；SMS 等其余渠道端点归后续（A2 配置先允许存储）。 */
+    private void assertMpChannel(String channelType) {
+        if (!"MP".equals(channelType)) {
+            throw new BusinessException(400, "该渠道登录方式暂未支持");
+        }
+    }
+
+    private String normalizeChannel(String channel) {
+        return channel == null ? "" : channel.trim().toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * 端凭据换 session（D5）：appid 取渠道 config，secret 取 config 密文解密；
+     * 端未配置 → 回退全局 env（过渡兼容）→ 双缺 503。
+     */
+    private WechatMiniprogramClient.SessionInfo exchangeSession(SysClientChannel channel, String code) {
+        JsonNode config = tryReadConfig(channel.getConfigJson());
+        String appId = textOrNull(config.get("appid"));
+        String secret = textOrNull(config.get("secret"));
+        if (secret != null) {
+            secret = clientCrypto.decrypt(secret); // 密文形态见 J2 ClientService secret 边界
+        }
+        if (appId == null || secret == null) {
+            appId = textOrNull(globalMpAppId);
+            secret = textOrNull(globalMpAppSecret);
+        }
+        if (appId == null || secret == null) {
+            throw new BusinessException(503, "小程序登录未配置（该端缺少 appid/secret）");
+        }
+        return miniprogramClient.code2Session(appId, secret, code);
+    }
+
+    private JsonNode tryReadConfig(String json) {
+        if (json == null || json.isEmpty()) {
+            return CONFIG_MAPPER.createObjectNode();
+        }
+        try {
+            JsonNode node = CONFIG_MAPPER.readTree(json);
+            return node.isObject() ? node : CONFIG_MAPPER.createObjectNode();
+        } catch (Exception e) {
+            return CONFIG_MAPPER.createObjectNode();
+        }
+    }
+
+    private String textOrNull(JsonNode node) {
+        return node == null || !node.isTextual() || node.asText().isBlank() ? null : node.asText().trim();
+    }
+
+    private String textOrNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    // ------------------------------------------------------------ 通用支撑
 
     private SysUser requireActiveUser(Long userId, String missingMessage) {
         SysUser user = userRepository.findById(userId)

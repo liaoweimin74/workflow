@@ -1,10 +1,12 @@
 package com.workflow.system.service.impl;
 
 import com.workflow.common.exception.BusinessException;
+import com.workflow.framework.security.ClientCrypto;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
 import com.workflow.system.domain.dto.ChangePasswordRequest;
 import com.workflow.system.domain.entity.SysUser;
 import com.workflow.system.repository.*;
+import com.workflow.system.service.BindCodeService;
 import com.workflow.system.service.WechatMiniprogramClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,7 @@ class AuthServiceImplChangePasswordTest {
     private static final String OLD_PASSWORD = "old-pass-1";
     private static final String NEW_PASSWORD = "new-pass-1";
     private static final String NEW_HASH = "encoded-new";
+    private static final String TEST_KEY = "d29ya2Zsb3ctY2xpZW50LWNyeXB0by1kZXYta2V5MzI=";
 
     private SysUserRepository userRepository;
     private JwtTokenProvider jwtTokenProvider;
@@ -47,11 +50,13 @@ class AuthServiceImplChangePasswordTest {
         SysRoleMenuRepository roleMenuRepository = mock(SysRoleMenuRepository.class);
         SysOrganizationRepository orgRepository = mock(SysOrganizationRepository.class);
         SysUserOpenidRepository openidRepository = mock(SysUserOpenidRepository.class);
+        SysClientChannelRepository channelRepository = mock(SysClientChannelRepository.class);
         WechatMiniprogramClient miniprogramClient = mock(WechatMiniprogramClient.class);
         jwtTokenProvider = mock(JwtTokenProvider.class);
         passwordEncoder = mock(PasswordEncoder.class);
         service = new AuthServiceImpl(userRepository, roleRepository, menuRepository, userRoleRepository,
-                roleMenuRepository, orgRepository, openidRepository, miniprogramClient,
+                roleMenuRepository, orgRepository, openidRepository, channelRepository,
+                miniprogramClient, new ClientCrypto(TEST_KEY), mock(BindCodeService.class),
                 jwtTokenProvider, passwordEncoder);
 
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(activeUser()));

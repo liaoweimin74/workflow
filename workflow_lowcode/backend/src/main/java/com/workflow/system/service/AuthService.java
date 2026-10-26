@@ -1,8 +1,13 @@
 package com.workflow.system.service;
 
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.system.domain.dto.BindCodeIssueRequest;
 import com.workflow.system.domain.dto.ChangePasswordRequest;
+import com.workflow.system.domain.dto.ClientBindRequest;
+import com.workflow.system.domain.dto.ClientLoginRequest;
+import com.workflow.system.domain.dto.ClientUnbindRequest;
 import com.workflow.system.domain.dto.LoginRequest;
+import com.workflow.system.domain.vo.BindCodeVO;
 import com.workflow.system.domain.vo.LoginResponse;
 import com.workflow.system.domain.vo.MenuTree;
 
@@ -26,16 +31,24 @@ public interface AuthService {
     List<MenuTree> getCurrentUserMenus(Long userId);
 
     /**
-     * 小程序静默登录：code 换 openid 后按绑定关系登录。
-     * 未绑定时抛 401，调用方应引导用户走账号密码绑定。
+     * 端登录（J3 泛化，替代 V64 loginByMiniprogram）：按 clientId+channel 门禁登录方式后，
+     * 用端渠道配置的 appid/secret 换 openid，按 <b>端身份</b>（clientId+openid）查绑定发 token。
+     * 未绑定时抛 401，调用方应引导用户走绑定流程（账号密码或绑定码）。
      */
-    LoginResponse loginByMiniprogram(String code);
+    LoginResponse clientLogin(ClientLoginRequest request);
 
     /**
-     * 首次绑定并登录：校验平台账号密码，把当前微信 openid 绑到该账号。
+     * 端首绑（J3 泛化，替代 V64 bindMiniprogram）：双载体——
+     * username/password（门禁 OPENID_SILENT）或 bindCode（门禁 BIND_CODE，管理端 issue）。
      * 当前微信已绑本账号时幂等返回登录态。
      */
-    LoginResponse bindMiniprogram(String code, String username, String password);
+    LoginResponse clientBind(ClientBindRequest request);
+
+    /** 本人解绑指定端的身份绑定（软删）。无绑定时 400。 */
+    void clientUnbind(Long userId, ClientUnbindRequest request);
+
+    /** 管理端为「账号 × 端」签发一次性绑定码（A4 端身份 Tab 调用）。 */
+    BindCodeVO issueBindCode(BindCodeIssueRequest request);
 
     /**
      * 按 userId 构造带角色与权限集合的 LoginUser（JWT 过滤器用）。

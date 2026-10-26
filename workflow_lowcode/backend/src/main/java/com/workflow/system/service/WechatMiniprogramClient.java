@@ -14,11 +14,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * 小程序 code2session 调用封装（P0.4）。
+ * 小程序 code2session 调用封装（P0.4 建立，J3 泛化为按端参数化）。
  *
  * <p>只做「code → openid/unionid」的换取与错误码翻译；绑定关系与登录态由
  * {@link com.workflow.system.service.impl.AuthServiceImpl} 负责。
- * 未配置 app-id/app-secret 时返回 503，避免把配置缺失伪装成微信拒绝。
+ * J3 起 appid/secret 由调用方从 <b>端渠道配置</b>（sys_client_channel.config，secret 密文解密）
+ * 解析后传入——本类不再持有全局凭据配置；传空 → 503（配置缺失不该伪装成微信拒绝）。
  */
 @Component
 public class WechatMiniprogramClient {
@@ -28,12 +29,6 @@ public class WechatMiniprogramClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
-
-    @Value("${workflow.auth.miniprogram.app-id:}")
-    private String appId;
-
-    @Value("${workflow.auth.miniprogram.app-secret:}")
-    private String appSecret;
 
     @Value("${workflow.auth.miniprogram.base-url:}")
     private String baseUrl;
@@ -46,16 +41,15 @@ public class WechatMiniprogramClient {
     public record SessionInfo(String appId, String openid, String unionid) {
     }
 
-    public SessionInfo code2Session(String code) {
-        if (!isConfigured()) {
-            throw new BusinessException(503, "小程序登录未配置（缺少 app-id/app-secret）");
+    public SessionInfo code2Session(String appId, String appSecret, String code) {
+        if (appId == null || appId.isBlank() || appSecret == null || appSecret.isBlank()) {
+            throw new BusinessException(503, "小程序登录未配置（缺少 appid/secret）");
         }
-        String currentAppId = appId;
         String json;
         try {
             json = restClient.get()
                     .uri(baseUrl().concat("/sns/jscode2session")
-                            .concat("?appid=").concat(encode(currentAppId))
+                            .concat("?appid=").concat(encode(appId))
                             .concat("&secret=").concat(encode(appSecret))
                             .concat("&js_code=").concat(encode(code))
                             .concat("&grant_type=authorization_code"))
@@ -65,11 +59,7 @@ public class WechatMiniprogramClient {
             log.error("小程序 code2session 请求失败: {}", e.getMessage());
             throw new BusinessException(502, "微信登录服务暂不可用");
         }
-        return parse(currentAppId, json);
-    }
-
-    public boolean isConfigured() {
-        return appId != null && !appId.isBlank() && appSecret != null && !appSecret.isBlank();
+        return parse(appId, json);
     }
 
     private SessionInfo parse(String currentAppId, String json) {

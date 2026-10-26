@@ -7,6 +7,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.system.repository.SysClientRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class PageDefinitionService {
     private final TenantProvider tenantProvider;
     private final PageValidator validator;
     private final ObjectMapper objectMapper;
+    private final SysClientRepository clientRepository;
 
     /**
      * 同 key 发布串行化锁（进程内）：findByIdForUpdate 仅锁单行，
@@ -46,11 +48,13 @@ public class PageDefinitionService {
     public PageDefinitionService(PageDefinitionRepository pageDefRepository,
                                  TenantProvider tenantProvider,
                                  PageValidator validator,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 SysClientRepository clientRepository) {
         this.pageDefRepository = pageDefRepository;
         this.tenantProvider = tenantProvider;
         this.validator = validator;
         this.objectMapper = objectMapper;
+        this.clientRepository = clientRepository;
     }
 
     /**
@@ -251,6 +255,25 @@ public class PageDefinitionService {
      */
     @Transactional
     public PageDefinition publish(String id) {
+        return publish(id, null);
+    }
+
+    /**
+     * 发布页面并落发布目标端（A5，designs 2026-10-25 §4）。
+     * clientIds null/空 = 缺省 portal(1)（与存量 target_clients NULL 语义同轨）；
+     * 目标端不存在 → 400 拒绝（与「已归档不能发布」同文案族），且校验发生在锁临界区之前——
+     * 非法目标端不产生任何发布副作用。
+     */
+    @Transactional
+    public PageDefinition publish(String id, List<Long> clientIds) {
+        List<Long> targets = PageTargetClients.normalize(clientIds);
+        for (Long clientId : targets) {
+            if (!clientRepository.existsById(clientId)) {
+                throw new BusinessException(400, "客户端不存在: " + clientId);
+            }
+        }
+        String targetCsv = PageTargetClients.toCsv(targets);
+
         String tenantId = tenantProvider.getTenantId();
         PageDefinition current = pageDefRepository.findByIdForUpdate(id, tenantId)
                 .orElseThrow(() -> new BusinessException(404, "页面不存在: " + id));
@@ -281,6 +304,7 @@ public class PageDefinitionService {
 
             current.setStatus("PUBLISHED");
             current.setPublishedVersion(current.getVersion());
+            current.setTargetClients(targetCsv);
             return pageDefRepository.save(current);
         }
     }

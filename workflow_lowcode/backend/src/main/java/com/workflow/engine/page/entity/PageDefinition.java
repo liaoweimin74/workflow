@@ -64,6 +64,13 @@ public class PageDefinition {
     @Column(name = "published_version")
     private Integer publishedVersion;
 
+    /**
+     * 发布目标端（A5）：sys_client.id 升序逗号分隔 CSV（如 "1,2"）；
+     * NULL = 存量行缺省仅 portal(1)——PageTargetClients 统一解读，存量零破坏。
+     */
+    @Column(name = "target_clients", length = 255)
+    private String targetClients;
+
     @Column(name = "created_by", length = 50)
     private String createdBy;
 
@@ -116,6 +123,9 @@ public class PageDefinition {
 
     public Integer getPublishedVersion() { return publishedVersion; }
     public void setPublishedVersion(Integer publishedVersion) { this.publishedVersion = publishedVersion; }
+
+    public String getTargetClients() { return targetClients; }
+    public void setTargetClients(String targetClients) { this.targetClients = targetClients; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

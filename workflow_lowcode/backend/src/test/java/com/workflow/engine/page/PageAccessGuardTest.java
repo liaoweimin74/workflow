@@ -1,6 +1,9 @@
 package com.workflow.engine.page;
 
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.page.entity.PageDefinition;
+import com.workflow.engine.page.repository.PageDefinitionRepository;
+import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.permission.PermissionEvaluator;
 import com.workflow.system.domain.entity.SysMenu;
@@ -12,10 +15,13 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,6 +39,8 @@ class PageAccessGuardTest {
 
     private SysMenuRepository menuRepository;
     private PermissionEvaluator permissionEvaluator;
+    private PageDefinitionRepository pageDefRepository;
+    private TenantProvider tenantProvider;
     private PageAccessGuard guard;
 
     private SysMenu menuA;
@@ -42,10 +50,31 @@ class PageAccessGuardTest {
     void setUp() {
         menuRepository = mock(SysMenuRepository.class);
         permissionEvaluator = mock(PermissionEvaluator.class);
-        guard = new PageAccessGuard(menuRepository, permissionEvaluator);
+        pageDefRepository = mock(PageDefinitionRepository.class);
+        tenantProvider = mock(TenantProvider.class);
+        guard = new PageAccessGuard(menuRepository, permissionEvaluator, pageDefRepository, tenantProvider);
 
         menuA = buildMenu(1L, 1);
         menuB = buildMenu(2L, 1);
+
+        // A5 发布端闸缺省桩：本例库页面已发布到司机端(7)——端隔离历史用例语义不变，
+        // 发布端闸用例各自覆写 findFirst 返回值
+        lenient().when(tenantProvider.getTenantId()).thenReturn("default");
+        lenient().when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "default", "leave-query", "PUBLISHED"))
+                .thenReturn(Optional.of(publishedRow("7")));
+    }
+
+    private PageDefinition publishedRow(String targetClients) {
+        PageDefinition p = new PageDefinition();
+        p.setId("row-1");
+        p.setTenantId("default");
+        p.setName("请假查询");
+        p.setKey("leave-query");
+        p.setType("PAGE");
+        p.setStatus("PUBLISHED");
+        p.setTargetClients(targetClients);
+        return p;
     }
 
     @AfterEach
@@ -188,7 +217,9 @@ class PageAccessGuardTest {
 
     /** 用真实 PermissionEvaluator 重建 guard：钉「空端态不放行」端到端语义 */
     private void withRealEvaluator() {
-        guard = new PageAccessGuard(menuRepository, new com.workflow.framework.security.permission.PermissionEvaluator());
+        guard = new PageAccessGuard(menuRepository,
+                new com.workflow.framework.security.permission.PermissionEvaluator(),
+                pageDefRepository, tenantProvider);
     }
 
     private void loginAsWithGrants(Long clientId, List<String> roles, Set<String> permissions) {
@@ -220,5 +251,84 @@ class PageAccessGuardTest {
 
         // portal 端 admin 绕过语义保持（存量零破坏——修复只剥跨端携带，不动端内特权）
         assertThatCode(() -> guard.assertPageAccess("leave-query")).doesNotThrowAnyException();
+    }
+
+    // ------------------------------------------------------------ A5 发布目标端闸
+
+    @Test
+    void nonPortal_notPublishedToClient_throws404_sameWordingAsUnbound() {
+        loginAs(7L);
+        menuB.setClientId(7L); // 本端有挂接菜单（端过滤剔除不了）
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA, menuB));
+        when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "default", "leave-query", "PUBLISHED"))
+                .thenReturn(Optional.of(publishedRow("1"))); // 资产仅发布到 portal
+
+        // 未发布到本端 → 404 且与「未挂接」同文案：不暴露资产存在性
+        assertThatThrownBy(() -> guard.assertPageAccess("leave-query"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("页面不存在或未挂接菜单");
+        // 闸必须走在授权段之前
+        verify(permissionEvaluator, never()).hasPermission(anyString());
+    }
+
+    @Test
+    void nonPortal_legacyNullTargetClients_treatedAsPortalOnly_throws404() {
+        loginAs(7L);
+        menuB.setClientId(7L);
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA, menuB));
+        when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "default", "leave-query", "PUBLISHED"))
+                .thenReturn(Optional.of(publishedRow(null))); // 存量 PUBLISHED 行
+
+        // NULL=缺省仅 portal（与 publish 归一口径同轨）：存量行在他端一律不放行
+        assertThatThrownBy(() -> guard.assertPageAccess("leave-query"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("页面不存在或未挂接菜单");
+    }
+
+    @Test
+    void nonPortal_noPublishedRow_throws404() {
+        loginAs(7L);
+        menuB.setClientId(7L);
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA, menuB));
+        when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "default", "leave-query", "PUBLISHED"))
+                .thenReturn(Optional.empty()); // 只有 DRAFT 稿
+
+        // 本端挂了菜单但从未发布 → 同样 404（发布闸覆盖「未发布」与「未发到本端」两种空态）
+        assertThatThrownBy(() -> guard.assertPageAccess("leave-query"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("页面不存在或未挂接菜单");
+    }
+
+    @Test
+    void nonPortal_publishedToClient_passesGate_toAuthStage() {
+        loginAs(7L);
+        menuB.setClientId(7L);
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA, menuB));
+        when(pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "default", "leave-query", "PUBLISHED"))
+                .thenReturn(Optional.of(publishedRow("1,7")));
+        when(permissionEvaluator.hasPermission("page:read:leave-query")).thenReturn(true);
+
+        assertThatCode(() -> guard.assertPageAccess("leave-query")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void portalClient_skipsPublishGate_zeroBreakage() {
+        loginAs(1L);
+        when(menuRepository.findByPathAndIsDeleted("/page/leave-query", 0))
+                .thenReturn(List.of(menuA));
+        when(permissionEvaluator.hasPermission("page:read:leave-query")).thenReturn(true);
+
+        assertThatCode(() -> guard.assertPageAccess("leave-query")).doesNotThrowAnyException();
+        // portal 端不查发布表：存量链路的 DB 触点与放行结果都零变化
+        verify(pageDefRepository, never())
+                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(anyString(), anyString(), anyString());
     }
 }

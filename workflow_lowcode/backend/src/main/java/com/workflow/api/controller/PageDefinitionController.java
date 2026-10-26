@@ -3,6 +3,7 @@ package com.workflow.api.controller;
 import com.workflow.api.dto.PageDefinitionDTO;
 import com.workflow.api.dto.PageDefinitionDetailDTO;
 import com.workflow.api.dto.PageDefinitionSaveRequest;
+import com.workflow.api.dto.PagePublishRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
@@ -143,10 +144,12 @@ public class PageDefinitionController {
 
     /**
      * 发布页面定义（不建表，编译视图配置）。
+     * A5：body 可选携带目标端 clientIds；null/空 = 缺省仅 portal(1)。
      */
     @PostMapping("/{id}/publish")
-    public R<PageDefinition> publish(@PathVariable String id) {
-        PageDefinition pageDef = pageDefService.publish(id);
+    public R<PageDefinition> publish(@PathVariable String id,
+                                     @RequestBody(required = false) PagePublishRequest body) {
+        PageDefinition pageDef = pageDefService.publish(id, body == null ? null : body.clientIds());
         return R.ok(pageDef);
     }
 

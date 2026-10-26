@@ -19,6 +19,7 @@ import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.system.repository.SysClientRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -99,7 +100,11 @@ class PageDefinitionPublishIntegrationTest {
         // 页面链路全真实：Validator/Service + 内存仓库（发布临界区同步模拟行锁）
         pageRepo = new InMemoryPageRepository();
         PageValidator validator = new PageValidator(formDefRepository, objectMapper, tenantProvider, dsService);
-        pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, objectMapper);
+        // A5：发布链存在性校验——本测试不测目标端语义，客户端存在性恒放行
+        SysClientRepository clientRepository = mock(SysClientRepository.class);
+        lenient().when(clientRepository.existsById(anyLong())).thenReturn(true);
+        pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator,
+                objectMapper, clientRepository);
 
         // PAGE 引用的全局数据源（FORM 型，绑定 biz_leave）
         lenient().when(dsService.getEnabled()).thenReturn(List.of(enabledFormDs(DS_REF, "biz_leave")));

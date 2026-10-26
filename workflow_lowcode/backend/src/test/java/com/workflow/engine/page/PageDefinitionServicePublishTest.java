@@ -7,6 +7,7 @@ import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.system.repository.SysClientRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class PageDefinitionServicePublishTest {
     @Mock
     private PageValidator validator;
 
+    @Mock
+    private SysClientRepository clientRepository;
+
     private PageDefinitionService service;
 
     private static final String TENANT_ID = "test-tenant";
@@ -49,8 +53,10 @@ class PageDefinitionServicePublishTest {
     void setUp() {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
+        // A5：发布链缺省目标端 portal(1) 存在性校验放行（本类不测目标端语义）
+        lenient().when(clientRepository.existsById(1L)).thenReturn(true);
         service = new PageDefinitionService(pageDefRepository, tenantProvider,
-                validator, new ObjectMapper());
+                validator, new ObjectMapper(), clientRepository);
     }
 
     @AfterEach

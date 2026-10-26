@@ -123,6 +123,7 @@
     <PagePublishDialog
       v-model="publishDialogVisible"
       :page-name="publishTargetName"
+      :rule="publishTargetRule"
       @confirm="handlePublishConfirm"
     />
   </div>
@@ -162,6 +163,8 @@ const homePageKey = ref('dashboard')
 const publishDialogVisible = ref(false)
 const publishTargetId = ref('')
 const publishTargetName = ref('')
+// 批C C3：发布拦截清单需要当前 rule——异步拉定义回填（拉到前=不拦截，与原行为一致）
+const publishTargetRule = ref<unknown[] | undefined>(undefined)
 
 async function handlePublishConfirm(clientIds: number[]) {
   try {
@@ -419,7 +422,16 @@ const actionButtons: ActionButton[] = [
       // A5：发布先经目标端对话框选端，再随请求下发
       publishTargetId.value = row.id
       publishTargetName.value = row.name
+      publishTargetRule.value = undefined
       publishDialogVisible.value = true
+      // C3：拉当前定义解析 rule 供移动拦截清单（失败=保持不拦截，不阻塞发布流程）
+      pageApi.getPage(row.id).then((res) => {
+        try {
+          publishTargetRule.value = JSON.parse((res.data as any)?.schema || '{}')?.rule
+        } catch {
+          publishTargetRule.value = undefined
+        }
+      }).catch(() => {})
     },
   },
   {

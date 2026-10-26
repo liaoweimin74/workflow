@@ -16,6 +16,7 @@ vi.mock('@/api/page', () => ({
     deletePage: vi.fn(),
     getHomePage: vi.fn(),
     setHomePage: vi.fn(),
+    getPage: vi.fn(),
   },
 }))
 
@@ -43,6 +44,8 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 beforeEach(() => {
   vi.clearAllMocks()
   ;(pageApi.getHomePage as any).mockResolvedValue({ data: 'dashboard' })
+  // C3：发布点击拉定义解析 rule——缺省空 schema（不拦截，行为与 A5 原状一致）
+  ;(pageApi.getPage as any).mockResolvedValue({ data: { schema: '{}' } })
 })
 
 /** SearchTable 桩：透传 actionButtons/formConfig，供测试触发操作按钮 */
@@ -56,7 +59,7 @@ const SearchTableStub = defineComponent({
 /** A5 发布目标端对话框桩：捕获可见性，手动 emit confirm 驱动下发 */
 const PublishDialogStub = defineComponent({
   name: 'PagePublishDialog',
-  props: ['modelValue', 'pageName'],
+  props: ['modelValue', 'pageName', 'rule'],
   emits: ['update:modelValue', 'confirm'],
   setup() {
     return () => h('div', { class: 'publish-dialog-stub' })

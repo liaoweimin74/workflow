@@ -267,6 +267,7 @@
     <PagePublishDialog
       v-model="publishDialogVisible"
       :page-name="pageName || pageKey"
+      :rule="designerRule"
       @confirm="handlePublishConfirm"
     />
 

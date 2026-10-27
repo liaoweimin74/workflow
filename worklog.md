@@ -10318,3 +10318,20 @@ Work Log:
 Stage Summary:
 - 恢复 #158 单轮闭环，累计 158 次；r323-r327 沙箱中断 5 轮后首轮成功运维
 - 沙箱不可用累计 115 次（r327 为第 115 次）
+
+---
+Task ID: r329
+Agent: ops-loop (main)
+Task: 2026-10-27 15:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-070541 workflow=272K，3306 竟在线）；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #159
+- ps 佐证：bun src/index.ts/bun install 残留，vite 缺失；另有后台 curl 正下载 jdk21.tar.gz，疑冷启动自动恢复中途被打断
+- 定型恢复流水线：pkill 五连（含杀掉后台半途恢复）→ jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（07:06:00→07:07:29，89s，完整退出型连续第 11 次）
+- 日志仍报「无 jar 备份」（持续观察项）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1217)/3000=MainThread(1339)/8080=java(1531)
+- 收口 dump：OK 20261027-070824 workflow=272K v6=4.0K；内存 3405676544（~3.17GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #159 单轮闭环，累计 159 次；本轮重供给距 r328（#158）仅 1 小时，重供给频率升高
+- 沙箱不可用累计 115 次（无新增）

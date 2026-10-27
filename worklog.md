@@ -10335,3 +10335,19 @@ Work Log:
 Stage Summary:
 - 恢复 #159 单轮闭环，累计 159 次；本轮重供给距 r328（#158）仅 1 小时，重供给频率升高
 - 沙箱不可用累计 115 次（无新增）
+
+---
+Task ID: r330
+Agent: ops-loop (main)
+Task: 2026-10-27 16:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-080544 workflow=272K）；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #160
+- ps 佐证：与 r329 完全同构——bun src/index.ts/bun install 残留、vite 缺失、mariadbd 幸存（1216）、后台 curl 下载 jdk21.tar.gz（冷启动自动恢复中途）
+- 定型恢复流水线：pkill 五连 → jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（08:06:03→08:07:37，94s，完整退出型连续第 12 次）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1216)/3000=MainThread(1350)/8080=java(1544)
+- 收口 dump：OK 20261027-080833 workflow=272K v6=4.0K；内存 3426398208（~3.19GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #160 单轮闭环，累计 160 次；连续三轮每小时重供给（#158/#159/#160），频率异常，持续观察
+- 沙箱不可用累计 115 次（无新增）

@@ -10300,3 +10300,21 @@ Stage Summary:
 - 重供给恢复 #158，累计 158 次全部闭环；本轮由单命令流水线升级为深度排障：jar 路径之谜、dump 不入库之谜双双闭环
 - 数据安全升级：已知良好 dump（220707 + 042834）首次真正进入 git 持久化；020730 缺陷件隔离
 - 端口归属正常（vite/1147、mariadbd/2265、java/2331）；内存 3.22GB，oom 0
+
+---
+Task ID: r328
+Agent: ops-loop (main)
+Task: 2026-10-27 14:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump-db 判 3306 不在线跳过；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #158
+- ps 佐证：bun install/bun src/index.ts/bun run dev 残留，vite 缺失，mariadbd 进程在但 3306 未就绪
+- 定型恢复流水线：pkill 五连 → jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（06:05:51→06:07:21，90s，完整退出型连续第 10 次）
+- 日志仍报「无 jar 备份」走重建分支（持续观察项，结果不受影响）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1227)/3000=MainThread(1298)/8080=java(1489)
+- 收口 dump：OK 20261027-060818 workflow=272K v6=4.0K；dump-db 报 git push FAILED（远端落后）→ pull --rebase 后重新 push 成功
+- 内存 3199610880（~2.98GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #158 单轮闭环，累计 158 次；r323-r327 沙箱中断 5 轮后首轮成功运维
+- 沙箱不可用累计 115 次（r327 为第 115 次）

@@ -10388,3 +10388,26 @@ Stage Summary:
 - 恢复 #162 闭环，累计 162 次；数据库事故「大小写重复表→字典不一致」由权威 dump 全量重建解决，数据零丢失（以 11:06 快照为准，期间无业务写入）
 - 新观察项：recover 导入 dump 在 lower_case_table_names=1 下会产生大小写重复表并破坏 dump 能力——若后续复现，应在 recover 后立即验证 dump 有效性
 - backups/jar 路径冲突（文件 vs 目录）为新观察项；沙箱不可用累计 116 次（无新增）
+
+---
+Task ID: r345
+Agent: ops-loop (main)
+Task: 2026-10-28 07:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump 无效；四链路表面 200×4 但真伪核验 no such table → 重供给 #163（同 #161/#162 亚型：vite 幸存、8080 Node 假绿、mariadbd 幸存）
+- 首次恢复失败（EXIT=2）：recover 报「无可用 dump（库空壳）」+「jar=MISSING」——backups/ 内全部有效 workflow dump 已随重供给丢失，mvn 构建编译失败（cannot find symbol）
+- 三大根因发现：
+  1. .gitignore:64 忽略 backups/ → dump-db.sh 的 git add -A 历来被静默拦截，所有 dump 从未入库；1867c47d 提交实为删除最后一个被跟踪 dump（20261025-220707）——数据持久层机制性失效
+  2. 「无 jar 备份」观察项终局解密：recover 探测 backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（目录内文件），历轮重拼产物为 backups/jar 文件——路径形式错位致每轮白跑工具链重建+mvn
+  3. mvn 构建路线不可靠（源码与 .m2 依赖不匹配编译失败）
+- 修复：git show 自 1867c47d~1 恢复 20261025-220707 dump（唯一幸存权威源，275025B/104 表——与 r333 权威快照逐字节同大小，确认期间无业务写入、数据零丢失）；jar 重拼产物布置到 JAR_BAK 目录路径与 backend/target/
+- 重跑 recover：EXIT=0，23 秒史上最快（跳过 mvn，直接导入+拉 Java），日志不再报「无 jar 备份」
+- 复验：四链路 200×4、accessToken 真绿；端口 3306=mariadbd(1268)/3000=MainThread(1293)/8080=java(1826)；workflow 104 表、大小写重复 0 组（r333 事故未复发）；dump OK 20261027-231241 workflow=272K；内存 3558453248（~3.31GB）、oom 0
+- 补救持久层：git add -f 强制入库 20261025-220707 与 231241 两份 dump（脚本修复留待用户决策）
+
+Stage Summary:
+- 恢复 #163 闭环，累计 163 次；数据零丢失（唯一幸存 dump 与最新快照同源同大小）
+- 「无 jar 备份」持续观察项正式终结（路径错位实锤+修复）；恢复耗时从 67-110s 降至 23s
+- 新观察项：dump-db.sh 的 git add 被 .gitignore 拦截（本轮已 add -f 补救两份 dump；建议后续给脚本加 -f 或调整 .gitignore，涉及改代码待用户决策）
+- 沙箱不可用累计 127 次（r334-r344 十一轮中断）

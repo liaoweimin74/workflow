@@ -10368,3 +10368,23 @@ Work Log:
 Stage Summary:
 - 恢复 #161 单轮闭环，累计 161 次；新亚型「vite 幸存+8080 假绿」（3000 表面真 200 但整体假绿）首次在四链路全 200 下靠真伪核验拦截
 - 沙箱不可用累计 116 次（r331 新增 1 次）
+
+---
+Task ID: r333
+Agent: ops-loop (main)
+Task: 2026-10-27 19:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（110611）；四链路表面 200×4 但真伪核验 no such table → 重供给 #162（同 #161 亚型：vite 幸存、8080 Node 假绿）
+- 首次恢复尝试异常：重拼报 backups/jar Is a directory —— 发现该路径已被后台冷启动恢复流程变成目录（内含旧构建 jar 121124916B）；删除目录后重拼 MD5=e369839b 校验通过，recover EXIT=0（70s）；此发现部分解释「无 jar 备份」观察项（探测遇目录即判无备份）
+- 复验四链路真绿，但收口 dump 连续报「workflow dump 无效」
+- 深度诊断：mariadb-dump 报 1066 Not unique table/alias: act_evt_log（lower_case_table_names=1 下出现 45 组 ACT_*/FLW_* 大小写重复表，recover 导入 110611 dump 的 DROP+CREATE 在 =1 模式下产生重复文件名）；SHOW TABLES 151 张
+- 处置一（部分失败）：--force DROP 小写变体，8 张被外键 1451 挡住；FOREIGN_KEY_CHECKS=0 重删后 0 错误、表数 106、重复清零
+- 但 dump 仍无效且 SELECT ACT_GE_PROPERTY 报 1146 不存在 —— 证实字典不一致：DROP 小写名实际清掉 InnoDB 真实表，SHOW TABLES 残留孤儿条目
+- 处置二（成功）：以权威 dump db-workflow-full-20261027-110611.sql（104 张 CREATE TABLE，重供给后 recover 前自幸存库导出）全量重建：DROP DATABASE（报 1010 rmdir 失败系孤儿文件，表已清空）→ 导入自建库 → 验证表数 104、sys_user=2、ACT_GE_PROPERTY=7
+- 终验：dump-db OK 20261027-111329 workflow=272K v6=4.0K；四链路 200×4、accessToken 真绿；内存 3222700032（~3.0GB）、oom 0
+
+Stage Summary:
+- 恢复 #162 闭环，累计 162 次；数据库事故「大小写重复表→字典不一致」由权威 dump 全量重建解决，数据零丢失（以 11:06 快照为准，期间无业务写入）
+- 新观察项：recover 导入 dump 在 lower_case_table_names=1 下会产生大小写重复表并破坏 dump 能力——若后续复现，应在 recover 后立即验证 dump 有效性
+- backups/jar 路径冲突（文件 vs 目录）为新观察项；沙箱不可用累计 116 次（无新增）

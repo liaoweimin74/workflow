@@ -4,6 +4,10 @@
  * （form-create rule 数组），按「组件/区块类型 × 属性键」聚合出现次数与
  * 资产数，输出 stdout JSON，供人工分拣成语义/表现台账。
  *
+ * E-0 扩面（2026-10-27）：新式页面 rule[] 深入遍历（pages.ruleGroups，
+ * 含 props.* 展平、props.rule / props.columns[].rule 双容器载体）；
+ * wf_form_def.column_config 键分布（columnConfig.groups.column）。
+ *
  * 用法：
  *   pnpm exec tsx tools/schema-audit.ts > $env:TEMP\schema-audit.json
  *   （可用 DB_NAME=... 指定库；缺省 .env 的库）
@@ -54,11 +58,19 @@ interface AuditResult {
     parseErrors: string[]
     /** 区块/组件类型 → 属性键 → 统计 */
     groups: Record<string, GroupStat>
+    /** 新式页面 rule[] 深入遍历（auditRuleNode 同口径），组名前缀 page-rule: */
+    ruleGroups: Record<string, GroupStat>
   }
   forms: {
     scanned: number
     parseErrors: string[]
     /** rule.type（或区块名） → 属性键（含 props.* 展平）→ 统计 */
+    groups: Record<string, GroupStat>
+  }
+  /** 扩面（E-0）：wf_form_def.column_config 数组元素键分布（数据模型列定义，出码消费面） */
+  columnConfig: {
+    scanned: number
+    parseErrors: string[]
     groups: Record<string, GroupStat>
   }
 }
@@ -138,7 +150,10 @@ function auditRuleNode(node: Record<string, unknown>, out: Record<string, GroupS
   }
 }
 
-function parseJson(text: string | null): unknown {
+function parseJson(text: unknown): unknown {
+  if (text === null || text === undefined) return null
+  // mysql2 对 JSON 列类型自动反序列化为对象（column_config 是 JSON 列）；longtext 列仍是字符串
+  if (typeof text !== 'string') return text
   if (!text) return null
   try {
     return JSON.parse(text)
@@ -165,8 +180,9 @@ async function main(): Promise<void> {
   const result: AuditResult = {
     generatedAt: new Date().toISOString(),
     database: dbConfig.database,
-    pages: { scanned: 0, parseErrors: [], groups: {} },
+    pages: { scanned: 0, parseErrors: [], groups: {}, ruleGroups: {} },
     forms: { scanned: 0, parseErrors: [], groups: {} },
+    columnConfig: { scanned: 0, parseErrors: [], groups: {} },
   }
 
   try {
@@ -182,7 +198,47 @@ async function main(): Promise<void> {
       }
       if (config === null || typeof config !== 'object' || Array.isArray(config)) continue
       result.pages.scanned += 1
-      auditPageSchema(config as Record<string, unknown>, `${row.key}#${row.id.slice(0, 8)}`, result.pages.groups)
+      const assetId = `${row.key}#${row.id.slice(0, 8)}`
+      auditPageSchema(config as Record<string, unknown>, assetId, result.pages.groups)
+      // E-0 扩面：新式页面 rule[] 按 form-create 口径深入遍历（props.* 展平、validate 分组、children 递归）
+      const rule = (config as Record<string, unknown>).rule
+      if (Array.isArray(rule)) {
+        const sub: Record<string, GroupStat> = {}
+        const walk = (rules: unknown[]): void => {
+          for (const r of rules) {
+            if (r && typeof r === 'object' && !Array.isArray(r)) {
+              auditRuleNode(r as Record<string, unknown>, sub, assetId)
+              // auditRuleNode 未跟随的容器载体：props.rule（subForm 存盘形态）与 props.columns[].rule（tableForm）
+              const node = r as Record<string, unknown>
+              const props = node.props as Record<string, unknown> | undefined
+              if (props) {
+                if (Array.isArray(props.rule)) walk(props.rule as unknown[])
+                if (Array.isArray(props.columns)) {
+                  for (const c of props.columns as unknown[]) {
+                    const cc = c as Record<string, unknown> | null
+                    if (cc && Array.isArray(cc.rule)) walk(cc.rule as unknown[])
+                  }
+                }
+              }
+            } else if (Array.isArray(r)) walk(r)
+          }
+        }
+        walk(rule)
+        // 本次资产级统计并入全局 ruleGroups：实例累加、资产按并集计数
+        for (const [g, stats] of Object.entries(sub)) {
+          const target = (result.pages.ruleGroups[`page-rule:${g}`] ??= {})
+          for (const [k, s] of Object.entries(stats)) {
+            const t = (target[k] ??= { instances: 0, assets: 0, presentationCandidate: s.presentationCandidate, _assetIds: [] })
+            t.instances += s.instances
+            for (const aid of s._assetIds ?? []) {
+              if (!t._assetIds!.includes(aid)) {
+                t._assetIds!.push(aid)
+                t.assets += 1
+              }
+            }
+          }
+        }
+      }
     }
 
     const formRows = await sql<{ id: string; key: string; status: string; schema: string | null }>`
@@ -205,8 +261,32 @@ async function main(): Promise<void> {
       }
       walk(schema)
     }
+
+    // E-0 扩面：column_config（数据模型列定义数组）键分布
+    const colRows = await sql<{ id: string; key: string; column_config: string | null }>`
+      SELECT id, \`key\`, \`column_config\` FROM wf_form_def ORDER BY id
+    `.execute(db)
+    for (const row of colRows.rows) {
+      const cc = parseJson(row.column_config)
+      if (cc === undefined) {
+        result.columnConfig.parseErrors.push(`${row.key}#${row.id.slice(0, 8)}`)
+        continue
+      }
+      if (!Array.isArray(cc) || cc.length === 0) continue
+      result.columnConfig.scanned += 1
+      const assetId = `${row.key}#${row.id.slice(0, 8)}`
+      const g = (result.columnConfig.groups['column'] ??= {})
+      const bumpItem = (item: Record<string, unknown>): void => {
+        for (const k of Object.keys(item)) bump(g, k, assetId)
+      }
+      for (const item of cc) {
+        if (item && typeof item === 'object' && !Array.isArray(item)) bumpItem(item as Record<string, unknown>)
+      }
+    }
     stripTemp(result.pages.groups)
+    stripTemp(result.pages.ruleGroups)
     stripTemp(result.forms.groups)
+    stripTemp(result.columnConfig.groups)
   } finally {
     await db.destroy()
   }

@@ -1,8 +1,10 @@
 ﻿import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { Empty as VanEmpty, List as VanList, PullRefresh as VanPullRefresh, Search as VanSearch } from 'vant'
 
 import { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import MobileCardList from '../blocks/MobileCardList.vue'
 
 vi.mock('@/api/data-source', () => ({
@@ -42,13 +44,27 @@ function mountList(props: Record<string, unknown> = {}) {
   return mount(MobileCardList, { props: { dsRefId: 'ref-1', columns: COLUMNS, ...props } })
 }
 
+/**
+ * 忠实复刻 Vant List 触发加载的时序（vant 4.10.2 List.mjs:60-62）：
+ * Vant 是「先置位 loading → emit('update:loading', true) → emit('load')」。
+ * 旧写法只裸发 'load'，跳过了置位那步，等于模拟了一条现实中不存在的调用序列，
+ * 因此宿主里 `if (loading.value) return` 这类错误守卫测不出来。
+ */
 async function fireLoad(wrapper: ReturnType<typeof mountList>) {
-  wrapper.findComponent(VanList).vm.$emit('load')
+  const list = wrapper.findComponent(VanList).vm
+  list.$emit('update:loading', true)
+  await nextTick()
+  list.$emit('load')
   await flushPromises()
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+afterEach(() => {
+  // store 是模块级单例，直接清空避免跨用例泄漏（setActiveDsBindings 空数组不覆盖非空）
+  activeDsBindings.value = []
 })
 
 describe('MobileCardList（Vant 卡片列表块）', () => {
@@ -149,6 +165,19 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     await fireLoad(wrapper)
     expect(queryData).not.toHaveBeenCalled()
     expect(wrapper.findComponent(VanList).props('finished')).toBe(true)
+    // 设计画布态：未绑源也必须复位 loading，否则画布里永远转「加载中…」
+    expect(wrapper.findComponent(VanList).props('loading')).toBe(false)
+    expect(wrapper.findComponent(VanEmpty).exists()).toBe(true)
+  })
+
+  it('issues the request and clears loading under Vant 的真实 emit 时序（回归：永久加载中）', async () => {
+    queryData.mockResolvedValue(pageResponse([{ code: 'C001', name: '张三' }]) as never)
+    const wrapper = mountList()
+    await fireLoad(wrapper)
+    expect(queryData).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('.m-card')).toHaveLength(1)
+    // Vant 发 load 前已把 loading 置 true，宿主必须负责写回 false
+    expect(wrapper.findComponent(VanList).props('loading')).toBe(false)
   })
 
   it('emits row-click with the flattened row', async () => {
@@ -158,6 +187,17 @@ describe('MobileCardList（Vant 卡片列表块）', () => {
     await wrapper.find('.m-card').trigger('click')
     const payload = wrapper.emitted('row-click')?.[0]?.[0] as Record<string, unknown>
     expect(payload).toMatchObject({ id: 'r0', code: 'C001', name: '张三' })
+  })
+
+  it('resolves dataSourceId through page-level bindings when dsRefId is absent（设计态通路）', async () => {
+    // 设计器里块属性面板「配置数据源」写入的是页面级绑定 id，而非全局 refId；
+    // 组件必须经 activeDsBindings 把绑定 id 解析成 refId 才能取到数。
+    activeDsBindings.value = [{ id: 'ds_bind_1', refId: 'ds-real-ref' } as never]
+    queryData.mockResolvedValue(pageResponse([{ code: 'C001', name: '张三' }]) as never)
+    const wrapper = mountList({ dsRefId: undefined, dataSourceId: 'ds_bind_1' })
+    await fireLoad(wrapper)
+    expect(queryData).toHaveBeenCalledWith('ds-real-ref', { page: 1, size: 20 })
+    expect(wrapper.findAll('.m-card')).toHaveLength(1)
   })
 
   it('honors cardSlotsOverride from the channel overlay (title/kv by key, hidden dropped)', async () => {

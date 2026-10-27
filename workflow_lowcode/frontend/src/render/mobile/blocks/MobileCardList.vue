@@ -73,13 +73,22 @@ function text(value: unknown): string {
   return value === null || value === undefined || value === '' ? '-' : String(value)
 }
 
+/**
+ * 重入标志必须自持：van-list 触发加载时是「先置位 loading 再发 load」
+ * （vant 4.10.2 List.mjs:60-62），若用 loading 当守卫，每一次加载都会在第一行返回，
+ * loading 永久 true、finished 永不置位 → 组件卡死在「加载中…」。
+ */
+let inFlight = false
+
 async function load() {
-  // 守卫：van-list 只在非 loading/finished 时发 load 事件，但搜索/刷新重入须自行挡住
-  if (loading.value || finished.value) return
+  if (inFlight || finished.value) return
   if (!sourceId.value) {
     finished.value = true
+    loading.value = false
+    refreshing.value = false
     return
   }
+  inFlight = true
   loading.value = true
   try {
     const params: DataSourceQueryParams = { page: page.value + 1, size: props.pageSize }
@@ -96,6 +105,7 @@ async function load() {
     // 请求失败止于当前页，不无限重试（van-list 语义：finished 后不再触发 load）
     finished.value = true
   } finally {
+    inFlight = false
     loading.value = false
     refreshing.value = false
   }

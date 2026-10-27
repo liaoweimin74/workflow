@@ -10278,3 +10278,25 @@ Work Log:
 
 Stage Summary:
 - 重供给恢复 #157，累计 157 次全部单轮闭环；内存 3.31GB，oom_kill 0；回合结束
+
+---
+Task ID: r327
+Agent: main
+Task: 轻量运维巡检 2026-10-27 12:05 (Job 446961) —— 复合型深水区修复
+
+Work Log:
+- 沙箱中断 r323-r326 四连（累计 114 次）后恢复；巡检发现重供给 #158（MariaDB 冷态复合型，mariadbd 未起 + bootstrap 下载 JDK），8080 Node 假绿
+- timeout 170 首跑 EXIT=124（复合型 mvn 分支超时）；复跑前发现 backups/jar 被快照还原为【目录】（内含 10-11 旧 jar）致重拼失败——移开旧目录后重拼 e369839b 通过
+- 复跑 EXIT=0 但 8080=000：Java 死于 Flowable 建表冲突 flw_ru_batch already exists（快照残留 112 表半残 schema，SYS_USER 存在致脚本跳过导入）
+- 关键解密①：recover 脚本 JAR_BAK=backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（目录+jar 结构）——历轮「无 jar 备份」提示真相；规范化后成功走「从 backups/jar 恢复（跳过 mvn）」快速分支
+- 关键解密②：.gitignore L64 整目录忽略 backups/ ——历轮 dump 从未入库（git add 需 -f）；已 force-add 220707+新 dump 入 git
+- 数据修复：DROP 残库遇 errno 39（孤儿文件）+ 1205 锁超时（无外部会话，mariadbd 内部 MDL 卡死）→ 停机清理 datadir/workflow* → 重启 mariadbd → 干净导入 220707 成功（104 表、SYS_USER=1）
+- 缺陷 dump 发现：020730（#158 重供给前最后一份）act_ge_bytearray INSERT 区转义损坏（含二进制，解析脱轨误报 1100 not locked），从未被成功导入过；已 git mv 改名 invalid- 前缀隔离
+- 自坑自省：导入管道接 head -3 触发 SIGPIPE 中断（24 表即止）、mariadbd 相对路径 redirect 失败——均即改即验
+- RECOVER_EXIT=0，done: 8080=200 jar=ok 3306=ok 真绿；四链路 200×4，accessToken 真绿
+- 收口 dump OK 20261027-042834（275025B 规范尺寸，0 ERROR）
+
+Stage Summary:
+- 重供给恢复 #158，累计 158 次全部闭环；本轮由单命令流水线升级为深度排障：jar 路径之谜、dump 不入库之谜双双闭环
+- 数据安全升级：已知良好 dump（220707 + 042834）首次真正进入 git 持久化；020730 缺陷件隔离
+- 端口归属正常（vite/1147、mariadbd/2265、java/2331）；内存 3.22GB，oom 0

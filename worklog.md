@@ -10351,3 +10351,20 @@ Work Log:
 Stage Summary:
 - 恢复 #160 单轮闭环，累计 160 次；连续三轮每小时重供给（#158/#159/#160），频率异常，持续观察
 - 沙箱不可用累计 115 次（无新增）
+
+---
+Task ID: r332
+Agent: ops-loop (main)
+Task: 2026-10-27 18:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-100543）；四链路表面全 200，但真伪核验 no such table: SYS_USER → 8080 Node 假绿，判定环境重供给 #161
+- 新亚型：vite 幸存（1272，RSS 719MB）→ 3000 三链路真 200，仅 8080 被 node index.ts（1334）/bun src/index.ts（1105）假绿占用；mariadbd 幸存（1220）
+- 定型恢复流水线：pkill 五连（只杀 node index.ts/bun，vite 未受影响）→ jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（10:06:02→10:07:51，109s，完整退出型连续第 13 次）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1220)/3000=MainThread(1272)/8080=java(1531)
+- 收口 dump：OK 20261027-100844 workflow=272K v6=4.0K；内存 3266048000（~3.04GB），oom_kill 0
+- dump-db 报 git push FAILED（远端落后）→ pull --rebase 后重新 push 成功
+
+Stage Summary:
+- 恢复 #161 单轮闭环，累计 161 次；新亚型「vite 幸存+8080 假绿」（3000 表面真 200 但整体假绿）首次在四链路全 200 下靠真伪核验拦截
+- 沙箱不可用累计 116 次（r331 新增 1 次）

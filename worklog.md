@@ -10447,3 +10447,13 @@ Stage Summary:
 - 复验全绿：200×4 + accessToken 真绿；3306=mariadbd(1268) 3000=vite(1294) 8080=java(1574)；mem 3.34GiB oom 0
 - 收口 dump 20261028-130740 workflow=272K，验证 104 表 0 大小写重复（275025B 与权威源一致）
 - 发现：重供给后便携 mariadb 客户端布局变化（root/usr/local/mariadb/bin/ 消失，客户端在 root/usr/bin/）
+
+## r359 (2026-10-28 22:05 +08:00) 本会话沙箱再次重供给 + r333 同型重复表事故复发
+- 22:05 探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 本会话沙箱再次重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~28s，导入本轮 140612 dump）真绿；但收口 dump 报「无效」
+- 诊断：workflow 库 151 表（106 小写 + 45 大写变体），ACT_*/FLW_* 大小写重复表事故复发（同 r333）
+- 根因：重供给环境 workflow 库预置小写表集合（缺 SYS_USER），recover 导入大写命名 dump 产生字典重复
+- 定型方案重建：DROP DATABASE（errno 39 仅残留 db.opt，151 表全清）→ 导入权威 dump 140612 → 104 表 0 重复
+- recover 再跑（跳过导入直启 Java）EXIT=0 → 复验真绿
+- 收口 dump 20261028-141025 = 104 CREATE TABLE / 275028B 有效；四链路 200×4；mem 3.24GiB oom 0
+- 教训固守：recover 后必须验证 dump 有效性；重供给后 recover 导入前应检查库内既有表（防重复表复发）

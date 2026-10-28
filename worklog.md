@@ -10457,3 +10457,9 @@ Stage Summary:
 - recover 再跑（跳过导入直启 Java）EXIT=0 → 复验真绿
 - 收口 dump 20261028-141025 = 104 CREATE TABLE / 275028B 有效；四链路 200×4；mem 3.24GiB oom 0
 - 教训固守：recover 后必须验证 dump 有效性；重供给后 recover 导入前应检查库内既有表（防重复表复发）
+
+## r365 (2026-10-29 04:05 +08:00) 本会话沙箱第三次重供给恢复
+- r360-r364 五轮沙箱不可用；r365 恢复探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~28s，recover 跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
+- 四链路 200×4；mem 3.34GiB oom 0

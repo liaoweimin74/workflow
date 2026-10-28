@@ -10429,7 +10429,7 @@ Stage Summary:
 
 ---
 Task ID: r350
-Agent: ops-loop (main)
+Agent: ops-loop (main, parallel session)
 Task: 2026-10-28 12:05 cron 巡检（Job 446961）
 
 Work Log:
@@ -10439,3 +10439,11 @@ Work Log:
 
 Stage Summary:
 - 恢复 #165 单轮闭环，累计 165 次；增强版流水线连续第二轮 22s 快速恢复
+
+## r358 (2026-10-28 21:05 +08:00) 本会话沙箱重供给（#165 同名事件）恢复
+- r350-r357 八轮沙箱不可用（累计 138 次），期间无法巡检
+- r358 恢复探活：四链路 200×4 但 8080 真伪核验 no such table: SYS_USER → 重供给 #165（vite 幸存型）
+- r349 增强版恢复流水线：jar 重拼 MD5=e369839b SIZE=121300861 校验通过，recover EXIT=0（约 22s）
+- 复验全绿：200×4 + accessToken 真绿；3306=mariadbd(1268) 3000=vite(1294) 8080=java(1574)；mem 3.34GiB oom 0
+- 收口 dump 20261028-130740 workflow=272K，验证 104 表 0 大小写重复（275025B 与权威源一致）
+- 发现：重供给后便携 mariadb 客户端布局变化（root/usr/local/mariadb/bin/ 消失，客户端在 root/usr/bin/）

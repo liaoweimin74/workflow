@@ -10411,3 +10411,18 @@ Stage Summary:
 - 「无 jar 备份」持续观察项正式终结（路径错位实锤+修复）；恢复耗时从 67-110s 降至 23s
 - 新观察项：dump-db.sh 的 git add 被 .gitignore 拦截（本轮已 add -f 补救两份 dump；建议后续给脚本加 -f 或调整 .gitignore，涉及改代码待用户决策）
 - 沙箱不可用累计 127 次（r334-r344 十一轮中断）
+
+---
+Task ID: r349
+Agent: ops-loop (main)
+Task: 2026-10-28 11:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（030558 workflow=272K，mariadbd+数据幸存）；四链路表面 200×4 但真伪核验 no such table → 重供给 #164（同亚型：vite 幸存、8080 Node 假绿）
+- r345 增强版定型恢复：pkill 五连 → jar 重拼 MD5=e369839b 布置到 backups/jar/（目录）与 backend/target/ → recover EXIT=0 仅 22 秒（SYS_USER 已在跳过导入、jar 直复跳过 mvn）
+- 复验：四链路 200×4、accessToken 真绿；端口 3306=mariadbd(1269)/3000=MainThread(1289)/8080=java(1552)；收口 dump OK 20261028-030741；内存 3540516864（~3.30GB）、oom 0
+- 新快照已 git add -f 入库并推送
+
+Stage Summary:
+- 恢复 #164 单轮闭环，累计 164 次；r345 修复后恢复耗时稳定在 ~22s（原 67-110s）
+- 沙箱不可用累计 130 次（r346-r348 三轮中断）

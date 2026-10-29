@@ -16,6 +16,7 @@
 - `src/layouts/__tests__/AdminLayout.page-fullscreen.test.ts` — 2 failed（composable 复用 / pageStageRef 覆盖层类）
 - `src/views/system/member-group/__tests__/MemberGroupPage.test.ts` — 5 failed
 - `src/views/dataSource/components/__tests__/VisualQueryBuilder.test.ts` — 1 failed（**flaky**：同码两轮 7/8 与 8/8 红，判定时按"红集成员"而非"红数"）
+- `src/views/dataSource/__tests__/DataSourceListPage.test.ts` — 全量 242 文件并行时偶发 1 红且**每轮红不同用例**（worktree 轮=可视化保存序列、主仓轮=工具栏弹窗强类型）；单跑 56/56 全绿两轮复现（2026-10-29，merge 树与主仓各单跑一次）。负载竞态，非回归；新成员红须先单跑复核再定性（见 §5）。
 - **门禁判定**：全量 `pnpm vitest run` 允许红集恰为上述成员；出现新成员即回归，必须当场修。
 - 参照实测：2026-10-29 主仓 FF 后 2795 passed / 8 failed 与基线逐字节一致。
 

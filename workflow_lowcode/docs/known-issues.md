@@ -23,11 +23,17 @@
 
 - 门禁比对同样按成员集合，新增错即回归。
 
-## 4. origin/main 半成品预坏（在途，阻塞常规 pull）
+## 4. origin/main 半成品预坏（已处置：revert-to-green 合入，2026-10-29）
 
-- **现状**（2026-10-29 取证）：origin/main 领先旧基线 107 笔，其中含**编译不过**的在途代码：
-  - `DataScopeService` 缺 `list/save/delete/effectiveRule/conditionFor/subjectsOf/matchedRules`（被 origin 的 `DataScopeController` 调用）
-  - `AiProperties` 缺 `isConfigured()`（被 `TestCaseNarrateService` 调用）
-  - `PageDefinitionRepository` 缺 `findByTypeAndFormKeyNotNullAndDataSourceIdNull`（被 `ViewDataSourceMigrator` 调用）
-- **一处跨分支签名冲突**：本地 J4/dcefe462 将 `LoginUserService.buildLoginUser(Long)` 改为 `(Long, Long, String)`（userId, clientId, channel），origin 的单参调用点（`DataScopeController:121`）合入后接不上，pull 时需适配为三参。
-- **处置**：待 origin 在途会话修绿推送后再 pull 适配；在那之前主仓常规 `git pull` 会把预坏代码收进来导致编译炸（2026-10-29 实测发生过一次，已回退）。
+- **处置结果**：`integrate/origin-main` 收 origin 107 笔（merge `73cf8dc0`，零冲突），断源撤除 15 文件（单笔 `c02ee1ce`，清单与理由见提交消息），三套门禁回基线后合入 main 并推送。origin 侧文件在历史与其会话分支中完整保留，对方补好实现后重新推送会自然再落地。
+- **断源实况**（除原登记三簇外，演练又发现两处**运行时炸点**，编译期不报）：
+  - `V2__init_data.sql` 与存量 `V2__init.sql` 版本号重复 → Flyway validate 启动炸
+  - `system/controller/PostController`（origin 新增别名，路径 `/api/posts` 与存量 `api/controller/PostController` 完全重复）→ 默认 bean 名 `postController` 冲突 → **Spring 上下文炸，连锁污染 7 个测试类 35 错**。教训：不同包同名 `@RestController` 类不会报编译错，只在上下文启动时炸——归因红集先看 `ConflictingBeanDefinitionException`。
+- **origin 会话再推时的适配点**（仍有效）：`LoginUserService.buildLoginUser` 现为 `(Long userId, Long clientId, String channel)` 三参，其单参调用点（`DataScopeController:121`）需适配为 `(userId, SysClient.PORTAL_CLIENT_ID, "WEB")`。
+- **FE 侧同批半成品**（已随 c02ee1ce 撤除）：`PageRenderer.test.ts`(17 红)/`PageRenderer.keepalive.test.ts`(4 红) 为"先测试后实现"红灯（origin 未配套改 PageRenderer.vue）；`DataScopeDialog.vue+Test` mock `@element-plus/icons-vue` 缺 `Close` 导出，套件收集必炸。健康增量（`ViewDesigner.test` 全绿、`ViewCompilerTest` 26 例全绿、`filterMerge` 全绿等）**均已保留**。
+
+## 5. 门禁判定的两个"不算回归"坑（2026-10-29 演练实证）
+
+- **`test:integration` 不在官方 node 门禁口径**：backend-node `pnpm test` = `vitest run --exclude "**/integration/**"`（54/54）。集成 spec（如 `menu-client-scope.spec.ts` 的"sys_menu 全库 client_id=1"整库断言）依赖活库脏数据状态，红不红与代码回归无关，勿计入红集。
+- **全量 FE 并行负载 flaky**：`DataSourceListPage.test.ts`(56 例) 245 文件全量跑时偶发 1 红、单跑全绿（VisualQueryBuilder 同类）。再次印证门禁按"红集成员"判定外，**新成员红须先单跑复核**再定性回归。
+- **junction node_modules 的假红**：worktree 里用目录 junction 复用主仓 node_modules 时，`runtime-package.test.ts` 的"宿主与产物同一实现"`Object.is` 断言必红（realpath 分叉成两份模块实例）——环境副作用。FE 权威验证必须在主仓实依赖树跑。

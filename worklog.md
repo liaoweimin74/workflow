@@ -10494,3 +10494,9 @@ Stage Summary:
 - 恢复：r349 增强版流水线（jar 重拼 MD5=e369839b 校验通过）EXIT=0 ~22s，recover 检测 SYS_USER 已在跳过导入
 - 复验：200×4 + accessToken 真绿；3306/3000/8080 各 1 进程；104 表 0 重复；内存 3.21GiB，oom 0
 - 收口 dump 完成；注：sandbox 系统时间偏慢（21:05 vs 实际 05:05），dump 时间戳以沙箱时间为准
+
+## r391 (2026-10-30 06:05 +08:00 / sandbox 22:05) 第8次重供给恢复
+- r390 恢复仅 1 小时后再次假绿（no such table: SYS_USER，vite 幸存型）——重供给周期缩短至 1h（同 r381→r382 型）
+- 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存）
+- 恢复：r349 流水线 EXIT=0 ~22s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.26GiB oom 0
+- 收口 dump 完成

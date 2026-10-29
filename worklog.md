@@ -10487,3 +10487,10 @@ Stage Summary:
 - r349 增强版恢复 EXIT=0（~23s，跳过导入——SYS_USER 已在预置库中）；复验真绿
 - 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
 - 四链路 200×4；mem 3.34GiB oom 0
+
+## r390 (2026-10-30 05:05 +08:00 / sandbox 21:05) 第7次重供给恢复
+- 现象：四链路表面 200×4，auth 核验 `no such table: SYS_USER`（vite 幸存型假绿）
+- 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存，无需重建）
+- 恢复：r349 增强版流水线（jar 重拼 MD5=e369839b 校验通过）EXIT=0 ~22s，recover 检测 SYS_USER 已在跳过导入
+- 复验：200×4 + accessToken 真绿；3306/3000/8080 各 1 进程；104 表 0 重复；内存 3.21GiB，oom 0
+- 收口 dump 完成；注：sandbox 系统时间偏慢（21:05 vs 实际 05:05），dump 时间戳以沙箱时间为准

@@ -1,0 +1,44 @@
+# client-scoped-menu Specification
+
+## Purpose
+TBD - created by archiving change multi-client-support. Update Purpose after archive.
+## Requirements
+### Requirement: 菜单树按客户端作用域
+`sys_menu` SHALL 增加 `client_id` 作用域，每个客户端一棵菜单树；菜单的查询、创建、编辑、移动 MUST 限定在当前客户端范围内，跨端不可见。
+
+#### Scenario: 端间互不污染
+- **WHEN** 在司机端树中新增"订单"菜单
+- **THEN** 平台端树与乘客端树均不含该节点
+
+### Requirement: 存量菜单零破坏回填
+迁移 SHALL 仅加 `sys_menu.client_id` 列并将存量全部回填为默认平台客户端；path、权限码、角色授权、前端静态路由 MUST 一律不动。回填后 MUST NOT 存在 `client_id` 为空的菜单行。
+
+#### Scenario: 平台端树完整继承
+- **WHEN** 迁移执行完毕后查看平台端菜单树
+- **THEN** 现有全部节点（含目录/菜单/按钮三层）归属平台端且结构、权限码与迁移前一致
+
+### Requirement: 端形态约束与服务端校验
+菜单形态 SHALL 按客户端渠道类型约束：WEB 端沿用目录→菜单→按钮三层规则；移动端（H5/APP/小程序）为**底部 Tab（2~5 个一级菜单节点）+ 工作台宫格（其余节点）**，工作台内层级 ≤2。拖拽/保存时服务端 MUST 按端形态校验落点合法性并拒绝违规结构。
+
+#### Scenario: Tab 超限拒绝
+- **WHEN** 维护司机端树时尝试将第 6 个一级节点划入底部 Tab 区
+- **THEN** 服务端拒绝该次移动并返回形态约束错误
+
+#### Scenario: 按钮节点不占屏
+- **WHEN** 司机端某移动菜单下配置按钮权限节点
+- **THEN** 按钮仅作为权限载体，不出现在 Tab 或宫格界面
+
+### Requirement: 菜单管理页端作用域切换
+菜单管理页（A3，`/system/menu`，权限码 `menu:*` 不变）SHALL 在顶部提供端切换 Tab：切换后按 `client_id` 重新拉取该端树，并提供"去新建端"入口；移动端 Tab 下 SHALL 显示"底部Tab区/工作台功能"分区带，拖拽即改归属。
+
+#### Scenario: 切换端编辑
+- **WHEN** 建造者从平台端切到司机端并调整 Tab 顺序后保存
+- **THEN** 仅司机端树受影响；切回平台端可见其树无变化
+
+### Requirement: 端菜单为空的处理
+某端菜单树为空或用户在该端无角色时，该端运行态 SHALL 呈现空态引导（WEB 端空侧边栏/移动端空工作台），API MUST 不因空菜单放行任何页面。
+
+#### Scenario: 新端未挂菜单
+- **WHEN** 新建客户端尚未配置任何菜单节点，该端用户登录
+- **THEN** 运行态显示"功能开发中"空态，所有页面 API 返回无权限
+

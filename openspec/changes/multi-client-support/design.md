@@ -89,6 +89,10 @@ grant 在"行"之上增加字段策略：列 → 可见 / 脱敏（引用内置�
 **D11. P0 前置 spike：存量 schema 桌面细节审计**
 现 VIEW 配置 / form-create rule 混有列宽、栅格 span、弹窗尺寸等表现字段。P0 先逐组件清点"语义 vs 表现"，表现字段迁到渠道 profile 层——否则移动渲染器被迫读不懂的遗留属性。spike 产出直接决定 D8 覆盖层的迁移清单。
 
+> **Decision-Update（verify 校准 2026-10-29，裁定记录 `80c8f8d8`/`e50a35d1`/`c7ddf9ad`）**：
+> 1. **D5 存储形态**：资产-端发布关系按实现落地为 `wf_page_def.target_clients` CSV 列（非 `page_client_target` 关系表）——理由见 V77 注释：NULL 缺省仅 portal = 存量零破坏、逻辑外键对齐 V71-V73。
+> 2. **D9/D10 交付形态**：架构已收敛为**单设计器（EP）+ 分端 uni-app 出码**——Vant 保留为设计器 iframe 移动预览物料（**预览≠产物**，漂移不可消除、已写死进文档为接受项）；`/m/` 产物、B1 工作台、uni 出码工程整体移交批 E（change：multi-client-uniapp-codegen，先只出 H5）。权威参照：`workflow_lowcode/docs/designs/2026-10-27-多端交付-单设计器分端出码架构.md`。
+
 ## Risks / Trade-offs
 
 - [存量 schema 混表现字段，渲染分层落空] → D11 spike 前置为 P0 任务；分拣结果迁渠道 profile 层，schema 校验器加拦截

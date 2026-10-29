@@ -8,7 +8,7 @@
 
 | 维度 | 状态 |
 |------|------|
-| Completeness | 勾选 22/53；清点后实际完成 32/53（10 笔待追记），其余 21 笔为裁定后置/Deferred（批 E 另立 change） |
+| Completeness | 勾选 22/53 → 校准后实际完成 33/53（11 笔已追记），其余 20 笔为裁定后置/Deferred（批 E 另立 change） |
 | Correctness | 42 需求中 30 个有强实现+测试证据，8 个部分实现，4 个（P2 两域）为计划内未实施 |
 | Coherence | 已交付切片与 design.md 基本一致；两处**文档级漂移**需校准（D9 渲染形态、D5 目标端存储形态）——均有用户裁定在案 |
 
@@ -18,7 +18,7 @@
 
 ## CRITICAL（归档前必须处置）
 
-### C1. tasks.md 勾选状态与实现事实不一致（10 笔待追记 + 21 笔待标记 deferred）
+### C1. tasks.md 勾选状态与实现事实不一致（11 笔追记 + 20 笔 deferred 标注）——**已处置 ✅**
 
 后端 A/B 组与批 A/B/C 的交付没有回写勾选，而剩余未完成项若不标注归属，archive 合并 specs 时会把未实现能力当作已完成基线。
 
@@ -42,7 +42,7 @@
 
 **处置**：更新 `openspec/changes/multi-client-support/tasks.md`（追记 + deferred 标注），与 C2 一并提交。
 
-### C2. delta spec 与实现存在两处口径漂移，archive 合并前必须改写
+### C2. delta spec 与实现存在两处口径漂移，archive 合并前必须改写——**已处置 ✅**
 
 specs 会在归档时合入 `openspec/specs/` 成为长期基线，按现文本合并会固化已被用户裁定放弃的形态：
 
@@ -97,7 +97,7 @@ specs 会在归档时合入 `openspec/specs/` 成为长期基线，按现文本�
 ## Overall Decision
 
 - [ ] PASS
-- [x] PASS WITH WARNINGS —— 条件：C1（tasks.md 追记+deferred 标注）与 C2（两 delta spec 漂移校准）在归档前完成；WARNING 项随批 E / 后续小批处置。
+- [x] PASS WITH WARNINGS —— 原条件 C1（tasks.md 追记+deferred 标注）与 C2（两 delta spec 漂移校准+design.md Decision-Update）**已于本校准提交完成**；WARNING 项随批 E / 后续小批处置。
 - [ ] FAIL
 
 **Final Assessment**：已交付切片（P0 全域 + P1 主体 + Java J 系列 + 移动预览批 A/B/C + E-0 分拣闭环）质量有测试强背书，无实现正确性缺陷。两处 spec↔实现漂移均系用户裁定所致、裁定记录在案，属**文档校准义务**而非实现问题。完成 C1/C2 后即可进入 /opsx-finish 归档流程。

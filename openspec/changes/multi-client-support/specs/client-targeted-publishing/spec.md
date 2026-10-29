@@ -3,11 +3,11 @@
 ## ADDED Requirements
 
 ### Requirement: 发布选择目标端
-页面/表单发布对话框（A5）SHALL 提供"目标端"多选（列表显示各端及其已开通渠道），仅已启用客户端可选；发布 MUST 将结果写入资产-端关系（`page_client_target`），同一资产可发布到多端且仅一份 schema。
+页面/表单发布对话框（A5）SHALL 提供"目标端"多选（列表显示各端及其已开通渠道），仅已启用客户端可选；发布 MUST 将结果写入资产-端关系（实现形态：`wf_page_def.target_clients` 升序 CSV 列，NULL=存量缺省仅 portal，逻辑外键不建关系表——见 V77 注记与 design.md Decision-Update），同一资产可发布到多端且仅一份 schema。
 
 #### Scenario: 发布到两端
 - **WHEN** 「订单列表」v4 发布时勾选平台端与司机端
-- **THEN** `page_client_target` 生成两条关系，两端各按其形态渲染同一资产
+- **THEN** `target_clients` 同时包含两端 id，两端各按其形态渲染同一份 schema 资产
 
 #### Scenario: 停用端不可选
 - **WHEN** 某客户端处于停用状态

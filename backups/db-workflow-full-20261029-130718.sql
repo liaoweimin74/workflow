@@ -2054,7 +2054,10 @@ INSERT INTO `flyway_schema_history` VALUES
 (50,'61','row permission','SQL','V61__row_permission.sql',-56855114,'root','2026-10-21 03:07:19',4,1),
 (51,'62','row scope exemption','SQL','V62__row_scope_exemption.sql',-1170162866,'root','2026-10-21 03:07:19',2,1),
 (52,'63','row permission menu','SQL','V63__row_permission_menu.sql',-595049202,'root','2026-10-21 03:07:19',1,1),
-(53,'64','miniprogram client identity','SQL','V64__miniprogram_client_identity.sql',359359719,'root','2026-10-21 03:07:19',1,1);
+(53,'64','miniprogram client identity','SQL','V64__miniprogram_client_identity.sql',359359719,'root','2026-10-21 03:07:19',1,1),
+(54,'65','row scope v3','SQL','V65__row_scope_v3.sql',-1414207439,'root','2026-10-24 13:29:32',14,1),
+(55,'66','row permission menu to dev','SQL','V66__row_permission_menu_to_dev.sql',1585024650,'root','2026-10-24 13:29:32',0,1),
+(56,'67','home page setting','SQL','V67__home_page_setting.sql',-651823045,'root','2026-10-24 13:29:32',2,1);
 /*!40000 ALTER TABLE `flyway_schema_history` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
@@ -2527,6 +2530,33 @@ COMMIT;
 SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 
 --
+-- Table structure for table `sys_home_page_setting`
+--
+
+DROP TABLE IF EXISTS `sys_home_page_setting`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `sys_home_page_setting` (
+  `tenant_id` varchar(64) NOT NULL,
+  `page_key` varchar(255) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `sys_home_page_setting`
+--
+
+SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
+LOCK TABLES `sys_home_page_setting` WRITE;
+/*!40000 ALTER TABLE `sys_home_page_setting` DISABLE KEYS */;
+/*!40000 ALTER TABLE `sys_home_page_setting` ENABLE KEYS */;
+UNLOCK TABLES;
+COMMIT;
+SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
+
+--
 -- Table structure for table `sys_material`
 --
 
@@ -2765,7 +2795,7 @@ INSERT INTO `sys_menu` VALUES
 (316,'2026-10-09 00:05:46.271000',NULL,0,'2026-10-09 00:05:46.271000',NULL,NULL,NULL,'成员维护',2,305,NULL,'system:member-group:member',5,1),
 (320,'2026-10-13 04:35:50.662000',NULL,0,'2026-10-20 04:07:09.382000',NULL,'system/ai-config/AiConfigPage','Cpu','模型配置',1,1,'/system/ai-config','system:aiconfig:list',7,1),
 (321,'2026-10-20 04:07:09.328000',NULL,0,'2026-10-20 04:07:09.399000',NULL,'material/MaterialListPage','Files','物料管理',1,180,'/material','material:manage',7,1),
-(322,'2026-10-21 03:07:19.136000',NULL,0,'2026-10-21 03:07:19.136000',NULL,'system/row-permission/RowPermissionPage','Lock','数据权限',1,1,'/system/row-permission','system:rowpermission:list',8,1),
+(322,'2026-10-21 03:07:19.136000',NULL,0,'2026-10-24 13:29:32.868000',NULL,'system/row-permission/RowPermissionPage','Lock','数据权限',1,180,'/system/row-permission','system:rowpermission:list',7,1),
 (9319,'2026-10-11 15:19:25.498182',NULL,0,'2026-10-20 04:07:09.381000',NULL,'page/PageRenderer',NULL,'组件演示·数据详情与步骤条',1,190,'/page/page_detail_steps_demo','page:read:page_detail_steps_demo',1,1);
 /*!40000 ALTER TABLE `sys_menu` ENABLE KEYS */;
 UNLOCK TABLES;
@@ -4198,13 +4228,12 @@ CREATE TABLE `wf_row_permission_grant` (
   `is_deleted` int(11) NOT NULL,
   `updated_at` datetime(6) DEFAULT NULL,
   `updated_by` varchar(50) DEFAULT NULL,
-  `scope_action` enum('READ','WRITE') NOT NULL,
   `permission_id` bigint(20) NOT NULL,
   `subject_key` varchar(64) NOT NULL,
   `subject_type` enum('ROLE') NOT NULL,
   `tenant_id` varchar(64) NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_row_permission_grant` (`permission_id`,`subject_type`,`subject_key`,`scope_action`)
+  UNIQUE KEY `uk_row_permission_grant` (`permission_id`,`subject_type`,`subject_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -4268,13 +4297,13 @@ CREATE TABLE `wf_row_scope_exemption` (
   `is_deleted` int(11) NOT NULL,
   `updated_at` datetime(6) DEFAULT NULL,
   `updated_by` varchar(50) DEFAULT NULL,
-  `scope_action` enum('READ','WRITE') NOT NULL,
   `data_source_id` varchar(64) NOT NULL,
   `reason` varchar(500) NOT NULL,
   `revoked_at` datetime(6) DEFAULT NULL,
   `revoked_by` varchar(50) DEFAULT NULL,
   `tenant_id` varchar(64) NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_row_scope_exemption_ds` (`tenant_id`,`data_source_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -4434,4 +4463,4 @@ SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
--- Dump completed on 2026-10-23  3:05:47
+-- Dump completed on 2026-10-29 13:07:18

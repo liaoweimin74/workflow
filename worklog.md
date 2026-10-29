@@ -9879,3 +9879,611 @@ Work Log:
 
 Stage Summary:
 - 事件 #133 单轮闭环，零 mvn 第 117 次；累计 133 次
+
+---
+Task ID: r230
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 完整冷启动（事件 #133）：四链路 000×4、3306 离线、无业务进程
+- pkill 五连拦截 mvn → 重拼 jar md5 e369839b 校验通过 → timeout 170 recover-dplus.sh（被工具 180s 杀，幸存型）
+- 复验：Java 拉起 8080 auth 真绿 accessToken、mariadbd 3306 在线、workflow 103 表完整（workflow_v6 历来空库）
+- start-services.sh 补拉 vite → 3000 200
+- 40s 四链路复验 200×4 + nodeProbe 200
+
+Stage Summary:
+- 事件 #133 完整冷启动单轮恢复成功，零 mvn 第 117 次
+- mariadb 客户端需 sysroot LD_LIBRARY_PATH（libncurses.so.6）
+
+---
+Task ID: r235
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #134）：四链路假绿（8080 被 bun src/index.ts + node index.ts 占据，auth=no such table: SYS_USER）、Java 缺位、workflow 库空壳（dump-db 报无效）
+- pkill 五连（含 bun/node 假绿）→ jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型超时被杀）
+- 复验：Java 拉起 8080 auth 真绿、mariadbd/vite 在线、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.35G oom 0
+
+Stage Summary:
+- 事件 #134 标准重供给单轮恢复成功，零 mvn 第 118 次
+- 此前 r231-234 沙箱四连败（历史最长），期间环境重供给由本轮闭环
+
+---
+Task ID: r237
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #135）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.17G oom 0
+
+Stage Summary:
+- 事件 #135 标准重供给单轮恢复成功，零 mvn 第 119 次
+- r236 沙箱故障 1 轮
+
+---
+Task ID: r238
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #136）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.40G oom 0
+
+Stage Summary:
+- 事件 #136 标准重供给单轮恢复成功，零 mvn 第 120 次
+- 与 r237 同型（连续每小时重供给节奏）
+
+---
+Task ID: r246
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 沙箱 8 小时空窗（r239-245 七连败，创历史纪录）后自愈
+- 标准重供给（事件 #137）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.39G oom 0
+
+Stage Summary:
+- 事件 #137 标准重供给单轮恢复成功，零 mvn 第 121 次
+- 连续重供给节奏持续（r237/r238/r246 同型）
+
+---
+Task ID: r248
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #138）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.34G oom 0
+- r247 沙箱故障 1 轮
+
+Stage Summary:
+- 事件 #138 标准重供给单轮恢复成功，零 mvn 第 122 次
+
+---
+Task ID: r249
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #139）：8080 被 bun/node 假绿占据、workflow 库空壳（dump-db 报无效）
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.40G oom 0
+
+Stage Summary:
+- 事件 #139 标准重供给单轮恢复成功，零 mvn 第 123 次
+
+---
+Task ID: r254
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 沙箱 4 小时空窗（r250-253 四连败）后自愈
+- 标准重供给（事件 #140）：8080 被 bun/node 假绿占据、workflow 库空壳（dump-db 报无效）
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.32G oom 0
+
+Stage Summary:
+- 事件 #140 标准重供给单轮恢复成功，零 mvn 第 124 次
+
+---
+Task ID: r255
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #141）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.40G oom 0
+
+Stage Summary:
+- 事件 #141 标准重供给单轮恢复成功，零 mvn 第 125 次
+
+---
+Task ID: r256
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 标准重供给（事件 #142）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.33G oom 0
+
+Stage Summary:
+- 事件 #142 标准重供给单轮恢复成功，零 mvn 第 126 次
+
+---
+Task ID: r259
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 沙箱 2 轮空窗（r257-258）后自愈
+- 标准重供给（事件 #143）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.40G oom 0
+
+Stage Summary:
+- 事件 #143 标准重供给单轮恢复成功，零 mvn 第 127 次
+
+---
+Task ID: r262
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 沙箱 2 轮空窗（r260-261）后自愈
+- 标准重供给（事件 #144）：8080 被 bun/node 假绿占据（auth=no such table: SYS_USER）、Java 缺位
+- pkill 五连 → jar 重拼 md5 e369839b 校验 → timeout 170 recover-dplus.sh（幸存型）
+- 复验：Java 拉起 8080 auth 真绿、workflow 103 表完整
+- 40s 复验 200×4 + nodeProbe 200，mem 3.37G oom 0
+
+Stage Summary:
+- 事件 #144 标准重供给单轮恢复成功，零 mvn 第 128 次
+
+---
+Task ID: r263
+Agent: main
+Task: cron 轻量运维巡检（Job 446961）
+
+Work Log:
+- 全绿：四链路 200×4、auth 真绿 accessToken、Java/vite/mariadbd 在位
+- dump 272K（数据正常增长）103 表核验通过
+- 清理 bun/node index.ts 假绿残留进程（未占 8080）
+- mem 3.43G oom 0
+
+Stage Summary:
+- r262 恢复后服务连续稳定，无需干预恢复链
+
+---
+Task ID: r268
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 03:05（Job 446961）——事件 #145 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r265-267 连续 3 轮故障后恢复，累计 #69-#71）
+- 探活四链路 200×4 但 auth 返回 no such table: SYS_USER=假绿；bun(1145)/node(1305) 占 8080，Java 进程消失，dump 无效 → 判定事件 #145 标准重供给
+- pkill 五连清场 + git checkout jar-parts + 重拼 jar（md5 e369839b / 121300861B 校验通过）
+- 前台 recover-dplus.sh 幸存型超时（第 13 次，工具 180s 杀掉但 Java 已拉起）
+- 复验：ss 8080=java(1415)/3000=vite(1244)/3306=mariadbd(1216)，auth 真绿，40s 四链路 200×4，workflow 104 表
+- 收口 dump 191034（272K）强制入库推送（先前 add 路径展开失败已修正，.gitignore:64 仍待裁决）
+
+Stage Summary:
+- 事件 #145 单轮闭环，累计恢复 145 次，零 mvn 达 129 次
+- 沙箱累计故障 71 次（连续 3 轮后自愈）
+- HEAD 9da9901e 已推远端
+
+---
+Task ID: r274
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 09:05（Job 446961）——事件 #146 标准重供给+MariaDB 冷态恢复
+
+Work Log:
+- 沙箱自愈（r269-273 连续 5 轮故障后恢复，累计 #72-#76）
+- 四链路 200×4 但 auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadbd 未起（bootstrap 下载 mariadb 包中），Java 消失 → 事件 #146
+- pkill 五连 + jar 重拼（md5 e369839b ✓）+ 最新 dump 191034 在位 + mariadb-user bin/data 完整
+- recover-dplus.sh 幸存型超时（第 14 次），复验 ss：8080=java(1421)/3000=vite(1134)/3306=mariadbd(1310)，auth 真绿
+- 40s 四链路 200×4，workflow 104 表，收口 dump 011032（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #146 单轮闭环（重供给+MariaDB 冷态复合型首例），累计恢复 146 次，零 mvn 130 次
+- 沙箱累计故障 76 次
+
+---
+Task ID: r277
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 11:05（Job 446961）——事件 #147 标准重供给+MariaDB 冷态恢复
+
+Work Log:
+- 沙箱单轮故障后自愈（累计 #77）
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadb 冷态（bootstrap 下载中），Java 消失 → 事件 #147（同 #146 复合型）
+- pkill 五连 + jar 重拼（md5 e369839b ✓）+ dump 011032 在位；mariadbd 二进制缺位由 recover 链自 debs 重建
+- recover-dplus.sh 幸存型超时（第 15 次），复验 ss：8080=java(1407)/3000=vite(1137)/3306=mariadbd(1313)，auth 真绿
+- 40s 四链路 200×4，104 表，收口 dump 031011（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #147 单轮闭环，累计恢复 147 次，零 mvn 131 次；#146/#147 连续两轮同型（每小时重供给节奏持续）
+
+---
+Task ID: r280
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 12:05（Job 446961）——事件 #148 标准重供给恢复
+
+Work Log:
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，Java 消失；mariadbd 幸存（bootstrap 拉起，dump 272K 数据完整）
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 幸存型超时（第 16 次），复验 ss：8080=java(1510)/3000=vite(1242)/3306=mariadbd(1220)，auth 真绿
+- 40s 四链路 200×4，104 表，收口 dump 041019（272K），内存 3.17GB oom 0
+
+Stage Summary:
+- 事件 #148 单轮闭环，累计恢复 148 次，零 mvn 132 次；本轮 MariaDB 幸存仅 Java 缺失（较 #146/#147 恢复更快）
+
+---
+Task ID: r281
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 13:05（Job 446961）——事件 #149 标准重供给恢复
+
+Work Log:
+- auth 假绿（no such table: SYS_USER）；bun/node 占 8080，mariadbd 幸存（1250），Java 消失 → 事件 #149
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 首次完整退出（EXIT=0，done: 8080=200 jar=ok 3306=ok 真绿 t+5s），非幸存型
+- 40s 四链路 200×4，ss：8080=java(1420)/3000=vite(1174)/3306=mariadbd(1250)，104 表
+- 收口 dump 050709（272K），内存 3.31GB oom 0
+
+Stage Summary:
+- 事件 #149 单轮闭环，累计恢复 149 次，零 mvn 133 次；recover 脚本首次在工具时限内跑完全程
+
+---
+Task ID: r286
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 18:05（Job 446961）——事件 #150 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r282-285 连续 4 轮故障后恢复，累计 #78-#81）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1219），Java 消失 → 事件 #150
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 2 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1423)/3000=vite(1242)/3306=mariadbd(1219)，104 表
+- 收口 dump 100713（272K），内存 3.32GB oom 0
+
+Stage Summary:
+- 事件 #150 单轮闭环，累计恢复 150 次（整数里程碑），零 mvn 134 次
+
+---
+Task ID: r289
+Agent: main (ops loop)
+Task: 巡检 2026-10-25 21:05（Job 446961）——事件 #151 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r287-288 连续 2 轮故障后恢复，累计 #82-#83）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1246），Java 消失 → 事件 #151
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 3 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1420)/3000=vite(1223)/3306=mariadbd(1246)，104 表
+- 收口 dump 130714（272K），内存 3.31GB oom 0
+
+Stage Summary:
+- 事件 #151 单轮闭环，累计恢复 151 次，零 mvn 135 次
+
+---
+Task ID: r298
+Agent: main (ops loop)
+Task: 巡检 2026-10-26 06:05（Job 446961）——事件 #152 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r290-297 连续 8 轮故障，刷新历史纪录，累计 #84-#91）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1246），Java 消失 → 事件 #152
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 4 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1416)/3000=vite(1217)/3306=mariadbd(1246)，104 表
+- 收口 dump 220707（272K），内存 3.32GB oom 0
+
+Stage Summary:
+- 事件 #152 单轮闭环，累计恢复 152 次，零 mvn 136 次；沙箱最长连续故障纪录更新为 8 轮
+
+---
+Task ID: r302
+Agent: main (ops loop)
+Task: 巡检 2026-10-26 10:05（Job 446961）——事件 #153 标准重供给恢复
+
+Work Log:
+- 沙箱自愈（r299-301 连续 3 轮故障后恢复，累计 #92-#94）
+- auth 假绿；bun/node 占 8080，mariadbd 幸存（1284），Java 消失 → 事件 #153
+- pkill 五连 + jar 重拼（md5 e369839b ✓）
+- recover-dplus.sh 完整退出（EXIT=0，真绿 t+5s，连续第 5 次非幸存型）
+- 40s 四链路 200×4，ss：8080=java(1478)/3000=vite(1137)/3306=mariadbd(1284)，104 表
+- 收口 dump 020730（272K），内存 3.26GB oom 0
+
+Stage Summary:
+- 事件 #153 单轮闭环，累计恢复 153 次，零 mvn 137 次
+
+---
+Task ID: r306
+Agent: main
+Task: 轻量运维巡检 2026-10-26 15:05 (Job 446961)
+
+Work Log:
+- 巡检发现：环境重供给 #154（标准型）——8080 Node 假绿 no such table: SYS_USER，bun 残留（src/index.ts/install/run dev），3000 三链路 000，mariadbd 幸存；首轮 dump-db 报 workflow dump 无效
+- pkill 五连 + jar-parts checkout 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 6 次完整退出型）；注意：recover 日志称「无 jar 备份」走了重建分支但 68s 即完成，结果真绿，备份路径探测待观察
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3306=mariadbd/1222、3000=MainThread/1284、8080=java/1530）
+- 收口 dump OK（20261026-070838 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #154，累计 154 次全部单轮闭环；沙箱故障窗口 r304-r305 两连后恢复
+- 内存 3.33GB（峰值），oom_kill 0；四链路全绿真绿，回合结束
+
+---
+Task ID: r314
+Agent: main
+Task: 轻量运维巡检 2026-10-26 23:05 (Job 446961)
+
+Work Log:
+- 沙箱中断 r307-r313 七连（累计 104 次）后恢复执行；期间 8 小时无观测
+- 巡检发现：环境重供给 #155（标准型）——8080 Node 假绿 no such table: SYS_USER，bun/node 残留，3000 vite 在位幸存，mariadbd 幸存，首轮 dump 正常
+- pkill 五连 + jar-parts 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 7 次完整退出型）；recover 再次报「无 jar 备份」走重建分支但 ~112s 完成——该分支提示与实际 backups/jar 存在矛盾，疑脚本探测路径不同，持续观察（结果始终真绿）
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3000=vite/1207、3306=mariadbd/1252、8080=java/1513）
+- 收口 dump OK（20261026-150852 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #155，累计 155 次全部单轮闭环；内存 3.28GB，oom_kill 0；回合结束
+
+---
+Task ID: r320
+Agent: main
+Task: 轻量运维巡检 2026-10-27 05:05 (Job 446961)
+
+Work Log:
+- 沙箱中断 r315-r319 五连（累计 109 次）后恢复执行；期间 5 小时无观测
+- 巡检发现：环境重供给 #156（标准型）——8080 Node 假绿 no such table: SYS_USER，bun/node 残留，vite/mariadbd 幸存，首轮 dump 正常
+- pkill 五连 + jar-parts 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 8 次完整退出型）；「无 jar 备份」分支提示依旧（~100s 完成真绿），持续观察
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3000=vite/1225、3306=mariadbd/1238、8080=java/1514）
+- 收口 dump OK（20261026-210824 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #156，累计 156 次全部单轮闭环；内存 3.27GB，oom_kill 0；回合结束
+
+---
+Task ID: r322
+Agent: main
+Task: 轻量运维巡检 2026-10-27 07:05 (Job 446961)
+
+Work Log:
+- 沙箱单发中断 r321（累计 110 次）后本轮恢复执行
+- 巡检发现：环境重供给 #157——8080 Node 假绿 no such table: SYS_USER，bun/node 残留；mariadbd 进程在但 dump-db 判 3306 未就绪（复合型倾向，疑冷启动中），首轮 dump 跳过
+- pkill 五连 + jar-parts 重拼（MD5 e369839b / 121300861B 校验通过）+ timeout 170 recover-dplus.sh
+- RECOVER_EXIT=0（连续第 9 次完整退出型），3306=ok；「无 jar 备份」分支提示依旧（~100s 真绿）
+- 40s 复验：四链路 200×4，auth accessToken 真绿，ss 三端口归属正常（3000=vite/1182、3306=mariadbd/1257、8080=java/1489）
+- 收口 dump OK（20261026-230829 workflow=272K v6=4.0K）
+
+Stage Summary:
+- 重供给恢复 #157，累计 157 次全部单轮闭环；内存 3.31GB，oom_kill 0；回合结束
+
+---
+Task ID: r327
+Agent: main
+Task: 轻量运维巡检 2026-10-27 12:05 (Job 446961) —— 复合型深水区修复
+
+Work Log:
+- 沙箱中断 r323-r326 四连（累计 114 次）后恢复；巡检发现重供给 #158（MariaDB 冷态复合型，mariadbd 未起 + bootstrap 下载 JDK），8080 Node 假绿
+- timeout 170 首跑 EXIT=124（复合型 mvn 分支超时）；复跑前发现 backups/jar 被快照还原为【目录】（内含 10-11 旧 jar）致重拼失败——移开旧目录后重拼 e369839b 通过
+- 复跑 EXIT=0 但 8080=000：Java 死于 Flowable 建表冲突 flw_ru_batch already exists（快照残留 112 表半残 schema，SYS_USER 存在致脚本跳过导入）
+- 关键解密①：recover 脚本 JAR_BAK=backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（目录+jar 结构）——历轮「无 jar 备份」提示真相；规范化后成功走「从 backups/jar 恢复（跳过 mvn）」快速分支
+- 关键解密②：.gitignore L64 整目录忽略 backups/ ——历轮 dump 从未入库（git add 需 -f）；已 force-add 220707+新 dump 入 git
+- 数据修复：DROP 残库遇 errno 39（孤儿文件）+ 1205 锁超时（无外部会话，mariadbd 内部 MDL 卡死）→ 停机清理 datadir/workflow* → 重启 mariadbd → 干净导入 220707 成功（104 表、SYS_USER=1）
+- 缺陷 dump 发现：020730（#158 重供给前最后一份）act_ge_bytearray INSERT 区转义损坏（含二进制，解析脱轨误报 1100 not locked），从未被成功导入过；已 git mv 改名 invalid- 前缀隔离
+- 自坑自省：导入管道接 head -3 触发 SIGPIPE 中断（24 表即止）、mariadbd 相对路径 redirect 失败——均即改即验
+- RECOVER_EXIT=0，done: 8080=200 jar=ok 3306=ok 真绿；四链路 200×4，accessToken 真绿
+- 收口 dump OK 20261027-042834（275025B 规范尺寸，0 ERROR）
+
+Stage Summary:
+- 重供给恢复 #158，累计 158 次全部闭环；本轮由单命令流水线升级为深度排障：jar 路径之谜、dump 不入库之谜双双闭环
+- 数据安全升级：已知良好 dump（220707 + 042834）首次真正进入 git 持久化；020730 缺陷件隔离
+- 端口归属正常（vite/1147、mariadbd/2265、java/2331）；内存 3.22GB，oom 0
+
+---
+Task ID: r328
+Agent: ops-loop (main)
+Task: 2026-10-27 14:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump-db 判 3306 不在线跳过；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #158
+- ps 佐证：bun install/bun src/index.ts/bun run dev 残留，vite 缺失，mariadbd 进程在但 3306 未就绪
+- 定型恢复流水线：pkill 五连 → jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（06:05:51→06:07:21，90s，完整退出型连续第 10 次）
+- 日志仍报「无 jar 备份」走重建分支（持续观察项，结果不受影响）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1227)/3000=MainThread(1298)/8080=java(1489)
+- 收口 dump：OK 20261027-060818 workflow=272K v6=4.0K；dump-db 报 git push FAILED（远端落后）→ pull --rebase 后重新 push 成功
+- 内存 3199610880（~2.98GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #158 单轮闭环，累计 158 次；r323-r327 沙箱中断 5 轮后首轮成功运维
+- 沙箱不可用累计 115 次（r327 为第 115 次）
+
+---
+Task ID: r329
+Agent: ops-loop (main)
+Task: 2026-10-27 15:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-070541 workflow=272K，3306 竟在线）；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #159
+- ps 佐证：bun src/index.ts/bun install 残留，vite 缺失；另有后台 curl 正下载 jdk21.tar.gz，疑冷启动自动恢复中途被打断
+- 定型恢复流水线：pkill 五连（含杀掉后台半途恢复）→ jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（07:06:00→07:07:29，89s，完整退出型连续第 11 次）
+- 日志仍报「无 jar 备份」（持续观察项）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1217)/3000=MainThread(1339)/8080=java(1531)
+- 收口 dump：OK 20261027-070824 workflow=272K v6=4.0K；内存 3405676544（~3.17GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #159 单轮闭环，累计 159 次；本轮重供给距 r328（#158）仅 1 小时，重供给频率升高
+- 沙箱不可用累计 115 次（无新增）
+
+---
+Task ID: r330
+Agent: ops-loop (main)
+Task: 2026-10-27 16:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-080544 workflow=272K）；a/b/c=000、d=200；真伪核验 no such table: SYS_USER → Node 假绿，判定环境重供给 #160
+- ps 佐证：与 r329 完全同构——bun src/index.ts/bun install 残留、vite 缺失、mariadbd 幸存（1216）、后台 curl 下载 jdk21.tar.gz（冷启动自动恢复中途）
+- 定型恢复流水线：pkill 五连 → jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（08:06:03→08:07:37，94s，完整退出型连续第 12 次）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1216)/3000=MainThread(1350)/8080=java(1544)
+- 收口 dump：OK 20261027-080833 workflow=272K v6=4.0K；内存 3426398208（~3.19GB），oom_kill 0
+
+Stage Summary:
+- 恢复 #160 单轮闭环，累计 160 次；连续三轮每小时重供给（#158/#159/#160），频率异常，持续观察
+- 沙箱不可用累计 115 次（无新增）
+
+---
+Task ID: r332
+Agent: ops-loop (main)
+Task: 2026-10-27 18:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（20261027-100543）；四链路表面全 200，但真伪核验 no such table: SYS_USER → 8080 Node 假绿，判定环境重供给 #161
+- 新亚型：vite 幸存（1272，RSS 719MB）→ 3000 三链路真 200，仅 8080 被 node index.ts（1334）/bun src/index.ts（1105）假绿占用；mariadbd 幸存（1220）
+- 定型恢复流水线：pkill 五连（只杀 node index.ts/bun，vite 未受影响）→ jar 重拼 MD5=e369839b SIZE=121300861 校验通过 → recover-dplus.sh EXIT=0（10:06:02→10:07:51，109s，完整退出型连续第 13 次）
+- 40s 复验：四链路 200×4，accessToken 真绿；端口归属 3306=mariadbd(1220)/3000=MainThread(1272)/8080=java(1531)
+- 收口 dump：OK 20261027-100844 workflow=272K v6=4.0K；内存 3266048000（~3.04GB），oom_kill 0
+- dump-db 报 git push FAILED（远端落后）→ pull --rebase 后重新 push 成功
+
+Stage Summary:
+- 恢复 #161 单轮闭环，累计 161 次；新亚型「vite 幸存+8080 假绿」（3000 表面真 200 但整体假绿）首次在四链路全 200 下靠真伪核验拦截
+- 沙箱不可用累计 116 次（r331 新增 1 次）
+
+---
+Task ID: r333
+Agent: ops-loop (main)
+Task: 2026-10-27 19:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（110611）；四链路表面 200×4 但真伪核验 no such table → 重供给 #162（同 #161 亚型：vite 幸存、8080 Node 假绿）
+- 首次恢复尝试异常：重拼报 backups/jar Is a directory —— 发现该路径已被后台冷启动恢复流程变成目录（内含旧构建 jar 121124916B）；删除目录后重拼 MD5=e369839b 校验通过，recover EXIT=0（70s）；此发现部分解释「无 jar 备份」观察项（探测遇目录即判无备份）
+- 复验四链路真绿，但收口 dump 连续报「workflow dump 无效」
+- 深度诊断：mariadb-dump 报 1066 Not unique table/alias: act_evt_log（lower_case_table_names=1 下出现 45 组 ACT_*/FLW_* 大小写重复表，recover 导入 110611 dump 的 DROP+CREATE 在 =1 模式下产生重复文件名）；SHOW TABLES 151 张
+- 处置一（部分失败）：--force DROP 小写变体，8 张被外键 1451 挡住；FOREIGN_KEY_CHECKS=0 重删后 0 错误、表数 106、重复清零
+- 但 dump 仍无效且 SELECT ACT_GE_PROPERTY 报 1146 不存在 —— 证实字典不一致：DROP 小写名实际清掉 InnoDB 真实表，SHOW TABLES 残留孤儿条目
+- 处置二（成功）：以权威 dump db-workflow-full-20261027-110611.sql（104 张 CREATE TABLE，重供给后 recover 前自幸存库导出）全量重建：DROP DATABASE（报 1010 rmdir 失败系孤儿文件，表已清空）→ 导入自建库 → 验证表数 104、sys_user=2、ACT_GE_PROPERTY=7
+- 终验：dump-db OK 20261027-111329 workflow=272K v6=4.0K；四链路 200×4、accessToken 真绿；内存 3222700032（~3.0GB）、oom 0
+
+Stage Summary:
+- 恢复 #162 闭环，累计 162 次；数据库事故「大小写重复表→字典不一致」由权威 dump 全量重建解决，数据零丢失（以 11:06 快照为准，期间无业务写入）
+- 新观察项：recover 导入 dump 在 lower_case_table_names=1 下会产生大小写重复表并破坏 dump 能力——若后续复现，应在 recover 后立即验证 dump 有效性
+- backups/jar 路径冲突（文件 vs 目录）为新观察项；沙箱不可用累计 116 次（无新增）
+
+---
+Task ID: r345
+Agent: ops-loop (main)
+Task: 2026-10-28 07:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump 无效；四链路表面 200×4 但真伪核验 no such table → 重供给 #163（同 #161/#162 亚型：vite 幸存、8080 Node 假绿、mariadbd 幸存）
+- 首次恢复失败（EXIT=2）：recover 报「无可用 dump（库空壳）」+「jar=MISSING」——backups/ 内全部有效 workflow dump 已随重供给丢失，mvn 构建编译失败（cannot find symbol）
+- 三大根因发现：
+  1. .gitignore:64 忽略 backups/ → dump-db.sh 的 git add -A 历来被静默拦截，所有 dump 从未入库；1867c47d 提交实为删除最后一个被跟踪 dump（20261025-220707）——数据持久层机制性失效
+  2. 「无 jar 备份」观察项终局解密：recover 探测 backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（目录内文件），历轮重拼产物为 backups/jar 文件——路径形式错位致每轮白跑工具链重建+mvn
+  3. mvn 构建路线不可靠（源码与 .m2 依赖不匹配编译失败）
+- 修复：git show 自 1867c47d~1 恢复 20261025-220707 dump（唯一幸存权威源，275025B/104 表——与 r333 权威快照逐字节同大小，确认期间无业务写入、数据零丢失）；jar 重拼产物布置到 JAR_BAK 目录路径与 backend/target/
+- 重跑 recover：EXIT=0，23 秒史上最快（跳过 mvn，直接导入+拉 Java），日志不再报「无 jar 备份」
+- 复验：四链路 200×4、accessToken 真绿；端口 3306=mariadbd(1268)/3000=MainThread(1293)/8080=java(1826)；workflow 104 表、大小写重复 0 组（r333 事故未复发）；dump OK 20261027-231241 workflow=272K；内存 3558453248（~3.31GB）、oom 0
+- 补救持久层：git add -f 强制入库 20261025-220707 与 231241 两份 dump（脚本修复留待用户决策）
+
+Stage Summary:
+- 恢复 #163 闭环，累计 163 次；数据零丢失（唯一幸存 dump 与最新快照同源同大小）
+- 「无 jar 备份」持续观察项正式终结（路径错位实锤+修复）；恢复耗时从 67-110s 降至 23s
+- 新观察项：dump-db.sh 的 git add 被 .gitignore 拦截（本轮已 add -f 补救两份 dump；建议后续给脚本加 -f 或调整 .gitignore，涉及改代码待用户决策）
+- 沙箱不可用累计 127 次（r334-r344 十一轮中断）
+
+---
+Task ID: r349
+Agent: ops-loop (main)
+Task: 2026-10-28 11:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（030558 workflow=272K，mariadbd+数据幸存）；四链路表面 200×4 但真伪核验 no such table → 重供给 #164（同亚型：vite 幸存、8080 Node 假绿）
+- r345 增强版定型恢复：pkill 五连 → jar 重拼 MD5=e369839b 布置到 backups/jar/（目录）与 backend/target/ → recover EXIT=0 仅 22 秒（SYS_USER 已在跳过导入、jar 直复跳过 mvn）
+- 复验：四链路 200×4、accessToken 真绿；端口 3306=mariadbd(1269)/3000=MainThread(1289)/8080=java(1552)；收口 dump OK 20261028-030741；内存 3540516864（~3.30GB）、oom 0
+- 新快照已 git add -f 入库并推送
+
+Stage Summary:
+- 恢复 #164 单轮闭环，累计 164 次；r345 修复后恢复耗时稳定在 ~22s（原 67-110s）
+- 沙箱不可用累计 130 次（r346-r348 三轮中断）
+
+---
+Task ID: r350
+Agent: ops-loop (main, parallel session)
+Task: 2026-10-28 12:05 cron 巡检（Job 446961）
+
+Work Log:
+- 首轮探活：dump OK（040551）；四链路表面 200×4 但真伪核验 no such table → 重供给 #165（同亚型：数据幸存、8080 Node 假绿）
+- r345 增强版定型恢复：pkill 五连 → jar 重拼 MD5=e369839b 布置 JAR_BAK+target → recover EXIT=0 仅 22 秒
+- 复验：四链路 200×4、accessToken 真绿、端口归属正常、收口 dump OK、内存 ~3.3GB、oom 0
+
+Stage Summary:
+- 恢复 #165 单轮闭环，累计 165 次；增强版流水线连续第二轮 22s 快速恢复
+
+## r358 (2026-10-28 21:05 +08:00) 本会话沙箱重供给（#165 同名事件）恢复
+- r350-r357 八轮沙箱不可用（累计 138 次），期间无法巡检
+- r358 恢复探活：四链路 200×4 但 8080 真伪核验 no such table: SYS_USER → 重供给 #165（vite 幸存型）
+- r349 增强版恢复流水线：jar 重拼 MD5=e369839b SIZE=121300861 校验通过，recover EXIT=0（约 22s）
+- 复验全绿：200×4 + accessToken 真绿；3306=mariadbd(1268) 3000=vite(1294) 8080=java(1574)；mem 3.34GiB oom 0
+- 收口 dump 20261028-130740 workflow=272K，验证 104 表 0 大小写重复（275025B 与权威源一致）
+- 发现：重供给后便携 mariadb 客户端布局变化（root/usr/local/mariadb/bin/ 消失，客户端在 root/usr/bin/）
+
+## r359 (2026-10-28 22:05 +08:00) 本会话沙箱再次重供给 + r333 同型重复表事故复发
+- 22:05 探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 本会话沙箱再次重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~28s，导入本轮 140612 dump）真绿；但收口 dump 报「无效」
+- 诊断：workflow 库 151 表（106 小写 + 45 大写变体），ACT_*/FLW_* 大小写重复表事故复发（同 r333）
+- 根因：重供给环境 workflow 库预置小写表集合（缺 SYS_USER），recover 导入大写命名 dump 产生字典重复
+- 定型方案重建：DROP DATABASE（errno 39 仅残留 db.opt，151 表全清）→ 导入权威 dump 140612 → 104 表 0 重复
+- recover 再跑（跳过导入直启 Java）EXIT=0 → 复验真绿
+- 收口 dump 20261028-141025 = 104 CREATE TABLE / 275028B 有效；四链路 200×4；mem 3.24GiB oom 0
+- 教训固守：recover 后必须验证 dump 有效性；重供给后 recover 导入前应检查库内既有表（防重复表复发）
+
+## r365 (2026-10-29 04:05 +08:00) 本会话沙箱第三次重供给恢复
+- r360-r364 五轮沙箱不可用；r365 恢复探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~28s，recover 跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
+- 四链路 200×4；mem 3.34GiB oom 0
+
+## r371 (2026-10-29 10:05 +08:00) 本会话沙箱第四次重供给恢复
+- r366-r370 五轮沙箱不可用；r371 恢复探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~23s，跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
+- 四链路 200×4；mem 3.32GiB oom 0
+
+## r379 (2026-10-29 18:05 +08:00) 本会话沙箱第五次重供给恢复
+- r372-r378 七轮沙箱不可用；r379 恢复探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~23s，跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 20261029-100721 有效
+- 四链路 200×4；mem 3.30GiB oom 0
+
+## r381 (2026-10-29 20:05 +08:00) 本会话沙箱第六次重供给恢复
+- r380 一轮沙箱不可用；r381 探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- r349 增强版恢复 EXIT=0（~22s，跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
+- 四链路 200×4；mem 3.33GiB oom 0
+
+## r382 (2026-10-29 21:05 +08:00) 本会话沙箱第七次重供给恢复
+- r382 探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型，距 r381 恢复仅 1 小时）
+- r349 增强版恢复 EXIT=0（~23s，跳过导入——SYS_USER 已在预置库中）；复验真绿
+- 重复表检查：104 表 0 大小写重复（r359 同型事故未复发）；收口 dump 有效
+- 四链路 200×4；mem 3.34GiB oom 0

@@ -1,14 +1,10 @@
 <script setup lang="ts">
-// uni-shell 全局壳（Task 3.3 骨架）：generatePageUni 产物同步后以产物 App.vue 为准（Task 8.x）
+// 全局壳（Task 3.1 骨架）：全局样式与运行期适配接线由 Task 3.2/3.3 落地
 import { onLaunch } from '@dcloudio/uni-app'
 
-onLaunch(() => {
-  console.log('[uni-shell] launched')
-})
+onLaunch(() => {})
 </script>
 
 <style>
-page {
-  background-color: #f7f8fa;
-}
+/* 全局样式：@lc/runtime-uni 基础样式在 Task 3.2 引入 */
 </style>

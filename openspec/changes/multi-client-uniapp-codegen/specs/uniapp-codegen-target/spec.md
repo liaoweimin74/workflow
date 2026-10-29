@@ -74,3 +74,51 @@ uniapp 产物 SHALL 按端适配 ACTION_OPS 出口：open-link→uni.navigateTo�
 - **WHEN** 运行语料体检测试
 - **THEN** 报告输出 web 与 uniapp 两套分桶数字
 - **AND** uniapp 可出码率低于基线或 C 桶非零时测试失败
+
+---
+
+### Requirement: 页面根级字段族装配
+
+uniapp 产物 SHALL 在页面根装配已登记契约的字段族节点（组件契约声明 `field` 且不属列表/容器/展示组件族）：模板挂进 `uni-forms` 载体、脚本由页面级表单后端（`model` + `errors`）承载 `v-model` 与 `:error-message`。同一页面并存容器段时，两套表单后端 MUST 各用独立声明名（MUST NOT 重复声明同一标识符）。未登记出码契约的类型 SHALL 照旧以 `lc:todo` 占位并逐节点登记 unsupported，MUST NOT 静默丢弃。
+
+#### Scenario: 根级字段在产物中真渲染
+- **WHEN** 页面根含 input 与 LookupPicker 节点并以 uniapp 目标出码
+- **THEN** 产物模板含对应控件与 `uni-forms-item` 载体，且绑定到页面级表单后端字段
+- **AND** manifest 中这些节点不再出现 `not-assembled` 登记
+
+#### Scenario: 无出码契约的类型仍显式登记
+- **WHEN** 页面根含未登记出码契约的类型（如 radio）并以 uniapp 目标出码
+- **THEN** 产物只留 `lc:todo` 挂点注释且 manifest 逐节点登记 unsupported
+- **AND** 产物中不存在该类型的残缺实现或无效挂点
+
+---
+
+### Requirement: 查找选择器移动端形态
+
+`dataPicker` / `LookupPicker` SHALL 在 uniapp 目标出码为「只读触发框 + 底部弹层」形态：弹层内提供搜索与分页取数（走数据源记录接口），选中行 SHALL 按契约写回声明生效（`idField` 回写 id，`returnFields` 按 `key=被查表源字段 → value=表单目标字段` 逐项回写），清除 SHALL 清空同批目标字段。`dataPicker` 的多选上限（`maxCount`）与级联清理（`clearOnCascadeChange`）SHALL 生效；uni 首版无法对位的配置项（`allowCreate`、`detailReadonly`）SHALL 逐项登记 unsupported，MUST NOT 造无实现的入口。
+
+#### Scenario: 选中行按契约写回表单字段
+- **WHEN** LookupPicker 配置 `idField`/`returnFields` 并在产物中选中一行
+- **THEN** 目标字段被写入 id 与被查表字段值（方向 key=源字段、value=目标字段）
+- **AND** 清除动作把同批目标字段置空
+
+#### Scenario: 无法对位的配置只登记
+- **WHEN** dataPicker 配置 `allowCreate=true` 并以 uniapp 目标出码
+- **THEN** 报告登记该配置项为 unsupported（含路径与原因）
+- **AND** 产物不出现「允许新建」的假入口
+
+---
+
+### Requirement: dash-filter 广播联动产物化
+
+`dash-filter` SHALL 在 uniapp 目标出码为自绘筛选栏（`date-range` / `select` / `keyword` 三形态，keyword 走防抖）；产物 SHALL 自持页面级仪表盘实例登记表，目标件挂载时上报实例、筛选变更时按 `{ field: (op, value) }` 条件对全部显式接入的目标件调用 `setFilter`（对位宿主渲染器的 dashInstances 广播语义）。条件合并 SHALL 与宿主同源：`{field: value}` 等值、`{field: {op, value}}` 显式运算符、`{field: null}` 清除，并与组件级基础 `filter` 合并后下发。未接入 `setFilter` 的组件 MUST NOT 被伪造挂接。
+
+#### Scenario: 筛选变更广播到目标组件
+- **WHEN** 页面含 dash-filter 与 dash-kpi 并以 uniapp 目标出码，运行期筛选器变更
+- **THEN** 产物页面的实例登记表向目标件下发合并后的条件并触发重查
+- **AND** 筛选器清除时对应字段条件被移除
+
+#### Scenario: 无目标件时不造假联动
+- **WHEN** 页面只有 dash-filter、没有任何显式接入的目标件
+- **THEN** 产物不出与广播无关的伪 handler
+- **AND** 筛选栏自身仍按已装配形态渲染（与宿主渲染器空实例表行为一致）

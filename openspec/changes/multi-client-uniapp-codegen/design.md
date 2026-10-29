@@ -98,7 +98,9 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 | 字段族 S 项 | input/textarea→uni-easyinput、inputNumber→uni-number-box（precision 封装）、datePicker→uni-datetime-picker、group/subForm→块容器 | S |
 | select | 单选 picker/uni-data-select；multiple 与远程搜索自绘弹层 | M |
 | FormulaField | 复用 formulaEval 纯函数 + 产物 form 后端 | M |
-| dataPicker/LookupPicker | 自绘 popup（搜索/分页/级联清理/回写映射） | M |
+| dataPicker/LookupPicker | **已落地（Task 11.2/11.3，D12）** 自绘 popup（搜索/分页/级联清理/回写映射）：只读触发框 + `uni-popup` + 触底列表；`dataPicker` 多选走 `maxCount`、级联清理走 `clearOnCascadeChange`；`allowCreate`/`detailReadonly` 首版只登记 | M |
+| dash-filter | **已落地（Task 11.4，D12）** 自绘筛选栏（date-range/select/keyword 三形态）+ 页面级 `dashInstances` 登记表与 `setFilter` 广播（对位宿主 `PageRendererPage.vue:263-278`） | M |
+| 页面根级字段族 | **已落地（Task 11.1，D12）** uni 侧页面根装配字段族（`uni-forms` 载体 + 页面级表单后端）；web 侧仍只登记 `not-assembled`（产物字节 Gate） | M |
 | page-list-cards | uni-card + 触底加载 + uni-search-bar + 筛选抽屉 | M |
 | page-detail / page-steps / page-data-container | 堆叠详情 / uni-steps / uni-popup 弹层容器 | S–M |
 | dash-kpi/notice/todo | 自绘统计卡 / uni-notice-bar / 复用卡片列表 | S |
@@ -123,6 +125,16 @@ Client 携带 `render_mode`：WEB=RUNTIME（现有动态渲染、改完即生效
 - 语料体检 per-target：`generatePage(report)` 扩展为按 target 分桶，可出码率低于基线即失败（持续 Gate）。
 - 双渲染 e2e 延伸：宿主动态渲染 vs **uni-app H5 产物**（Playwright，同一活库同一时刻读数）；小程序真机走人工校验清单（登录/列表/详情/提交/二维码）。
 - golden 快照继续守产物字节；`@lc/runtime-uni` 独立编译测试（对应 P2 的 runtime-package-build Gate）。
+
+### D12：已登记契约组件在 uni 侧全量装配（本 change 追加）
+
+用户追加要求「补足所有已登记契约的组件，能在预览时真正显示出组件来」，落地口径：
+
+- **范围取自契约而非清单**：以 `TYPE_CONTRACTS` 已登记出码契约的类型为准——页面根级字段族、`LookupPicker`、`dataPicker`、`dash-filter`（`radio` 无出码契约，web 侧同样不出码，不在范围）。「已登记却不出码」是账目不平：必须销账或转成显式登记。
+- **三处都要真渲染**：设计器契约画布（375 设备框，经 `UNIAPP_COMPONENT_MAP` 注册）、产物 H5 预览（手机壳 iframe）、宿主渲染 `/page/<key>?preview=true`——验收项是「组件真显示出来」，不是只把 unsupported 条数改小。
+- **页面根级字段族 = 真装配**（10.5 的 A 案升级）：uni 侧 `emitPage` 增字段族分派与页面级表单后端；**web 侧仍只登记**（`not-assembled` + 挂点注释）——web 页面根字段是越界形态，其产物字节是 10.4 的硬 Gate，本条不动。
+- **不造假挂点**：`dash-filter` 只对真正消费筛选条件的件接线（kpi/chart 走 `filter` JSON、notice/todo 走同源参数映射、列表走 `filters`）；`allowCreate`/`detailReadonly` 这类 uni 首版无对位的配置只登记 unsupported。宁可显式登记，不造空入口。
+- **条件语义同源移植**：`parseDashFilter`/`mergeDashFilter`/`upsertDashConditions` 从宿主 `dash-shared.ts` 移植进 `@lc/runtime-uni`（产物独立可编译，不能依赖宿主路径），单测钉死三形态与清除语义。
 
 ## Risks / Trade-offs
 

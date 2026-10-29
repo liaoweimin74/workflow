@@ -240,3 +240,56 @@ workflow_lowcode/mini-services/app-builder/
 - [ ] **Step 3:** 10.4 全量回归：`npx vitest run` + web golden + `mvn -o test` 全绿
 - [ ] **Step 4:** 10.3 真机清单人工执行（登录/列表/详情/提交/二维码），结果记 `docs/test-runs/`
 - [ ] **Step 5:** 提交 `test(gate): 多端验证 Gate 与回归`
+
+## Task 11.1: 页面根级字段族装配（M2 追加）
+
+**Files:** Modify `frontend/src/views/page/codegen/uni/emit-uni.ts`（`emitPage` 分派 + 页面级表单后端）、`frontend/src/views/page/codegen/uni/emit-field.ts`（字段片段支持后端别名）、`frontend/src/views/page/codegen/uni/emit-container.ts`（若需抽公共后端声明）；Create `frontend/src/views/page/codegen/__tests__/uni/emit-page-root-fields.test.ts`
+**Interfaces:** `emitFieldNode(node, profile, ctx?)`，`ctx = { formVar?: string; errorsVar?: string }`（缺省 `form`/`errors`，容器段语义不变）
+**Spec:** uniapp-codegen-target ADDED「页面根级字段族装配」
+
+- [ ] **Step 1（RED）:** 用例①根级三字段（input/LookupPicker + 未登记 radio）→ 产物含 `<uni-easyinput>`、`pageForm.input` 绑定、`pageErrors.input`，radio 仍 `lc:todo` 且 unsupported 只留 radio 一条；②manifest 不再有 `key='not-assembled'` 的字段族条目；③与 `formContainer` 并存时两套后端不撞名（同一页两个 `form` 声明即失败）
+- [ ] **Step 2:** → FAIL → 实现分派（list → container → widget → field → todo）+ 页面级 `<uni-forms :model="pageForm">` 与 `const { model: pageForm, errors: pageErrors } = useUniForm(pageFormRules)` → PASS；提交 `feat(codegen): uni 页面根级字段族真装配（Task 11.1）`
+
+## Task 11.2: LookupPicker uni 落码（M2 追加）
+
+**Files:** Create `frontend/packages/lc-runtime-uni/src/picker.ts`、`frontend/packages/ui-mobile/src/components/dash.ts`（或 `picker-lookup.ts`）、`frontend/src/views/page/codegen/__tests__/uni/emit-lookup-picker.test.ts`、`frontend/packages/lc-runtime-uni/src/__tests__/picker.test.ts`；Modify `frontend/src/views/page/codegen/uni/emit-field.ts`、`frontend/src/views/page/codegen/component-map.ts`、`frontend/packages/ui-mobile/src/index.ts`
+**Interfaces:** `buildLookupQuery({ refId, page, size, keyword, searchColumns })`、`uniLookupRowsOf(records)`、`applyLookupSelect(row, { idField, returnFields })`、`useUniPicker({ refId, pageSize, searchColumns, idField, returnFields, writes })`
+**Spec:** uniapp-codegen-target ADDED「查找选择器移动端形态」
+
+- [ ] **Step 1（RED）:** 纯函数单测（查询参数形状 / 行映射 / 回写方向 key=源字段→value=目标字段）+ emit 单测（触发框 readonly + `uni-popup` + 搜索 + 触底 + `@select`/`@clear` handler 真写 `pageForm`，无假挂点）
+- [ ] **Step 2:** → FAIL → `picker.ts` 纯函数与 composable → PASS；提交 `feat(runtime-uni): LookupPicker 取数与回写数据层（Task 11.2）`
+
+## Task 11.3: dataPicker uni 落码（M2 追加）
+
+**Files:** Create `frontend/src/views/page/codegen/__tests__/uni/emit-data-picker.test.ts`；Modify `frontend/packages/lc-runtime-uni/src/picker.ts`（多选/级联清理）、`frontend/packages/ui-mobile/src/components/*.ts`、`frontend/src/views/page/codegen/uni/emit-field.ts`、`frontend/src/views/page/codegen/component-map.ts`
+**Interfaces:** `useUniPicker` 增 `multiple`/`maxCount`/`clearOnCascadeChange` 语义；`LcDataPicker` 契约件
+**Spec:** uniapp-codegen-target ADDED「查找选择器移动端形态」
+
+- [ ] **Step 1（RED）:** 用例：maxCount=1 单选回填；多选累积与超限拒绝；`clearOnCascadeChange` 命中时清空依赖值；`allowCreate`/`detailReadonly` 各自出 unsupported 登记（不造入口）
+- [ ] **Step 2:** → FAIL → 实现 → PASS；提交 `feat(codegen): dataPicker uni 落码与级联清理（Task 11.3）`
+
+## Task 11.4: dash-filter 落码与广播联动（M2 追加）
+
+**Files:** Create `frontend/packages/lc-runtime-uni/src/filter.ts`、`frontend/packages/ui-mobile/src/components/dash.ts`、`frontend/src/views/page/codegen/__tests__/uni/emit-dash-filter.test.ts`、`frontend/packages/lc-runtime-uni/src/__tests__/filter.test.ts`；Modify `frontend/packages/lc-runtime-uni/src/{dash.ts,list.ts}`、`frontend/src/views/page/codegen/uni/{emit-widget.ts,emit-uni.ts}`、`frontend/src/views/page/codegen/component-map.ts`
+**Interfaces:** `parseDashFilter/mergeDashFilter/upsertDashConditions`；`useUniKpi|useUniChart|useUniNotice|useUniTodo|useUniList` 增 `setFilter(cond)`/`refresh()`；`LcDashFilter`（props: filterType/field/label/placeholder/options）
+**Spec:** uniapp-codegen-target ADDED「dash-filter 广播联动产物化」
+
+- [ ] **Step 1（RED）:** 纯函数单测（`{field: value}` 等值 / `{field: {op,value}}` 显式运算符 / `{field: null}` 清除 / 基础 filter 与 props.filter 合并）；emit 单测（三形态模板 + 页面级 `dashInstances`/`onFilterChange` + 目标件 `@ready` 注册落地）
+- [ ] **Step 2:** → FAIL → `filter.ts` + composable `setFilter` + `list.ts` 多 op → PASS；提交 `feat(runtime-uni): dash-filter 数据层与广播 setFilter（Task 11.4）`
+
+## Task 11.5: 画布/映射一致性 Gate（M3 追加）
+
+**Files:** Modify `frontend/src/views/page/codegen/component-map.ts`（19→22 键）、`frontend/packages/ui-mobile/src/index.ts`；Create/Modify `frontend/src/views/page/codegen/__tests__/component-map.test.ts`
+**Spec:** custom-page-designer「页面设计类型与契约渲染画布」
+
+- [ ] **Step 1（RED）:** `component-map.test.ts` 断言三键存在且 `render` 由 `@lc/ui-mobile` 导出（`resolveComponent` 非 null）；`ui-mobile-package.test.ts` 契约组件清单 + 独立编译复跑
+- [ ] **Step 2:** → FAIL → 补映射与导出 → PASS；提交 `feat(codegen): 契约组件映射与画布注册补齐（Task 11.5）`
+
+## Task 11.6: 语料读数与 Gate 收口（M3 追加）
+
+**Files:** Modify `frontend/src/views/page/codegen/__tests__/baseline.ts`、`openspec/changes/multi-client-uniapp-codegen/tasks.md`（10.2 读数订正 + 10.3 真机项）
+**Spec:** uniapp-codegen-target「per-target 可出码率 Gate」
+
+- [ ] **Step 1:** `npx vitest run src/views/page/codegen` 全绿 + uni 语料 unsupported 重测（只许减不许增）+ `baseline.ts` 读数订正 + tasks.md 10.2 读数订正
+- [ ] **Step 2:** web golden 字节不变（`__snapshots__` 零改动）+ 前端全量 `npx vitest run` + `npx vue-tsc --noEmit`（uni 产物 `noUnusedLocals` 风险面）
+- [ ] **Step 3:** 提交 `test(gate): uni 契约组件补齐读数与回归收口（Task 11.6）`

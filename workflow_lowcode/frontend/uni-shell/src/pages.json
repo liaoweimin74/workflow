@@ -1,30 +1,21 @@
 {
-  "pages": [
-    {
-      "path": "pages/index",
-      "style": {
-        "navigationStyle": "default",
-        "navigationBarTitleText": "低代码移动端"
-      }
-    }
-  ],
-  "subPackages": [
-    {
-      "root": "pagesChart",
-      "pages": [
-        {
-          "path": "spike/echart",
-          "style": {
-            "navigationBarTitleText": "图表 spike"
-          }
-        }
-      ]
-    }
-  ],
   "easycom": {
     "autoscan": true,
     "custom": {
       "^uni-(.*)": "@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue"
     }
+  },
+  "pages": [
+    {
+      "path": "pages/gen/uni_page",
+      "style": {
+        "navigationBarTitleText": "uni_page"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "member",
+    "navigationBarBackgroundColor": "#FFFFFF"
   }
 }

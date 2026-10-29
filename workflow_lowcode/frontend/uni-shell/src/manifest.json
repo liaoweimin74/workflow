@@ -1,23 +1,24 @@
 {
-  "name": "lc-uni-shell",
+  "name": "member",
   "appid": "",
-  "description": "低代码 uniapp 产物宿主工程",
+  "description": "member 低代码出码工程",
   "versionName": "1.0.0",
   "versionCode": "100",
-  "vueVersion": "3",
-  "locale": "zh-Hans",
+  "uniStatistics": {
+    "enable": false
+  },
   "mp-weixin": {
     "appid": "",
     "setting": {
       "urlCheck": false
     },
+    "usingComponents": true,
     "optimization": {
       "subPackages": true
-    },
-    "usingComponents": true
+    }
   },
   "h5": {
-    "title": "低代码移动端",
+    "title": "member",
     "router": {
       "mode": "hash"
     }

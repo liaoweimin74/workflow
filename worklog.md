@@ -10518,3 +10518,12 @@ Stage Summary:
 - 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存）
 - 恢复：r349 流水线 EXIT=0 ~28s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.35GiB oom 0
 - 收口 dump 完成
+
+## r412 (2026-10-31 06:05 +08:00 / sandbox 22:05) 第12次重供给·全挂型恢复
+- r407-r411 五轮沙箱不可用；r412 探活：四链路全 000 + 3306 不在线（全挂型，非 vite 幸存型）
+- 环境重置严重：mariadb-user/ 目录与 /home/z/tools/ 目录均丢失，本地 backups 缺新 dump（git pull 恢复至 r406 快照）
+- 首跑 recover EXIT=2：/home/z/tools/ 不存在致日志重定向失败、deb 下载中断 → mkdir -p /home/z/tools + 清理 mariadb-user 残留后重跑
+- 二跑 recover EXIT=0：MariaDB 重建（deb 下载→initdb）→ 导入 dump 20261030-150725 → Java 拉起真绿（~27s）
+- recover 不含 vite：3000=000 → start-services.sh（bun install 补依赖）拉起 200
+- 复验：200×4 + accessToken 真绿；3306/3000/8080 各 1 进程；104 表 0 重复；mem ~3.4GiB oom 0；收口 dump 20261030-221129 有效
+- 注：本次 MariaDB 客户端新路径 mariadb-user/root/bin/mariadb（脚本重建布局）

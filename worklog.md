@@ -10506,3 +10506,9 @@ Stage Summary:
 - 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存）
 - 恢复：r349 流水线 EXIT=0 ~22s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.33GiB oom 0
 - 收口 dump 完成
+
+## r402 (2026-10-30 19:05 +08:00 / sandbox 11:05) 第10次重供给恢复
+- r399-r401 三轮沙箱不可用；r402 探活：四链路 200×4 但真伪核验 no such table: SYS_USER → 重供给（vite 幸存型）
+- 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存）
+- 恢复：r349 流水线 EXIT=0 ~22s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.33GiB oom 0
+- 收口 dump 完成

@@ -10527,3 +10527,8 @@ Stage Summary:
 - recover 不含 vite：3000=000 → start-services.sh（bun install 补依赖）拉起 200
 - 复验：200×4 + accessToken 真绿；3306/3000/8080 各 1 进程；104 表 0 重复；mem ~3.4GiB oom 0；收口 dump 20261030-221129 有效
 - 注：本次 MariaDB 客户端新路径 mariadb-user/root/bin/mariadb（脚本重建布局）
+## r413 (2026-10-31 07:05 +08:00 / sandbox 23:05) 第13次重供给恢复
+- r412 全挂恢复仅 1 小时后再次假绿（no such table: SYS_USER，vite 幸存型）
+- 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存；MariaDB 沿用 r412 重建实例，客户端路径 root/bin/mariadb）
+- 恢复：r349 流水线 EXIT=0 ~23s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.33GiB oom 0
+- 收口 dump 完成

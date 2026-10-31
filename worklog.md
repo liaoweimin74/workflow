@@ -10538,3 +10538,9 @@ Stage Summary:
 - **恢复**（r412 定型路径 + git pull 前置，~4min）：①`git pull` 找回并行会话 r413 推送的 dump 20261030-230718 与 jar-parts（HEAD→415178ee）→ ②pkill mariadbd（空库）+ `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → ③jar 重拼 MD5=e369839b (121300861B) 布置 backups/jar+target → ④`timeout 590 recover-dplus.sh`（deb 下载→initdb→导入 230718 dump→Java 拉起，EXIT=0 真绿）→ ⑤3000 幸存无需补（vite 1 个在）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.32GiB（vite 510M+java 442M）、oom_kill 0
 - **收口**：dump 20261031-020900（104 表有效）；第 14 次重供给单轮闭环
+
+## r422 (2026-11-01 01:05 北京 / 17:05 沙箱) — 第 15 次重供给（vite 幸存型，数据幸存）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行（8080=0）；库检查 104/1/0 数据完全幸存（mariadbd+数据均在，仅 Java 消失）；本地 backups 又回退（仅剩 10-28 与本轮 dump），jar 备份丢失；dump-db 本轮自动 commit 的 170542 与并行会话推送内容一致（rebase 自动跳过）
+- **恢复**（r349 流水线，~25s）：git pull --rebase 同步（HEAD→ddf35b88）→ jar 重拼 MD5=e369839b (121300861B) → 布置 backups/jar+target → `timeout 170 recover-dplus.sh`（检测数据在，跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.14GiB、oom_kill 0
+- **收口**：dump 20261031-170807（104 表有效）；第 15 次重供给单轮闭环

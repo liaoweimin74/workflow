@@ -10532,3 +10532,9 @@ Stage Summary:
 - 检查：mariadbd 在线，workflow 库 104 表、SYS_USER 在、0 重复（数据幸存；MariaDB 沿用 r412 重建实例，客户端路径 root/bin/mariadb）
 - 恢复：r349 流水线 EXIT=0 ~23s（MD5=e369839b 校验通过，跳过导入）；复验 200×4 + 真绿，104 表 0 重复，mem 3.33GiB oom 0
 - 收口 dump 完成
+
+## r416 (2026-10-31 10:05 北京 / 02:05 沙箱) — 第 14 次重供给（混合型：mariadbd 幸存+库空）
+- **现象**：四链路表面 200×4，真伪核验 8080 假绿（`no such table: SYS_USER`）；库检查 workflow=0 表（mariadbd 进程幸存但数据空，非典型 104/1/0 幸存型）；本地目录回退至 r371 期快照（HEAD=5aea3664、backups/jar 空、最新 dump 仅 10-29）
+- **恢复**（r412 定型路径 + git pull 前置，~4min）：①`git pull` 找回并行会话 r413 推送的 dump 20261030-230718 与 jar-parts（HEAD→415178ee）→ ②pkill mariadbd（空库）+ `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → ③jar 重拼 MD5=e369839b (121300861B) 布置 backups/jar+target → ④`timeout 590 recover-dplus.sh`（deb 下载→initdb→导入 230718 dump→Java 拉起，EXIT=0 真绿）→ ⑤3000 幸存无需补（vite 1 个在）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.32GiB（vite 510M+java 442M）、oom_kill 0
+- **收口**：dump 20261031-020900（104 表有效）；第 14 次重供给单轮闭环

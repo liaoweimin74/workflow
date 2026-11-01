@@ -10544,3 +10544,9 @@ Stage Summary:
 - **恢复**（r349 流水线，~25s）：git pull --rebase 同步（HEAD→ddf35b88）→ jar 重拼 MD5=e369839b (121300861B) → 布置 backups/jar+target → `timeout 170 recover-dplus.sh`（检测数据在，跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.14GiB、oom_kill 0
 - **收口**：dump 20261031-170807（104 表有效）；第 15 次重供给单轮闭环
+
+## r425 (2026-11-01 11:05 北京 / 03:05 沙箱) — 第 16 次重供给（vite 幸存型，数据幸存）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行（8080=0）；库 104/1/0 数据完全幸存；本地 backups 回退（仅剩 10-28 与本轮 dump）、jar 备份丢失；本轮 dump-db 产物与并行会话一致（rebase 自动跳过，push up-to-date）
+- **恢复**（r349 流水线，~25s）：jar 重拼 MD5=e369839b (121300861B) → 布置 backups/jar+target → `timeout 170 recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.33GiB、oom_kill 0
+- **收口**：dump 20261101-030732（104 表有效）；第 16 次重供给单轮闭环

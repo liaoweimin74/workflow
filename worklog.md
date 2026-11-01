@@ -10550,3 +10550,9 @@ Stage Summary:
 - **恢复**（r349 流水线，~25s）：jar 重拼 MD5=e369839b (121300861B) → 布置 backups/jar+target → `timeout 170 recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.33GiB、oom_kill 0
 - **收口**：dump 20261101-030732（104 表有效）；第 16 次重供给单轮闭环
+
+## r437 (2026-11-02 03:05 北京 / 19:05 沙箱) — 第 18 次重供给（全挂型）
+- **现象**：四链路全 000、3306 不在线、mariadbd/vite/Java 全部消失（r432 未竟恢复的环境整体消亡）；沙箱 r433-r436 连续 4 轮不可用致恢复延迟
+- **恢复**（r412 定型全挂型路径）：git pull 同步（r432 重复 dump 自动跳过，HEAD→4ac6c745）→ `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → jar 重拼 MD5=e369839b (121300861B) → `timeout 590 recover-dplus.sh`（deb 重建→initdb→导入 r425 收口 dump 20261101-030732→Java 真绿 EXIT=0）→ 3000=000，`start-services.sh`（bun install 补依赖）拉起 200
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.26GiB、oom_kill 0
+- **收口**：dump 20261101-190806（104 表有效）；第 18 次重供给单轮闭环；r432 遗留的「Java 监听 8080 但假绿」异常亚型随环境消亡一并消失

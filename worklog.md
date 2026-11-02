@@ -10568,3 +10568,9 @@ Stage Summary:
 - **恢复**（r349 流水线含 pkill 前置，~25s）：git 同步（dump-db 自动 commit 20261102-020552 已推送）→ pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.18GiB、oom_kill 0
 - **收口**：dump 20261102-020745（104 表有效）；第 20 次重供给单轮闭环
+
+## r444 (2026-11-02 18:05 北京 / 10:05 沙箱) — 第 21 次重供给（vite 幸存型，数据幸存）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行（8080=0）；库 104/1/0 数据完全幸存；jar 备份丢失
+- **恢复**（r349 流水线含 pkill 前置，~25s）：git 同步（HEAD→77d0c1fe）→ pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.17GiB、oom_kill 0
+- **收口**：dump 20261102-100746（104 表有效）；第 21 次重供给单轮闭环

@@ -10556,3 +10556,9 @@ Stage Summary:
 - **恢复**（r412 定型全挂型路径）：git pull 同步（r432 重复 dump 自动跳过，HEAD→4ac6c745）→ `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → jar 重拼 MD5=e369839b (121300861B) → `timeout 590 recover-dplus.sh`（deb 重建→initdb→导入 r425 收口 dump 20261101-030732→Java 真绿 EXIT=0）→ 3000=000，`start-services.sh`（bun install 补依赖）拉起 200
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.26GiB、oom_kill 0
 - **收口**：dump 20261101-190806（104 表有效）；第 18 次重供给单轮闭环；r432 遗留的「Java 监听 8080 但假绿」异常亚型随环境消亡一并消失
+
+## r440 (2026-11-02 08:05 北京 / 00:05 沙箱) — 第 19 次重供给（vite 幸存型，数据幸存）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行（8080=0）；库 104/1/0 数据完全幸存；本地 backups 回退、jar 备份丢失
+- **恢复**（r349 流水线含 pkill 前置，~25s）：git pull --rebase 同步（HEAD→ecc2f3ad）→ pkill 五连（8080 确认清空 000）→ jar 重拼 MD5=e369839b (121300861B) → `timeout 170 recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）；本轮吸取 r432 教训，pkill 前置未遗漏
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.33GiB、oom_kill 0
+- **收口**：dump 20261102-000732（104 表有效）；第 19 次重供给单轮闭环

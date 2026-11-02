@@ -10580,3 +10580,10 @@ Stage Summary:
 - **恢复**（r349 流水线含 pkill 前置，~25s）：git 同步（取回并行会话 dump 20261102-100746）→ pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（数据在跳过导入，直接拉 Java，EXIT=0 真绿 t+5s）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、104 表 0 重复、mem 3.19GiB、oom_kill 0
 - **收口**：dump 20261102-130807（104 表有效）；第 22 次重供给单轮闭环
+
+## r450 (2026-11-03 01:05 北京 / 17:05 沙箱) — 第 23 次重供给（vite 幸存型，本次 recover 执行了 dump 导入）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行；r447-r449 未达本会话（22:05/00:05 未收到、23:05 沙箱启动失败跳过）；dump-db push 失败（远端被并行会话分叉）；mariadb 客户端 libncurses.so.6 符号链接被重供给回滚丢失
+- **恢复**（r349 流水线）：pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（本次未跳过、执行 dump 导入 170620，EXIT=0 真绿 t+5s）；补建 libncurses.so.6→libncurses.so.6.5 符号链接；git rebase 冲突（worklog r444/r446 双方重复条目，取远端侧解决）后推送 2c120315
+- **新情况（重要）**：本次 Java 启动时 Flowable 自动创建大写 ACT_*/FLW_* 全套 46 张 + 大写 wf_biz_demo_inbound/warehouse（历史轮次未见），库内 151 表/45 组大小写重名（小写 dump 系 + 大写 Flowable 系并存，SYS_USER 大小写各 2 行）；app 真绿不受影响。外科清理脚本（scripts/r450-clean-dups.sh）DROP 未生效零副作用，决定保留现状不折腾运行中的 Java；实证 dump-db.sh 在 151 表库态下仍只导出 104 张基准表（170920），git 备份链不受污染
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.44GiB、oom 0
+- **收口**：dump 20261102-170920（104 表有效已推送）；后续巡检库态基线调整为「总表数≈151/重名≈45 属新常态，以 dump CREATE TABLE=104 为准」

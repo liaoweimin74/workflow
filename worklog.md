@@ -10595,3 +10595,9 @@ Stage Summary:
 - **临时处置（不改脚本，待用户决策）**：手工按 030626 dump 的 104 张基准表白名单过滤导出 db-workflow-full-20261103-031408.sql（104 表 274846B）+ v6 推送，维持备份链 RPO；后续轮次沿用此法，直至用户批准修复 dump-db.sh（建议 --skip-lock-tables + 显式表名单）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、库 151/45/SYS_USER=2（新常态）、mem 3.15GiB、oom 0
 - **收口**：dump 20261103-031408（手工过滤版 104 表有效）
+
+## r476 (2026-11-04 03:05 北京 / 19:05 沙箱) — 第 25 次重供给（vite 幸存型，数据幸存免导入）
+- **现象**：四链路表面 200×4，8080 假绿（no such table: SYS_USER）、Java 未运行；r461-r475 未达本会话（14:05-21:05 六轮沙箱启动失败、其余未推送，沙箱中断累计 231 次）；本地 HEAD 回滚至 77d0c1fe；dump-db push 失败（远端分叉）
+- **恢复**（r349 流水线）：git rebase 干净对齐（本次无 worklog 冲突）并推送 1bad2410 → pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（SYS_USER 在，跳过导入直接拉 Java，EXIT=0 真绿 t+5s）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.39GiB、oom 0
+- **收口**：dump 20261103-190733（104 表干净格式，Java 惰性大写表尚未生成）；距上轮成功巡检 16 小时（RPO 由 hourly 快照兜底）

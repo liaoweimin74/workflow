@@ -10587,3 +10587,11 @@ Stage Summary:
 - **新情况（重要）**：本次 Java 启动时 Flowable 自动创建大写 ACT_*/FLW_* 全套 46 张 + 大写 wf_biz_demo_inbound/warehouse（历史轮次未见），库内 151 表/45 组大小写重名（小写 dump 系 + 大写 Flowable 系并存，SYS_USER 大小写各 2 行）；app 真绿不受影响。外科清理脚本（scripts/r450-clean-dups.sh）DROP 未生效零副作用，决定保留现状不折腾运行中的 Java；实证 dump-db.sh 在 151 表库态下仍只导出 104 张基准表（170920），git 备份链不受污染
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.44GiB、oom 0
 - **收口**：dump 20261102-170920（104 表有效已推送）；后续巡检库态基线调整为「总表数≈151/重名≈45 属新常态，以 dump CREATE TABLE=104 为准」
+
+## r460 (2026-11-03 11:05 北京 / 03:05 沙箱) — 第 24 次重供给（vite 幸存型，recover 执行 dump 导入）
+- **现象**：四链路表面 200×4，8080 假绿、Java 未运行；r453-r459 未达本会话（04:05-10:05 无推送）；dump-db push 失败（远端分叉）；本地 HEAD 被重供给回滚至 77d0c1fe，dump-db 自动提交夹带历史 dump 删除（git add -A 将回滚缺失记为删除，若推送将掏空备份链，被 rebase 冲突拦下）
+- **恢复**（r349 流水线）：pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（导入 dump 030626，EXIT=0 真绿 t+5s）；git 侧 worklog 冲突取远端侧、UD 冲突逐文件恢复保留历史 dump，rebase 完成推送 c8617060，备份链 4 个 20261102 历史 dump 验证完好
+- **重要更正与确诊（dump 链故障根因）**：库内大写 ACT_*/FLW_* 系为 Java 启动后数分钟内惰性渐增创建（r450 观察 17→46 增长，r460 复现终态 151 表/45 组重名）；历史轮「104 表 0 重复」实为恢复后 +40s 早期快照假象。库存活超 1 小时后 mariadb-dump 在 LOCK TABLES 阶段报 1066 Not unique table/alias（大小写撞名）→ dump-db.sh 持续「workflow dump 无效」；r450「151 表库态 dump 仍 104」记载有误（170920 系撞名完成前所摄），特此更正
+- **临时处置（不改脚本，待用户决策）**：手工按 030626 dump 的 104 张基准表白名单过滤导出 db-workflow-full-20261103-031408.sql（104 表 274846B）+ v6 推送，维持备份链 RPO；后续轮次沿用此法，直至用户批准修复 dump-db.sh（建议 --skip-lock-tables + 显式表名单）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、库 151/45/SYS_USER=2（新常态）、mem 3.15GiB、oom 0
+- **收口**：dump 20261103-031408（手工过滤版 104 表有效）

@@ -10601,3 +10601,9 @@ Stage Summary:
 - **恢复**（r349 流水线）：git rebase 干净对齐（本次无 worklog 冲突）并推送 1bad2410 → pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（SYS_USER 在，跳过导入直接拉 Java，EXIT=0 真绿 t+5s）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.39GiB、oom 0
 - **收口**：dump 20261103-190733（104 表干净格式，Java 惰性大写表尚未生成）；距上轮成功巡检 16 小时（RPO 由 hourly 快照兜底）
+
+## r482 (2026-11-04 09:05 北京 / 01:05 沙箱) — 第 26 次重供给（vite 幸存型，数据幸存免导入）
+- **现象**：四链路表面 200×4，8080 假绿、Java 未运行；r477-r481 未达本会话（04:05-08:05 无推送）；本地 HEAD 回滚；dump-db push 失败（远端分叉）
+- **恢复**（r349 流水线）：git rebase 干净对齐推送 bdebc8f4 → pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（SYS_USER 在跳过导入，EXIT=0 真绿 t+5s）
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.15GiB、oom 0
+- **收口**：dump 20261104-0107xx（104 表干净格式）

@@ -10614,3 +10614,11 @@ Stage Summary:
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.24GiB、oom 0
 - **收口**：dump（104 表干净格式）；并行会话新增业务源码文件（TestCaseNarrate*/DataScopeController/V39）保持 untracked 不触碰
 - **补充（dump 白名单演进）**：收口 dump 020948 实测 109 表（+sys_bind_code/sys_client/sys_client_channel/sys_user_device/wf_data_scope，Java 启动按实体模型新建的小写业务表，与并行会话新代码呼应）；020948 已被污染不宜作恢复源。已固化 scripts/dump-whitelist.txt（109 张）并以 109 白名单重摄干净链顶 dump，后续手工过滤 dump 沿用此清单（发现新小写表时增补）
+
+## r486 (2026-11-04 19:05 北京 / 11:05 沙箱) — 第 28 次重供给（全挂型）+ 自愈链并发竞争事故
+- **现象**：3306/3000/8080 全 000、进程全空（mariadbd/vite/java 均 0），全挂型；r484-r485 未达本会话（15:05 沙箱启动失败 #232 空转，19:05 前累计 232 次）；mariadb-user 空壳；本地从 git 重建，远端已有并行会话 r483 提交（47e57824，含 scripts/dump-whitelist.txt 109 表清单与链顶 dump 021040）
+- **事故（新类型，重要）**：sandbox 开机自愈链自动后台触发 recover-dplus.sh（运行 B），与巡检手动恢复交错竞争——B 在 deb 下载阶段时巡检执行 rm -rf mariadb-user 删其工作目录；B 以 rebase 前 git 视角导入老 dump 20261102-020745；recover.log 出现 B 的「无 jar 备份 mvn 构建」中间记录；巡检手动 cp 的 jar（MD5=e369839b 校验通过）随后使 B 跳过 mvn；mariadbd 悬挂进程（basedir 文件已被删）kill 处理；巡检重跑 recover 时 600s 工具窗口超时被杀，但后台子链继续推进完成全链路
+- **恢复结果**：deb 重建→initdb→导入链顶 db-workflow-full-20261104-021040→Java 拉起，真绿达成；残留 start-services（1336）/recover（1969/2007）进程清理
+- **复验**：8080=200、3000=200、auth accessToken 真绿；库 104 表/SYS_USER=2；workflow_v6 0 表（与链顶 v6 dump 1555B 体量一致属常态）；mem 3.43GiB、oom 0
+- **流水线注记（后续轮次沿用）**：全挂型恢复前先 pkill start-services.sh 与 recover-dplus.sh 残留（自愈链可能与巡检并发竞争，r486 实证），再动手 rm/initdb；recover 前台运行超 Bash 工具 600s 窗口被杀时，后台 nohup 子链会继续推进，勿立即重跑，先探活再定
+- **收口**：dump 20261104-112259（104 表）提交 fe7407da

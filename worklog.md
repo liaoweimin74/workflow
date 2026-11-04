@@ -10613,3 +10613,4 @@ Stage Summary:
 - **恢复**（r412 全挂型流水线）：git 同步 → `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → jar 重拼 MD5=e369839b → `recover-dplus.sh` timeout 590 全重建（deb→initdb→导入 dump 010700→Java 拉起），EXIT=0 真绿 t+5s
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.24GiB、oom 0
 - **收口**：dump（104 表干净格式）；并行会话新增业务源码文件（TestCaseNarrate*/DataScopeController/V39）保持 untracked 不触碰
+- **补充（dump 白名单演进）**：收口 dump 020948 实测 109 表（+sys_bind_code/sys_client/sys_client_channel/sys_user_device/wf_data_scope，Java 启动按实体模型新建的小写业务表，与并行会话新代码呼应）；020948 已被污染不宜作恢复源。已固化 scripts/dump-whitelist.txt（109 张）并以 109 白名单重摄干净链顶 dump，后续手工过滤 dump 沿用此清单（发现新小写表时增补）

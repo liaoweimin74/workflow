@@ -10607,3 +10607,9 @@ Stage Summary:
 - **恢复**（r349 流水线）：git rebase 干净对齐推送 bdebc8f4 → pkill 五连（8080 清空 000）→ jar 重拼 MD5=e369839b → `recover-dplus.sh`（SYS_USER 在跳过导入，EXIT=0 真绿 t+5s）
 - **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.15GiB、oom 0
 - **收口**：dump 20261104-0107xx（104 表干净格式）
+
+## r483 (2026-11-04 10:05 北京 / 02:05 沙箱) — 第 27 次重供给（全挂型：mariadbd 进程消失）
+- **现象**：3306 不在线（mariadbd=0）+ 8080 假绿 + Java 消失，仅 vite 幸存；r477-r481 未达本会话；git pull 被 worklog 未提交改动阻塞
+- **恢复**（r412 全挂型流水线）：git 同步 → `mkdir -p /home/z/tools` + `rm -rf mariadb-user` → jar 重拼 MD5=e369839b → `recover-dplus.sh` timeout 590 全重建（deb→initdb→导入 dump 010700→Java 拉起），EXIT=0 真绿 t+5s
+- **复验**：200×4、auth accessToken 真绿、procs 3306=1/3000=1/8080=1、mem 3.24GiB、oom 0
+- **收口**：dump（104 表干净格式）；并行会话新增业务源码文件（TestCaseNarrate*/DataScopeController/V39）保持 untracked 不触碰
